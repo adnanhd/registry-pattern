@@ -24,9 +24,9 @@ def test_serialize_shape():
     serialized = shape.model_dump()
     assert serialized == {'shape': [3, 3]}
 
-def test_validate_instance_of_torch_shape():
+def test_validate_torch_shape():
     shape = [3, 3]
-    torch_shape = TorchShape.validate_instance_of_torch_shape(shape)
+    torch_shape = TorchShape.validate_torch_shape(shape).build_model()
     assert torch_shape == torch.Size([3, 3])
 
 def test_torch_shape_within_model():

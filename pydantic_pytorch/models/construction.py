@@ -3,7 +3,7 @@ from pydantic._internal import _decorators, _generics
 from pydantic_core import SchemaSerializer, SchemaValidator, CoreSchema
 from typing import Any, ClassVar, Literal, get_type_hints, TypedDict, Generic, TypeVar, Tuple
 from inspect import Signature, signature, Parameter, _empty
-from .registry import ClassRegistryMetaclass, FunctionalRegistryMetaclass
+from ..registry import ClassRegistryMetaclass, FunctionalRegistryMetaclass
 from pydantic.fields import ModelPrivateAttr, FieldInfo
 from pydantic import BaseModel, ConfigDict, create_model
 from torch.nn import Linear, Transformer

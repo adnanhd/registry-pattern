@@ -49,16 +49,16 @@ class TorchDType(BaseModel):
         print('serializing')
         return nxt(dict(type=str(v)))
 
-    @staticmethod
-    def validate_instance_of_torch_dtype(v: torch.dtype) -> torch.dtype:
-        return TorchDType(type=str(v)).build_model()
-
+    @classmethod
+    def validate_torch_dtype(cls, v: torch.dtype) -> 'TorchDType':
+        return cls(type=str(v))
+    
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler):
         model_schema = handler(source_type)
         
         instance_validation = core_schema.no_info_after_validator_function(
-            cls.validate_instance_of_torch_dtype,
+            cls.validate_torch_dtype,
             core_schema.is_instance_schema(torch.dtype),
             serialization=core_schema.wrap_serializer_function_ser_schema(
                 cls.serialize_torch_dtype)
