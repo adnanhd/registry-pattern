@@ -1,0 +1,4 @@
+pydantic>=2.7
+torch
+typing_extensions
+numpy
