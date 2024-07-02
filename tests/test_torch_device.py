@@ -3,7 +3,7 @@ from pydantic import ValidationError, BaseModel, validate_call
 import torch
 from typing import Dict
 
-from pydantic_pytorch.typing.multiarray.torch_device import TorchDevice
+from pydantic_pytorch.annotations.multiarray.torch_device import TorchDevice
 
 
 def test_valid_cpu_device():

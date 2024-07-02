@@ -1,8 +1,8 @@
 import torch
 import pytest
 from pydantic import ValidationError
-from pydantic_pytorch.typing.multiarray import TorchShape, TorchDevice, TorchDType  # Adjust import paths
-from pydantic_pytorch.typing import TorchTensor  # Adjust import paths
+from pydantic_pytorch.annotations.multiarray import TorchShape, TorchDevice, TorchDType  # Adjust import paths
+from pydantic_pytorch.annotations import TorchTensor  # Adjust import paths
 
 class ValidTensor(TorchTensor):
     shape = TorchShape(shape=[5, 10])

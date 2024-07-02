@@ -45,10 +45,12 @@ def git_most_recent_commit(dir: str, short: bool = False) -> str:
     else:
         command = ['git', 'rev-parse', 'HEAD']
 
-    if is_git_repo(dir) and have_git():
-        return subprocess.check_output(command, cwd=dir).decode('utf-8').strip()
+    if not have_git():
+        return 'git not found'
+    elif not is_git_repo(dir):
+        return 'not a git repository'
     else:
-        return 'unknown'
+        return subprocess.check_output(command, cwd=dir).decode('utf-8').strip()
 
 
 def get_torch_version() -> str:
@@ -57,18 +59,41 @@ def get_torch_version() -> str:
     except ImportError:
         return 'torch not found'
 
+    TORCH_VERSION = torch.__version__
+
+    PYTHON_VERSION = f'{sys.version_info.major}.{sys.version_info.minor}'
+
+    if torch.cuda.is_available():
+        # pytorch-2.3.1-py3.10_cuda12.1_cudnn8.9.2_0
+        TORCH_VERSION_EXTRA = f'py{PYTHON_VERSION}_cuda{torch.version.cuda}'
+        if torch.backends.cudnn.is_available():
+            cudnn_int_version = str(torch.backends.cudnn.version())
+            major, minor, patch = cudnn_int_version[0], cudnn_int_version[1], cudnn_int_version[2:]
+            major, minor, patch = int(major), int(minor), int(patch)
+            # type: ignore
+            TORCH_VERSION_EXTRA += f'_cudnn{major}.{minor}.{patch}'
+    else:
+        TORCH_VERSION_EXTRA = f'cpu_py{PYTHON_VERSION}'
+
+    return f'{TORCH_VERSION} (Build: {TORCH_VERSION_EXTRA})'
+
+
+def get_torch_build_info() -> str:
+    import torch
+
     TORCH_CONFIG = torch.__config__.show()
 
     def search_on_torch_config(pattern):
         return _safe_regex_search(pattern, TORCH_CONFIG, 1)
 
-    TORCH_VERSION = torch.__version__
-    CUDA_VERSION = search_on_torch_config(r'CUDA Runtime (\d+\.\d+)')
-    CUDNN_VERSION = search_on_torch_config(r'CuDNN (\d+\.\d+)')
-    GCC_VERSION = search_on_torch_config(r'GCC (\d+\.\d+)')
-    MAGMA_VERSION = search_on_torch_config(r'Magma (\d+\.\d+)')
+    modules = dict(
+        GCC=search_on_torch_config(r'GCC (\d+\.\d+)'),
+        CUDA=search_on_torch_config(r'CUDA Runtime (\d+\.\d+)'),
+        CuDNN=search_on_torch_config(r'CuDNN (\d+\.\d+)'),
+        Magma=search_on_torch_config(r'Magma (\d+\.\d+)')
+    )
 
-    return f'{TORCH_VERSION} (CUDA {CUDA_VERSION}, CuDNN {CUDNN_VERSION}, GCC {GCC_VERSION}, Magma {MAGMA_VERSION})'
+    return ' '.join(f'{module}-{version}' for module, version in modules.items() if version != 'not-found')
 
 
 def list_gpu_devices() -> str:
@@ -151,16 +176,22 @@ def version_info() -> str:
         'typing_extensions',
     })
 
+    if have_git() and is_git_repo(pydantic_pytorch_dir):
+        git_hash = ' (Git Hash: ' + \
+            git_most_recent_commit(pydantic_pytorch_dir, short=False) + ')'
+    else:
+        git_hash = ''
+
     info = {
-        f'pydantic-pytorch version': VERSION,
+        f'pydantic-pytorch version': VERSION + git_hash,
         'install path': Path(__file__).resolve().parent,
-        'Git Hash': git_most_recent_commit(pydantic_pytorch_dir, short=False),
         'python version': sys.version,
         'NVIDIA GPU devices': list_gpu_devices(),
         'NVIDIA CUDA Runtime': get_cuda_runtime_version(),
         'NVIDIA CUDA Driver': get_cuda_driver_version(),
         'platform': platform.platform(),
         'pytorch version': get_torch_version(),
+        'pytorch build libraries': get_torch_build_info(),
         'pytorch related packages': ' '.join(pytorch_related_packages),
         'pydantic related packages': ' '.join(pydantic_related_packages),
     }

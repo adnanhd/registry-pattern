@@ -1,7 +1,7 @@
 import pytest
 import torch
 from pydantic import ValidationError, BaseModel, validate_call
-from pydantic_pytorch.typing.multiarray.torch_dtype import TorchDType
+from pydantic_pytorch.annotations.multiarray.torch_dtype import TorchDType
 
 
 def test_valid_float32_dtype():

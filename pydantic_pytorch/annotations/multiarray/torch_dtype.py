@@ -4,7 +4,7 @@ import pydantic
 from pydantic import Field, GetCoreSchemaHandler, BaseModel, Field
 from pydantic_core import core_schema
 
-from pydantic_pytorch.registry import InstanceRegistryMetaclass
+from pydantic_pytorch.registrations import InstanceRegistryMetaclass
 
 __ALL__ = ['TorchDType']
 

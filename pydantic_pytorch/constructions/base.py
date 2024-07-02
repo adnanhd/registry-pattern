@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, InstanceOf, field_validator, model_validator
 from typing import TypeVar, Type
-from ..registry.registry import ClassRegistryMetaclass, FunctionalRegistryMetaclass
+from ..registrations.registry import ClassRegistryMetaclass, FunctionalRegistryMetaclass
 from pydantic._internal._model_construction import ModelMetaclass
 
 

@@ -3,9 +3,9 @@ import abc
 import torch
 from torch import nn, optim
 from pydantic import ValidationError, BaseModel, InstanceOf
-from pydantic_pytorch.models import TorchModule, TorchOptimizer  # Adjust import paths
+from pydantic_pytorch.constructions import TorchModule, TorchOptimizer  # Adjust import paths
 # Adjust import paths
-from pydantic_pytorch.models.base import PydanticClassRegistryBaseModel
+from pydantic_pytorch.constructions.base import PydanticClassRegistryBaseModel
 
 
 class TrainerModel(BaseModel):

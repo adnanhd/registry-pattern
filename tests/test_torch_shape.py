@@ -1,7 +1,7 @@
 import pytest
 import torch
 from pydantic import ValidationError, BaseModel
-from pydantic_pytorch.typing.multiarray.torch_shape import TorchShape
+from pydantic_pytorch.annotations.multiarray.torch_shape import TorchShape
 from pydantic import validate_call
 
 class TensorWithShape(BaseModel):
