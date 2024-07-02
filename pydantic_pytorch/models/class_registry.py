@@ -1,10 +1,14 @@
 from .base import PydanticClassRegistryBaseModel
 
 import torch
-from typing import Annotated, Generator
-from pydantic import InstanceOf, AfterValidator, Field, model_validator, field_validator, ConfigDict
+from typing import Generator
+from pydantic import AfterValidator, Field
 
-
+import sys
+if sys.version_info >= (3, 9):
+    from typing import Annotated
+else:
+    from typing_extensions import Annotated
 
 class TorchModule(PydanticClassRegistryBaseModel):
     """Module registry."""

@@ -1,15 +1,15 @@
 import re
-from typing import Any, Sequence, Dict, Generic, TypeVar, Type, Literal, ClassVar, Optional, Tuple
+import sys
+from typing import Any, Dict, Optional
 import torch
-import numpy as np
 import pydantic
-from pydantic import Field, GetCoreSchemaHandler, SerializerFunctionWrapHandler, ValidatorFunctionWrapHandler, AfterValidator, WrapValidator, BaseModel, ValidationInfo, NonNegativeInt
+from pydantic import Field, GetCoreSchemaHandler, SerializerFunctionWrapHandler, BaseModel
 from pydantic_core import core_schema
-from dataclasses import dataclass
-import annotated_types
 
-from typing_extensions import TypedDict
-from pydantic import TypeAdapter
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from typing_extensions import Literal
 
 
 __ALL__ = ['TorchDevice']
@@ -26,7 +26,7 @@ class TorchDevice(BaseModel):
     def build_model(self):
         print('validating model')
         return torch.device(self.type, self.index)
-    
+
     @pydantic.model_validator(mode='before')
     @classmethod
     def validate_string_without_device(cls, values: Any) -> Dict[str, Any]:
