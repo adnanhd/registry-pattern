@@ -1,62 +1,67 @@
-from typing import Any,  Dict
+from typing import Any,  Type
 import torch
+import inspect
 import pydantic
-from pydantic import Field, GetCoreSchemaHandler, BaseModel, Field
+from .base import _BaseModel
+from pydantic import Field, SerializerFunctionWrapHandler, BaseModel, Field
 from pydantic_core import core_schema
 
 from pydantic_pytorch.registrations import InstanceRegistryMetaclass
 
 __ALL__ = ['TorchDType']
 
+
 class Str2TorchDeviceMapping(metaclass=InstanceRegistryMetaclass):
-    pass
+    _DUPLICATE_DICT = {}
+
+    @classmethod
+    def register_instance(cls, name: str, instance: Type[torch.dtype]) -> None:
+        assert isinstance(name, str), f'{name} is not a string'
+        if name in cls._DUPLICATE_DICT:
+            val = cls.get_registered(cls._DUPLICATE_DICT[name])
+            raise ValueError(f'Can\'t register {name} twice. '
+                             f'Already registered to {val}')
+        cls._DUPLICATE_DICT[name] = str(instance)
+        if not cls.has_registered(instance):
+            return InstanceRegistryMetaclass.register_instance(cls, instance)
+        return instance
+
+    @classmethod
+    def get_registered(cls, name: str) -> Type[torch.dtype]:
+        if name in cls._DUPLICATE_DICT:
+            return InstanceRegistryMetaclass.get_registered(cls, cls._DUPLICATE_DICT[name])
+        return InstanceRegistryMetaclass.get_registered(cls, name)
+
 
 Str2TorchDeviceMapping.register(torch.dtype)
-Str2TorchDeviceMapping.register_instance('torch.float32', torch.float32)
-Str2TorchDeviceMapping.register_instance('torch.float', torch.float)
-Str2TorchDeviceMapping.register_instance('torch.float64', torch.float64)
-Str2TorchDeviceMapping.register_instance('torch.double', torch.double)
 
 
-class TorchDType(BaseModel):
+for k, v in inspect.getmembers(torch):
+    if isinstance(v, torch.dtype):
+        Str2TorchDeviceMapping.register_instance(k, v)
+
+
+class TorchDType(_BaseModel[torch.dtype]):
     """TypedDict for torch.device"""
     type: str = Field(..., description="String representation of torch dtype")
 
-    @pydantic.model_validator(mode='after')
-    def build_model(self) -> torch.dtype:
-        return Str2TorchDeviceMapping.get_registered(self.type)
-
     @pydantic.field_validator('type')
-    @classmethod
     def validate_type(cls, v: str) -> str:
         if v not in Str2TorchDeviceMapping.list_registry():
             raise ValueError(f'Invalid dtype: {v}')
-        return v
+        return Str2TorchDeviceMapping._DUPLICATE_DICT[str(v)]
 
-    @pydantic.field_serializer('type')
-    @classmethod
-    def serialize_type(cls, v: str) -> str:
-        print('serialize_dtype')
+    def _builder(self) -> Type[torch.dtype]:
+        return Str2TorchDeviceMapping.get_registered(self.type)
+
+    def _validate(self, v: torch.dtype) -> torch.dtype:
+        print('validating instance of torch device')
+        if self.type != self._serialize(v):
+            raise ValueError(f'Invalid dtype: {v} e.g. {self._serialize(v)} '
+                             f'but must be {self.type}')
         return v
 
     @staticmethod
-    def serialize_torch_dtype(v: torch.dtype, nxt: Any) -> Dict[str, Any]:
-        print('serializing')
-        return nxt(dict(type=str(v)))
-
-    @classmethod
-    def validate_torch_dtype(cls, v: torch.dtype) -> 'TorchDType':
-        return cls(type=str(v))
-    
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler):
-        model_schema = handler(source_type)
-        
-        instance_validation = core_schema.no_info_after_validator_function(
-            cls.validate_torch_dtype,
-            core_schema.is_instance_schema(torch.dtype),
-            serialization=core_schema.wrap_serializer_function_ser_schema(
-                cls.serialize_torch_dtype)
-        )
-        
-        return core_schema.union_schema([model_schema, instance_validation])
+    def _serialize(v: torch.dtype, nxt: SerializerFunctionWrapHandler = lambda x: x) -> dict[str, str | int]:
+        print('serializing torch device')
+        return nxt(dict(type=Str2TorchDeviceMapping._DUPLICATE_DICT[str(v)]))

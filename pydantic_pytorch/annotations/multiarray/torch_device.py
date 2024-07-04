@@ -1,14 +1,10 @@
+from .base import _BaseModel, configures
 import re
 import sys
-from typing import Any, Dict, Optional
+from typing import ClassVar, Optional, Type
 import torch
-from pydantic import Field, ValidationInfo, field_validator, NonNegativeInt, SerializerFunctionWrapHandler
-from pydantic_core import core_schema
-from .base import _BaseTypedDictAnnotation
-import dataclasses
-import pydantic
-# from dataclasses import dataclass
-# from pydantic.dataclasses import dataclass
+from pydantic import Field, model_validator, NonNegativeInt, SerializerFunctionWrapHandler
+
 
 if sys.version_info >= (3, 8):
     from typing import Literal
@@ -18,24 +14,47 @@ else:
 
 __ALL__ = ['TorchDevice']
 
-class TorchDevice(pydantic.BaseModel):
-    """Dataclass for torch.device"""
 
-    type: Literal['cpu', 'cuda', 'ipu', 'xpu', 'mkldnn', 'opengl', 'opencl', 'ideep', 'hip', 've',
-                  'fpga', 'ort', 'xla', 'lazy', 'vulkan', 'mps', 'meta', 'hpu', 'mtia'] = None
-    index: Optional[NonNegativeInt] = None
+@configures(torch.device)
+class TorchDevice(_BaseModel[torch.device]):
+    """TypedDict Config for torch.device"""
+    re_match: ClassVar[re.Pattern] = re.compile(r'^[a-z]+:[0-9]+$')
 
-    @field_validator('index')
+    type: Literal[
+        'cpu', 'cuda', 'fpga', 'hip', 'hpu', 'ideep', 'ipu',
+        'lazy', 'meta', 'mkldnn', 'mps', 'mtia',  'opencl',
+        'opengl', 'ort', 've', 'vulkan', 'xla', 'xpu'
+    ] = Field(json_schema_extra=dict(required=True))
+
+    index: Optional[NonNegativeInt] = Field(
+        default=None, json_schema_extra=dict(required=False)
+    )
+
+    @model_validator(mode='before')
     @classmethod
-    def validate_index(cls, index: int, info: ValidationInfo) -> int:
-        values: dict[str, str | int] = info.data
-        if index is not None and values.get('type', 0) is None:
-            raise ValueError(f'Invalid index: {index!r}')
-        return index
+    def validate_type_with_semicolon(cls, v: dict[str, str | int]):
+        """Validate and parse device type with semicolon notation."""
+        if isinstance(v, str):
+            v = dict(type=v, index=None)
+        if not isinstance(v, dict):
+            return v
+        if not 'type' in v:
+            raise ValueError('type (string) must be passed explicitly')
 
-    def build_model(self) -> torch.device:
-        print('validating model')
-        return torch.device(self.type, self.index)
+        ty = v['type']
+        if ':' not in ty:
+            return v
+        if v.get('index', None) is not None:
+            raise ValueError('type (string) must not include an index '
+                             f'because index was passed explicitly {ty!r}')
+
+        if not cls.re_match.match(ty):
+            raise ValueError(f'Invalid device string: {ty!r}')
+        v['type'], v['index'] = ty.split(':')
+        return v
+
+    def _builder(self) -> Type[torch.device]:
+        return torch.device
 
     def _validate(self, v: torch.device) -> torch.device:
         print('validating instance of torch device')
@@ -48,57 +67,6 @@ class TorchDevice(pydantic.BaseModel):
         return v
 
     @staticmethod
-    def _serialize(v: torch.device, nxt: SerializerFunctionWrapHandler) -> dict[str, str | int]:
+    def _serialize(v: torch.device, nxt: SerializerFunctionWrapHandler = lambda x: x) -> dict[str, str | int]:
         print('serializing torch device')
         return nxt(dict(type=v.type, index=v.index))
-
-
-def _validate_semicolon_in_type(values: dict[str, str | int]) -> dict[str, str | int]:
-    print('validating semicolon in type')
-    assert isinstance(values, dict), f'Invalid type: {type(values)!r}'
-    assert 'type' in values, 'type (string) must be passed explicitly'
-
-    if ':' in values['type']:
-        ty = values['type']
-        idx = values.get('index', None)
-        # define a proper regex for this
-        if not re.match(r'^[a-z]+:[0-9]+$', ty):
-            raise ValueError(f'Invalid device string: {ty!r}')
-        if idx is not None:
-            raise ValueError('type (string) must not include an index '
-                             f'because index was passed explicitly {ty!r}')
-        ty, idx = ty.split(':')
-        values['type'] = ty
-        values['index'] = int(idx)
-
-    return values
-
-from typing import Annotated
-from pydantic import BeforeValidator, AfterValidator, InstanceOf, WrapSerializer
-class TorchDeviceAnnotated:
-
-    @classmethod
-    def __class_getitem__(cls, item: Any) -> Any:
-        torch_device = TorchDevice.model_validate(item)
-        return Annotated[torch.device, InstanceOf,
-                        BeforeValidator(TorchDeviceAnnotated._validate_from_config),
-                        BeforeValidator(TorchDeviceAnnotated._validate_from_string),
-                        AfterValidator(torch_device._validate),
-                         WrapSerializer(torch_device._serialize)]
-
-    @staticmethod
-    def _validate_from_config(values: dict[str, str | int]) -> torch.device:
-        if isinstance(values, dict) and 'type' in values:
-            print('validating config')
-            values = _validate_semicolon_in_type(values)
-            return torch.device(**values)
-        return values
-
-    @staticmethod
-    def _validate_from_string(values: str) -> torch.device:
-        if isinstance(values, str):
-            print('validating string')
-            values = dict(type=values, index=None)
-            values = _validate_semicolon_in_type(values)
-            return torch.device(**values)
-        return values

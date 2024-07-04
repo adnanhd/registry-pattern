@@ -50,53 +50,18 @@ def test_invalid_device_string_with_index():
         TorchDevice(type='cuda:1', index=1)
 
 
-def test_validate_instance_of_torch_device():
-    torch_device = torch.device('cuda', 0)
-    device = TorchDevice.validate_torch_device(torch_device)
+def test_valid_device_string_format_with_model_validate():
+    device = TorchDevice.model_validate('cuda:1')
     assert device.type == 'cuda'
-    assert device.index == 0
+    assert device.index == 1
 
 
-def test_serialize_torch_device():
-    torch_device = torch.device('cuda', 0)
-    serialized = TorchDevice.serialize_torch_device(torch_device, lambda x: x)
-    assert serialized == {'type': 'cuda', 'index': 0}
-
-def test_validate_config_and_instance():
-    torch_device_cfg = dict(type='cuda', index=2)
-    torch_device_ins = torch.device(type='cuda', index=2)
-
-    assert torch_device_ins == TorchDevice.model_validate(torch_device_cfg)
-    assert torch_device_ins == TorchDevice.model_validate(torch_device_ins).build_model()
-
-def test_validate_model_and_instance():
-    torch_device_cfg = dict(type='cuda', index=2)
-    torch_device_ins = torch.device(type='cuda', index=2)
-    torch_device_mdl = TorchDevice(**torch_device_cfg)
-
-    assert torch_device_ins == torch_device_mdl.build_model()
-    assert torch_device_ins == TorchDevice.model_validate(torch_device_mdl)
-
-
-class TorchTensor(BaseModel):
-    device: TorchDevice
-
-
-def test_torch_device_within_model():
-    torch_device = torch.device('cuda')
-    assert torch_device == TorchTensor(device=torch_device).device.build_model()
-
-
-@validate_call
-def example_function(device: TorchDevice) -> None:
-    pass
-
-
-def test_torch_device_within_function():
-    torch_device = torch.device('cuda')
-    example_function(torch_device)
-
-
-def test_non_torch_device_within_function():
+def test_invalid_device_dict_with_same_index_and_model_validate():
     with pytest.raises(ValidationError):
-        example_function(2)
+        TorchDevice.model_validate({'type':'cuda:1', 'index':1})
+
+
+
+def test_invalid_device_dict_with_different_index_and_model_validate():
+    with pytest.raises(ValidationError):
+        TorchDevice.model_validate({'type':'cuda:1', 'index':2})

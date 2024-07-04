@@ -146,13 +146,13 @@ class InstanceRegistryMetaclass(RegistryMeta):
             return instance
         raise ValidationError(f"{instance} is not an instance of {cls}")
 
-    def register_instance(cls, name: str, instance: object) -> object:
+    def register_instance(cls, instance: object) -> object:
         """Register an instance."""
         # Validate the instance
         instance = cls.validate_instance(instance)
 
         # Register the instance
-        return cls._add_registry(name, instance)
+        return cls._add_registry(str(instance), instance)
 
 
 def _get_members(module) -> typing.Dict[str, typing.Any]:
