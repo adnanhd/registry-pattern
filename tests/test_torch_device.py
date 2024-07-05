@@ -45,6 +45,11 @@ def test_valid_device_string_format():
     assert device.index == 1
 
 
+def test_valid_device_string_format_multiple_colons():
+    with pytest.raises(ValidationError):
+        device = TorchDevice(type='cuda:1:2')
+
+
 def test_invalid_device_string_with_index():
     with pytest.raises(ValidationError):
         TorchDevice(type='cuda:1', index=1)

@@ -15,14 +15,20 @@ T = TypeVar('T')
 
 class _BaseModel(BaseModel, Generic[T]):
 
-    @abstractmethod
-    def _builder(self) -> Type[T]:
-        ...
+    
+    @final
+    def _config(self) -> dict[str, Any]:
+        return self.model_dump(exclude_unset=True)
 
     @final
     def _build(self) -> T | Callable[..., T]:
         """Build a torch.device instance from the model."""
-        return partial(self._builder(), **self.model_dump(exclude_unset=True))
+        return partial(self._builder(), **self._config())
+
+    @abstractmethod
+    def _builder(self) -> Type[T]:
+        ...
+
 
     @abstractmethod
     def _validate(self, v: T) -> T:

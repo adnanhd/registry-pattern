@@ -1,9 +1,10 @@
-from typing import Any,  Type
+from typing import Any,  Type, ClassVar, Literal
 import torch
+import re
 import inspect
 import pydantic
 from .base import _BaseModel
-from pydantic import Field, SerializerFunctionWrapHandler, BaseModel, Field
+from pydantic import Field, SerializerFunctionWrapHandler, BaseModel, InstanceOf, ConfigDict
 from pydantic_core import core_schema
 
 from pydantic_pytorch.registrations import InstanceRegistryMetaclass
@@ -11,52 +12,54 @@ from pydantic_pytorch.registrations import InstanceRegistryMetaclass
 __ALL__ = ['TorchDType']
 
 
-class Str2TorchDeviceMapping(metaclass=InstanceRegistryMetaclass):
-    _DUPLICATE_DICT = {}
-
-    @classmethod
-    def register_instance(cls, name: str, instance: Type[torch.dtype]) -> None:
-        assert isinstance(name, str), f'{name} is not a string'
-        if name in cls._DUPLICATE_DICT:
-            val = cls.get_registered(cls._DUPLICATE_DICT[name])
-            raise ValueError(f'Can\'t register {name} twice. '
-                             f'Already registered to {val}')
-        cls._DUPLICATE_DICT[name] = str(instance)
-        if not cls.has_registered(instance):
-            return InstanceRegistryMetaclass.register_instance(cls, instance)
-        return instance
-
-    @classmethod
-    def get_registered(cls, name: str) -> Type[torch.dtype]:
-        if name in cls._DUPLICATE_DICT:
-            return InstanceRegistryMetaclass.get_registered(cls, cls._DUPLICATE_DICT[name])
-        return InstanceRegistryMetaclass.get_registered(cls, name)
-
-
-Str2TorchDeviceMapping.register(torch.dtype)
-
-
-for k, v in inspect.getmembers(torch):
-    if isinstance(v, torch.dtype):
-        Str2TorchDeviceMapping.register_instance(k, v)
-
-
 class TorchDType(_BaseModel[torch.dtype]):
     """TypedDict for torch.device"""
-    type: str = Field(..., description="String representation of torch dtype")
+
+    dtypes: ClassVar[dict[str, InstanceOf[Any]]] = {
+        f'torch.{k}': v
+        for k, v in inspect.getmembers(torch)
+        if isinstance(v, torch.dtype)
+    }
+
+    aliases: ClassVar[dict[str, str]] = {
+        k: str(v)
+        for k, v in dtypes.items()
+    }
+    aliases.update({k[6:]: v for k, v in aliases.items()})
+    
+    aliases.update({
+        v[0] + re.findall(r'[0-9]+', v)[0]: v
+        for v in aliases.values()
+        if re.match(r'^[a-z]+[0-9]+$', v)
+    })
+    
+    
+    type: str = Field(description="String representation of torch dtype", 
+                      json_schema_extra=dict(required=True))
+
+    model_config = ConfigDict(validate_default=True, validate_assignment=True)
+
+    @pydantic.model_validator(mode='before')
+    @staticmethod
+    def validate_string(values: str) -> dict[str, str]:
+        print('validate model')
+        if isinstance(values, str):
+            return dict(type=values)
+        return values
 
     @pydantic.field_validator('type')
+    @classmethod
     def validate_type(cls, v: str) -> str:
-        if v not in Str2TorchDeviceMapping.list_registry():
+        if v not in cls.aliases.keys():
             raise ValueError(f'Invalid dtype: {v}')
-        return Str2TorchDeviceMapping._DUPLICATE_DICT[str(v)]
+        return cls.aliases[v]
 
     def _builder(self) -> Type[torch.dtype]:
-        return Str2TorchDeviceMapping.get_registered(self.type)
+        return (lambda type: self.dtypes[type])
 
     def _validate(self, v: torch.dtype) -> torch.dtype:
         print('validating instance of torch device')
-        if self.type != self._serialize(v):
+        if self.type != self._serialize(v)['type']:
             raise ValueError(f'Invalid dtype: {v} e.g. {self._serialize(v)} '
                              f'but must be {self.type}')
         return v
@@ -64,4 +67,4 @@ class TorchDType(_BaseModel[torch.dtype]):
     @staticmethod
     def _serialize(v: torch.dtype, nxt: SerializerFunctionWrapHandler = lambda x: x) -> dict[str, str | int]:
         print('serializing torch device')
-        return nxt(dict(type=Str2TorchDeviceMapping._DUPLICATE_DICT[str(v)]))
+        return nxt(dict(type=self.aliases[str(v)]))

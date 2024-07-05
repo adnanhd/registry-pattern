@@ -1,34 +1,35 @@
-from typing import Any, List
-from pydantic import BaseModel, NonNegativeInt, Field
+from typing import Any, List, Type
+from pydantic import BaseModel, NonNegativeInt, Field, SerializerFunctionWrapHandler
 from pydantic_core import core_schema
 import pydantic
 import torch
+from .base import _BaseModel
 
 TORCH_SHAPE_TYPE = List[NonNegativeInt]
 
 
-class TorchShape(BaseModel):
-    """Model for validating tensor shapes."""
-    shape: TORCH_SHAPE_TYPE = Field(..., description="Sequence of positive integers representing the shape of the tensor")
+class TorchShape(_BaseModel[torch.Size]):
+    """TypedDict Config for torch.device"""
+    shape: TORCH_SHAPE_TYPE = Field(json_schema_extra=dict(required=True))
 
-    @pydantic.model_validator(mode='after')
-    def build_model(self) -> torch.Size:
-        return torch.Size(self.shape)
+    @pydantic.model_validator(mode='before')
+    @staticmethod
+    def validate_string(values: list) -> dict[str, list]:
+        print('validate model')
+        if isinstance(values, list):
+            return dict(shape=values)
+        return values
 
-    @classmethod
-    def validate_torch_shape(cls, v: TORCH_SHAPE_TYPE) -> 'TorchShape':
-        return cls(shape=v)
+    def _builder(self) -> Type[torch.Size]:
+        return lambda shape: torch.Size(shape)
+
+    def _validate(self, v: torch.Size) -> torch.Size:
+        print('validating instance of torch device')
+        if self.shape is not None and self.shape != list(v):
+            raise ValueError(
+                f'Invalid shape: {list(v)!r} must be {self.shape!r}')
 
     @staticmethod
-    def serialize_torch_shape(v: TORCH_SHAPE_TYPE, nxt: Any) -> dict:
-        return nxt({'shape': list(v)})
-
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: Any) -> Any:
-        instance_validation = core_schema.no_info_after_validator_function(
-            cls.validate_torch_shape,
-            core_schema.is_instance_schema(torch.Size),
-            serialization=core_schema.wrap_serializer_function_ser_schema(
-                cls.serialize_torch_shape)
-        )
-        return core_schema.union_schema([handler(source_type), instance_validation])
+    def _serialize(v: torch.Size, nxt: SerializerFunctionWrapHandler = lambda x: x) -> dict[str, TORCH_SHAPE_TYPE]:
+        print('serializing torch device')
+        return nxt(dict(shape=list(v)))
