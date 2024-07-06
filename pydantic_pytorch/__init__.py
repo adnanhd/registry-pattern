@@ -1,3 +1,3 @@
 # pydantic_pytorch package
 
-from . import annotations, registrations, constructions, utilizations
+from . import annotations, registrations, constructions, utils

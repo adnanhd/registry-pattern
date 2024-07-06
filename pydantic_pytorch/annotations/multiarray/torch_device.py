@@ -14,17 +14,19 @@ else:
 
 __ALL__ = ['TorchDevice']
 
+TORCH_DEVICE_TYPE = Literal[
+    'cpu', 'cuda', 'fpga', 'hip', 'hpu', 'ideep', 'ipu',
+    'lazy', 'meta', 'mkldnn', 'mps', 'mtia',  'opencl',
+    'opengl', 'ort', 've', 'vulkan', 'xla', 'xpu'
+]
+
 
 @configures(torch.device)
 class TorchDevice(_BaseModel[torch.device]):
     """TypedDict Config for torch.device"""
     re_match: ClassVar[re.Pattern] = re.compile(r'^[a-z]+:[0-9]+$')
 
-    type: Literal[
-        'cpu', 'cuda', 'fpga', 'hip', 'hpu', 'ideep', 'ipu',
-        'lazy', 'meta', 'mkldnn', 'mps', 'mtia',  'opencl',
-        'opengl', 'ort', 've', 'vulkan', 'xla', 'xpu'
-    ] = Field(json_schema_extra=dict(required=True))
+    type: TORCH_DEVICE_TYPE = Field(json_schema_extra=dict(required=True))
 
     index: Optional[NonNegativeInt] = Field(
         default=None, json_schema_extra=dict(required=False)
@@ -42,6 +44,8 @@ class TorchDevice(_BaseModel[torch.device]):
             raise ValueError('type (string) must be passed explicitly')
 
         ty = v['type']
+        if not isinstance(ty, str):
+            return v  # let pydantic handle the error
         if ':' not in ty:
             return v
         if v.get('index', None) is not None:
