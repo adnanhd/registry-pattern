@@ -1,9 +1,16 @@
-from typing import Any
+from typing import Any, Annotated, Literal
 from functools import partial
+from annotated_types import Ge
 from pydantic_core import core_schema, CoreSchema
 from pydantic.json_schema import JsonSchemaValue
-from ..utils._types import TORCH_DEVICE_TYPE, TORCH_DEVICE_INDEX
 import torch
+
+TORCH_DEVICE_INDEX = Annotated[int, Ge(0)] | None
+
+TORCH_DEVICE_TYPE = Literal['cpu', 'cuda', 'fpga', 'hip', 'hpu', 'ideep', 'ipu',
+                            'lazy', 'meta', 'mkldnn', 'mps', 'mtia',  'opencl',
+                            'opengl', 'ort', 've', 'vulkan', 'xla', 'xpu']
+
 
 import torch
 from typing import Any
@@ -11,8 +18,7 @@ from functools import partial
 from pydantic import GetCoreSchemaHandler, SerializerFunctionWrapHandler
 
 
-def validate_js_torch_device(x: Any) -> torch.device:
-    print('validate_js_torch_device', x)
+def validate_js_torch_device(x: str) -> torch.device:
     try:
         return torch.device(x)
     except Exception as e:
@@ -26,18 +32,14 @@ def serialize_js_torch_device(x: torch.device, nxt: SerializerFunctionWrapHandle
 
 
 def validate_py_torch_device(x: Any, strict: bool = False) -> torch.device:
-    print('validate_py_torch_device', x, strict)
     if isinstance(x, torch.device):
         return x
     elif strict:
         raise ValueError(f'Invalid torch device: {x!r}')
-    try:
-        return torch.device(x)
-    except Exception as e:
-        raise ValueError(f'Invalid torch device: {x!r}') from e
+    return validate_js_torch_device(x)
 
 
-def serialize_py_torch_device(x: torch.device, nxt: SerializerFunctionWrapHandler) -> str:
+def serialize_py_torch_device(x: torch.device, nxt: SerializerFunctionWrapHandler) -> torch.device:
     return nxt(x)
 
 
