@@ -1,5 +1,6 @@
 import abc
 import inspect
+from numba.experimental import jitclass
 from functools import lru_cache
 from typeguard import check_type, TypeCheckError as TypeguardTypeCheckError
 from typing import TypeVar, Generic, ClassVar, Dict, Callable, ParamSpec, get_args, List, Any, Type
@@ -9,9 +10,8 @@ __all__ = [
     'RegistryError',
     'ValidationError',
     'RegistryMeta',
-    'ClassRegistryMetaclass',
-    'FunctionalRegistryMetaclass',
-    'InstanceRegistryMetaclass'
+    'ClassRegistry',
+    'FunctionalRegistry',
 ]
 
 

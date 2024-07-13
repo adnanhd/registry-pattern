@@ -1,12 +1,33 @@
-from typing import Generic, TypeVar, get_args
-from registry import InstanceKeyMeta, InstanceValueMeta
+from typing import Protocol, Annotated
+from registry import ClassRegistry, BuildFrom, BuilderValidator
+from pydantic import BaseModel, InstanceOf
 import torch
 
-class DtypeRegistry(InstanceValueMeta[torch.dtype], weak=False):
+
+# bug with arguments with default values
+class TorchModule(Protocol):
+    in_features: int
+    out_features: int
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        ...
+
+
+class TorchModuleRegistry(ClassRegistry[TorchModule]):
     """Registry for dtypes."""
     pass
 
 
-DtypeRegistry.register(torch.dtype)
-DtypeRegistry.register_instance(torch.float32)
-DtypeRegistry.register_instance(torch.float64)
+TorchModuleRegistry.register(torch.nn.Module)
+TorchModuleRegistry.register_class(torch.nn.Linear)
+
+
+class TrainModel(BaseModel):
+    model: Annotated[torch.nn.Module, BuilderValidator(
+        registry=TorchModuleRegistry)]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model.forward(x)
+
+
+model = TrainModel(model=torch.nn.Linear(1, 1))
