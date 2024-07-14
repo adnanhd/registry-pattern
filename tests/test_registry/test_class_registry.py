@@ -1,6 +1,11 @@
+"""
+Test class registry.
+"""
+
 from typing import Protocol
-from registry import ClassRegistry, RegistryError
 import pytest
+
+from pydantic_pytorch.patterns.registry import ClassRegistry, RegistryError
 
 
 class Foo(Protocol):

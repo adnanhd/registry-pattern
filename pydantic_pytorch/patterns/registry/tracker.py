@@ -4,6 +4,8 @@ from functools import wraps, lru_cache
 from .registry import RegistryError, ValidationError, TypeCheckError
 from typeguard import check_type, TypeCheckError
 from abc import ABCMeta
+
+
 class Hashable(Protocol):
     def __hash__(self) -> int:
         ...
@@ -67,15 +69,18 @@ class TrackerMeta(ABCMeta):
 K = TypeVar("K", bound=Hashable)
 CfgT = dict[str, Any]
 
+
 class InstanceKeyMeta(Generic[K], metaclass=TrackerMeta):
     __orig_bases__: ClassVar[tuple[type, ...]]
     __check_type__: ClassVar[type[K]]
     _trackables: ClassVar[MutableMapping[K, CfgT]]
-    
+
     @classmethod
     def __init_subclass__(cls, weak: bool = True, static: bool = True) -> None:
-        cls._trackables = weakref.WeakKeyDictionary[K]() if weak else dict[K, CfgT]()
-        cls.__check_type__, = get_args(cls.__orig_bases__[0]) if static else (type,)
+        cls._trackables = weakref.WeakKeyDictionary[K](
+        ) if weak else dict[K, CfgT]()
+        cls.__check_type__, = get_args(
+            cls.__orig_bases__[0]) if static else (type,)
 
     @classmethod
     def validate_instance(cls, instance: K) -> K:
@@ -108,8 +113,10 @@ class InstanceValueMeta(Generic[V], metaclass=TrackerMeta):
 
     @classmethod
     def __init_subclass__(cls, weak: bool = True, static: bool = True) -> None:
-        cls._trackables = weakref.WeakValueDictionary[V]() if weak else dict[Hashable, V]()
-        cls.__check_type__, = get_args(cls.__orig_bases__[0]) if static else (type,)
+        cls._trackables = weakref.WeakValueDictionary[V](
+        ) if weak else dict[Hashable, V]()
+        cls.__check_type__, = get_args(
+            cls.__orig_bases__[0]) if static else (type,)
 
     @classmethod
     def validate_instance(cls, instance: V) -> V:

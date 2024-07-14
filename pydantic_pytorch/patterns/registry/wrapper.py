@@ -13,12 +13,42 @@ class WrapperMeta(type):
     def _create_delegating_methods(cls):
         # Define a list of special method names to delegate
         special_methods = [
-            '__add__', '__sub__', '__mul__', '__truediv__', '__floordiv__', '__mod__',
-            '__pow__', '__and__', '__or__', '__xor__', '__lshift__', '__rshift__',
-            '__lt__', '__le__', '__eq__', '__ne__', '__gt__', '__ge__',
-            '__round__', '__floor__', '__ceil__', '__trunc__', '__int__', '__float__', '__complex__',
-            '__neg__', '__pos__', '__abs__', '__invert__', '__call__',
-            '__getitem__', '__setitem__', '__delitem__', '__len__', '__iter__', '__contains__'
+            "__add__",
+            "__sub__",
+            "__mul__",
+            "__truediv__",
+            "__floordiv__",
+            "__mod__",
+            "__pow__",
+            "__and__",
+            "__or__",
+            "__xor__",
+            "__lshift__",
+            "__rshift__",
+            "__lt__",
+            "__le__",
+            "__eq__",
+            "__ne__",
+            "__gt__",
+            "__ge__",
+            "__round__",
+            "__floor__",
+            "__ceil__",
+            "__trunc__",
+            "__int__",
+            "__float__",
+            "__complex__",
+            "__neg__",
+            "__pos__",
+            "__abs__",
+            "__invert__",
+            "__call__",
+            "__getitem__",
+            "__setitem__",
+            "__delitem__",
+            "__len__",
+            "__iter__",
+            "__contains__",
         ]
 
         for name in special_methods:
@@ -26,8 +56,9 @@ class WrapperMeta(type):
 
     def _create_delegating_properties(cls, instance):
         for name in dir(instance):
-            if not name.startswith('__') and not callable(getattr(instance, name)):
-                setattr(cls, name, cls._delegate_property(name))
+            if name.startswith("__") or callable(getattr(instance, name)):
+                continue
+            setattr(cls, name, cls._delegate_property(name))
 
     @staticmethod
     def _delegate_method(name):
@@ -46,6 +77,7 @@ class WrapperMeta(type):
 
         def property_deleter(self):
             delattr(self._instance, name)
+
         return property(property_getter, property_setter, property_deleter)
 
     '''
@@ -62,25 +94,26 @@ class WrapperMeta(type):
         return NotImplemented
     '''
 
+
 class InstanceWrapper(metaclass=WrapperMeta):
     def __init__(self, instance, config):
         self._instance = instance
         self._config = config
 
     def __getattr__(self, name):
-        if name in {'_instance', '_config'}:
+        if name in {"_instance", "_config"}:
             return self.__getattribute__(name)
         else:
             return getattr(self._instance, name)
 
     def __setattr__(self, name, value):
-        if name in {'_instance', '_config'}:
+        if name in {"_instance", "_config"}:
             super().__setattr__(name, value)
         else:
             setattr(self._instance, name, value)
 
     def __delattr__(self, name):
-        if name in {'_instance', '_config'}:
+        if name in {"_instance", "_config"}:
             super().__delattr__(name)
         else:
             delattr(self._instance, name)
@@ -89,4 +122,9 @@ class InstanceWrapper(metaclass=WrapperMeta):
         return dir(self._instance)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}[{self._instance.__class__.__name__}](' + ', '.join(f'{key!r}={val!r}' for key, val in self._config.items()) + ')'
+        return (
+            f"{self.__class__.__name__}[{self._instance.__class__.__name__}]("
+            + ", ".join(f"{key!r}={val!r}" for key, val in self._config.items())
+            + ")"
+        )
+

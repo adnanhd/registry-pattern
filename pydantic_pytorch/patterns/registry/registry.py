@@ -1,9 +1,25 @@
+"""
+Base metaclass for registering classes and functions.
+"""
+
 import abc
 import inspect
-from numba.experimental import jitclass
 from functools import lru_cache
+from typing import (
+    TypeVar,
+    Generic,
+    ClassVar,
+    Dict,
+    Callable,
+    ParamSpec,
+    get_args,
+    List,
+    Any,
+    Type,
+    MutableMapping,
+    Hashable
+)
 from typeguard import check_type, TypeCheckError as TypeguardTypeCheckError
-from typing import TypeVar, Generic, ClassVar, Dict, Callable, ParamSpec, get_args, List, Any, Type
 
 
 __all__ = [
@@ -17,17 +33,14 @@ __all__ = [
 
 class RegistryError(ValueError):
     """Exception raised for registration errors."""
-    pass
 
 
 class ValidationError(RuntimeError):
     """Exception raised for validation errors."""
-    pass
 
 
 class TypeCheckError(TypeError):
     """Exception raised for type checking errors."""
-    pass
 
 
 Error = RegistryError | ValidationError | TypeCheckError
@@ -35,23 +48,25 @@ Error = RegistryError | ValidationError | TypeCheckError
 
 class RegistryMeta(abc.ABCMeta):
     """Metaclass for managing registrations."""
-    _registrar: ClassVar[Dict[str, Any]]
+    _registrar: ClassVar[Dict[Hashable, Any] | MutableMapping[Hashable, Any]]
 
     def __new__(mcs, name, bases, attrs):
         cls = super().__new__(mcs, name, bases, attrs)
         cls._registrar = dict()
         return cls
 
-    def __call__(cls, *args, **kwargs):
-        raise TypeError(f"Cannot instantiate registry class {cls.__name__}")
+    def __call__(cls, name: str, *args, **kwargs) -> Any:
+        """Instantiate a registered class."""
+        return RegistryMeta.get_registered(cls, name)(*args, **kwargs)
+        # raise TypeError(f"Cannot instantiate registry class {cls.__name__}")
 
     def _add_registry(cls, name: str, value: Any) -> Any:
-        if name not in cls.list_registry():
+        if name not in cls._registrar.keys():
             return cls._registrar.setdefault(name, value)
         raise RegistryError(f'{cls.__name__}: {name!r} is already registered')
 
     def _pop_registry(cls, name: str) -> Any:
-        if name in cls.list_registry():
+        if name in cls._registrar.keys():
             return cls._registrar.pop(name)
         raise RegistryError(f'{cls.__name__}: {name!r} is not registered')
 
@@ -99,6 +114,7 @@ class ClassRegistry(Generic[Protocol], metaclass=RegistryMeta):
 
     @classmethod
     def __init_subclass__(cls, strict: bool = True):
+        print('__init_subclass__', strict)
         if strict:
             cls.__check_type__, = get_args(cls.__orig_bases__[0])
         else:
@@ -133,12 +149,14 @@ class ClassRegistry(Generic[Protocol], metaclass=RegistryMeta):
         for obj in _get_members(module).values():
             try:
                 cls.register_class(obj)
-            except (Error, KeyError, AssertionError):
+            except (RegistryError, ValidationError, TypeCheckError, KeyError, AssertionError):
                 pass
         return module
 
     @classmethod
-    def register_subclasses(cls, supercls: type[Protocol], recursive: bool = False) -> type[Protocol]:
+    def register_subclasses(cls,
+                            supercls: type[Protocol],
+                            recursive: bool = False) -> type[Protocol]:
         """Register all subclasses of a given superclass."""
         assert inspect.isclass(supercls), f"{supercls} is not a class"
         abc.ABCMeta.register(cls, supercls)
@@ -153,6 +171,10 @@ R = TypeVar("R")
 P = ParamSpec("P")
 
 
+def _f():
+    pass
+
+
 class FunctionalRegistry(Generic[P, R], metaclass=RegistryMeta):
     """Metaclass for registering functions."""
     __orig_bases__: ClassVar[tuple[type, ...]]
@@ -161,7 +183,6 @@ class FunctionalRegistry(Generic[P, R], metaclass=RegistryMeta):
 
     @classmethod
     def __init_subclass__(cls, static: bool = True):
-        def _f(): pass
         abc.ABCMeta.register(cls, type(_f))
         if static:
             param, ret = get_args(cls.__orig_bases__[0])
@@ -196,6 +217,6 @@ class FunctionalRegistry(Generic[P, R], metaclass=RegistryMeta):
         for obj in _get_members(module).values():
             try:
                 cls.register_function(obj)
-            except (Error, KeyError, AssertionError):
+            except (RegistryError, ValidationError, TypeCheckError, KeyError, AssertionError):
                 pass
         return module
