@@ -9,10 +9,10 @@ from pydantic_core import CoreSchema, core_schema
 from pydantic import BaseModel, GetCoreSchemaHandler, InstanceOf, ConfigDict
 from pydantic import Field
 from pydantic._internal import _generics
-from .registry import RegistryMeta
+from .base import BaseRegistry as RegistryMeta
 
 
-Builder = TypeVar("Builder", bound=RegistryMeta)
+Builder = TypeVar("Builder") #, bound=RegistryMeta)
 
 
 class Buildable(BaseModel):

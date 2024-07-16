@@ -1,10 +1,11 @@
-from typing import Type, TypeVar, _ProtocolMeta, ParamSpec, Annotated
-from types import new_class
-from .registry import ClassRegistry, FunctionalRegistry
-from ._compat import BuilderValidator
+from typing import TypeVar, _ProtocolMeta, ParamSpec, Annotated
+from types import EllipsisType
+from .cls_registry import ClassRegistry
+from .func_registry import FunctionalRegistry
+from ._pydantic import BuilderValidator
 
-Protocol = TypeVar("Protocol", bound=_ProtocolMeta)
-
+T = TypeVar("T", bound=_ProtocolMeta)
+P = ParamSpec("P")
 
 def _dict_not_none(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
@@ -12,35 +13,54 @@ def _dict_not_none(d: dict) -> dict:
 
 def make_class_registry(
         name: str,
-        cls: Type[Protocol],
-        strict: bool = True,
-        weak: bool = False,
-        domain: str | None = None
-) -> Type[ClassRegistry[Protocol]]:
+        * subcls: type,
+        protocol: type[T] | type = type,
+        coercion: bool = False,
+        domain: str | None = None,
+        description: str | None = None
+) -> ClassRegistry[T]:
     """Make a class registry."""
-    assert not weak, "Weak references are not supported"
     assert domain is None, "Domains are not supported"
-    assert strict, "Strict references are not supported"
+    assert not coercion, "Strict references are not supported"
 
-    # kwds = _dict_not_none({'strict': strict, 'weak': weak, 'domain': domain})
-    return new_class(f'{name}Registry', bases=(ClassRegistry[cls],), kwds=None)
+    class Register(ClassRegistry[protocol]):
+        """A class registry."""
+        ignore_structural_subtyping = protocol is type
+        ignore_abcnominal_subtyping = len(subcls) == 0
+
+    Register.__name__ = f'{name}Registry'
+    Register.__qualname__ = f'{name}Registry'
+    Register.__module__ = protocol.__module__
+    Register.__doc__ = description
+
+    for _subcls in subcls:
+        Register.register(_subcls)
+
+    # TODO: return cacher later
+    return Register()
 
 
 def make_functional_registry(
         name: str,
-        args: Type[ParamSpec],
-        ret: Type,
-        strict: bool = True,
-        weak: bool = False,
-        domain: str = ''
-) -> Type[FunctionalRegistry[Type[ParamSpec], Type]]:
+        args: list[type] | EllipsisType = ...,
+        ret: type[T] = type,
+        coercion: bool = False,
+        domain: str | None = None,
+        description: str | None = None
+) -> FunctionalRegistry[P, T]:
     """Make a functional registry."""
-    assert not weak, "Weak references are not supported"
     assert domain == '', "Domains are not supported"
-    assert strict, "Strict references are not supported"
+    assert not coercion, "Strict references are not supported"
 
-    # kwds = _dict_not_none({'strict': strict, 'weak': weak, 'domain': domain})
-    return new_class(f'{name}Registry', bases=(FunctionalRegistry[args, ret],), kwds=None)
+    class Registry(FunctionalRegistry[args, ret]): # type: ignore
+        """A functional registry."""
+        
+    Registry.__name__ = f'{name}Registry'
+    Registry.__qualname__ = f'{name}Registry'
+    Registry.__module__ = ret.__module__
+    Registry.__doc__ = description
+
+    return Registry()
 
 
 class PydanticBuilderValidatorMacro:
