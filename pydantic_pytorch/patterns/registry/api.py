@@ -1,10 +1,15 @@
-from typing import TypeVar, _ProtocolMeta, ParamSpec, Annotated
+from typing import TypeVar, _ProtocolMeta, ParamSpec, Annotated, Protocol
 from types import EllipsisType
 from .cls_registry import ClassRegistry
 from .func_registry import FunctionalRegistry
 from ._pydantic import BuilderValidator
 
-T = TypeVar("T", bound=_ProtocolMeta)
+
+class AnyProtocol(Protocol):
+    """Any protocol."""
+
+
+T = TypeVar("T", bound=AnyProtocol)
 P = ParamSpec("P")
 
 def _dict_not_none(d: dict) -> dict:
@@ -25,7 +30,7 @@ def make_class_registry(
 
     class Register(ClassRegistry[protocol]):
         """A class registry."""
-        ignore_structural_subtyping = protocol is type
+        ignore_structural_subtyping = protocol is AnyProtocol
         ignore_abcnominal_subtyping = len(subcls) == 0
 
     Register.__name__ = f'{name}Registry'
@@ -54,7 +59,7 @@ def make_functional_registry(
 
     class Registry(FunctionalRegistry[args, ret]): # type: ignore
         """A functional registry."""
-        
+
     Registry.__name__ = f'{name}Registry'
     Registry.__qualname__ = f'{name}Registry'
     Registry.__module__ = ret.__module__

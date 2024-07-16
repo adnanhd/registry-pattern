@@ -42,10 +42,10 @@ class BaseRegistry(Container[T], Generic[K, T]):
         """Initialize the subclass."""
         cls._repository = dict()
 
-    @staticmethod
-    def __absence__(key: K):
+    @classmethod
+    def __absence__(cls, key: K):
         """Raise an error for absent classes."""
-        raise RegistryLookupError(f'{key} not registered')
+        raise RegistryLookupError(f'{cls.__name__}: {key!r} not registered')
 
     def __contains__(self, key: Any) -> bool:
         return self.keys().__contains__(self.get_lookup_key(key))
@@ -90,10 +90,10 @@ class BaseRegistry(Container[T], Generic[K, T]):
 class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
     """Metaclass for managing mutable registrations."""
 
-    @staticmethod
-    def __presence__(key: K) -> Exception:
+    @classmethod
+    def __presence__(cls, key: K) -> Exception:
         """Raise an error for duplicate registrations."""
-        raise RegistryError(f'{key} already registered')
+        raise RegistryError(f'{cls.__name__}: {key!r} already registered')
 
     def __setitem__(self, key: K, value: Any) -> None:
         return self.add_registry_item(key, value)
