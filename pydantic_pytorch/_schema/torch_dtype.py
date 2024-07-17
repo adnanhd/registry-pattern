@@ -1,27 +1,29 @@
+import re
+import torch
+import inspect
 from typing import Any, Annotated, Literal
 from functools import partial
 from pydantic_core import core_schema, CoreSchema
 from pydantic.json_schema import JsonSchemaValue
-import torch
-import inspect
-import re
+from pydantic import GetCoreSchemaHandler, SerializerFunctionWrapHandler
+
 
 def _dtype_to_str(v: torch.dtype) -> str:
-    return str(v)[6:] 
+    return str(v)[6:]
 
 def _shorten_name(v: str) -> str:
     return v[0] + re.findall(r'[0-9]+', v)[0]
 
 def _is_shortanable(v: str) -> bool:
-    return re.match(r'^[a-z]+[0-9]+$', v)
+    return re.match(r'^[a-z]+[0-9]+$', v) is not None
 
 def _is_shortened_name(v: str) -> bool:
-    return re.match(r'^[a-z][0-9]+$', v)
+    return re.match(r'^[a-z][0-9]+$', v) is not None
 
 
 _TORCH_DTYPE_MAPPING = {
     k: _dtype_to_str(v)
-    for k, v in inspect.getmembers(torch) 
+    for k, v in inspect.getmembers(torch)
     if isinstance(v, torch.dtype)
 }
 
@@ -33,14 +35,7 @@ _SHORTENED_TORCH_DTYPE_MAPPING = {
 }
 
 
-TORCH_DTYPE_TYPE = Literal[*_TORCH_DTYPE_MAPPING.values()]
-
-
-
-import torch
-from typing import Any
-from functools import partial
-from pydantic import GetCoreSchemaHandler, SerializerFunctionWrapHandler
+TORCH_DTYPE_TYPE = Literal['float32', 'float64']
 
 
 def validate_js_torch_dtype(x: str) -> torch.dtype:
@@ -74,7 +69,7 @@ def torch_dtype_schema(
     dtype: TORCH_DTYPE_TYPE | None = None,
     strict: bool = True
 ) -> CoreSchema:
-    
+
     schema = core_schema.is_instance_schema(torch.dtype)
     constraints = []
 
@@ -98,7 +93,7 @@ def torch_dtype_schema(
             function=partial(validate_py_torch_dtype, strict=strict),
             schema=schema
         )
-    
+
     python_schema = core_schema.chain_schema([deserializer, schema, *constraints])
     python_schema['serialization'] = core_schema.wrap_serializer_function_ser_schema(
         serialize_py_torch_dtype,

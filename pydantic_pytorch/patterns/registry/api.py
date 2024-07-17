@@ -1,4 +1,5 @@
 from typing import TypeVar, _ProtocolMeta, ParamSpec, Annotated, Protocol
+from inspect import isclass, isfunction
 from types import EllipsisType
 from .cls_registry import ClassRegistry
 from .func_registry import FunctionalRegistry
@@ -27,6 +28,7 @@ def make_class_registry(
     """Make a class registry."""
     assert domain is None, "Domains are not supported"
     assert not coercion, "Strict references are not supported"
+    assert all(map(isclass, subcls)), "Only classes are supported"
 
     class Register(ClassRegistry[protocol]):
         """A class registry."""
