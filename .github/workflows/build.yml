@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-cov black flake8 pyright
+          pip install pytest pytest-cov coveralls black flake8 pyright
 
       - name: Install package
         run: |
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -v --cov
+          pytest -vv tests --cov=registry/
 
       - name: Run type checking
         run: |
@@ -49,3 +49,7 @@ jobs:
       - name: Lint with flake8
         run: |
           flake8 .
+
+      - name: Generate coverage with coveralls
+        run: |
+          COVERALLS_REPO_TOKEN=${{ secrets.COVERALLS_REPO_TOKEN }} coveralls

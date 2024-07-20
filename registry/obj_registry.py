@@ -12,6 +12,7 @@ from typing import (
     cast,
     Hashable,
     Callable,
+    Dict,
     List,
 )
 from .base import BaseMutableRegistry
@@ -21,7 +22,7 @@ from .obj_extra import ClassTracker
 
 
 K = TypeVar("K", bound=Hashable)
-CfgT = dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
+CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
 V = TypeVar("V")
 
 
@@ -71,7 +72,7 @@ class InstanceRegistry(_BaseInstanceRegistry[Hashable, V]):
     def track_class_instances(self, cls: Type) -> Type:
         """Track a class."""
         # TODO: validate if cls is of type V
-        kwds = cast(dict[str, Any], ClassTracker[cls].__dict__)
+        kwds = cast(Dict[str, Any], ClassTracker[cls].__dict__)
         # validator = compose(self.register_instance, ClassTracker[cls].__call__)
 
         def validator(cls: ClassTracker[cls], *args, **kwargs):
@@ -116,7 +117,7 @@ class InstanceKeyRegistry(_BaseInstanceRegistry[K, CfgT], Generic[K]):
             raise TypeError(f"{value} is not a dict")
         return value
 
-    def register_instance(self, cls: K, cfg: dict[str, Any]) -> K:
+    def register_instance(self, cls: K, cfg: Dict[str, Any]) -> K:
         """Track a class."""
         self.add_registry_item(cls, cfg)
         return cls
