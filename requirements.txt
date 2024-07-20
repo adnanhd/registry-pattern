@@ -1,4 +1,3 @@
 pydantic>=2.5
-torch
 typing_extensions
-numpy
+typeguard
