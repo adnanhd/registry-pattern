@@ -4,12 +4,13 @@ Base metaclass for registering classes and functions.
 
 import abc
 from functools import lru_cache
-from typing import Any, Hashable, Container, TypeVar, Iterator, ClassVar, Generic, Protocol, MutableMapping
+from typing import Any, Hashable, Container, TypeVar, Iterator, ClassVar
+from typing import Generic, Protocol, MutableMapping, Dict, Tuple, Union
 
 __all__ = [
-    'RegistryError',
-    'BaseRegistry',
-    'BaseMutableRegistry',
+    "RegistryError",
+    "BaseRegistry",
+    "BaseMutableRegistry",
 ]
 
 
@@ -24,18 +25,18 @@ class RegistryLookupError(RegistryError):
 class Stringable(Protocol):
     """A protocol for stringable objects."""
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
 
-K = TypeVar('K', bound=Hashable)
-T = TypeVar('T', bound=Stringable)
+K = TypeVar("K", bound=Hashable)
+T = TypeVar("T", bound=Stringable)
 
 
 class BaseRegistry(Container[T], Generic[K, T]):
     """Metaclass for managing registrations."""
-    __orig_bases__: ClassVar[tuple[type, ...]]
-    _repository: ClassVar[dict | MutableMapping]
+
+    __orig_bases__: ClassVar[Tuple[type, ...]]
+    _repository: ClassVar[Union[Dict, MutableMapping]]
 
     @classmethod
     def __init_subclass__(cls) -> None:
@@ -45,7 +46,7 @@ class BaseRegistry(Container[T], Generic[K, T]):
     @classmethod
     def __absence__(cls, key: K):
         """Raise an error for absent classes."""
-        raise RegistryLookupError(f'{cls.__name__}: {key!r} not registered')
+        raise RegistryLookupError(f"{cls.__name__}: {key!r} not registered")
 
     def __contains__(self, key: Any) -> bool:
         return self.keys().__contains__(self.get_lookup_key(key))
@@ -93,7 +94,7 @@ class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
     @classmethod
     def __presence__(cls, key: K) -> Exception:
         """Raise an error for duplicate registrations."""
-        raise RegistryError(f'{cls.__name__}: {key!r} already registered')
+        raise RegistryError(f"{cls.__name__}: {key!r} already registered")
 
     def __setitem__(self, key: K, value: Any) -> None:
         return self.add_registry_item(key, value)

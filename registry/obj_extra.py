@@ -1,5 +1,6 @@
 """Object registry pattern."""
-from typing import Protocol, Any, TypeVar, Generic, get_args, ClassVar
+
+from typing import Protocol, Any, TypeVar, Generic, get_args
 from abc import ABCMeta
 import weakref
 
@@ -7,14 +8,15 @@ import weakref
 class Stringable(Protocol):
     """A protocol for stringable objects."""
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
 
 T = TypeVar("T")
 
+
 class ClassTracker(Generic[T], ABCMeta):
     """Metaclass for managing trackable registrations."""
+
     _artifacts: weakref.WeakSet[T]
     __slots__ = ()
 
@@ -41,6 +43,7 @@ class ClassTracker(Generic[T], ABCMeta):
 
 class Wrappable(Protocol):
     """A protocol for wrapping objects."""
+
     __wrapobj__: object
     __wrapcfg__: dict
 
@@ -92,7 +95,7 @@ class WrapperMeta(type):
 
         def __delegate_method(name: str):
             def method(self: Wrappable, *args, **kwargs):
-                print('method', name)
+                print("method", name)
                 return getattr(self.__wrapobj__, name)(*args, **kwargs)
 
             return method
@@ -126,9 +129,9 @@ class WrapperMeta(type):
         return instance
 
 
-
 class Wrapped(Generic[T], metaclass=WrapperMeta):
     """A class for wrapping objects."""
+
     __orig_bases__: tuple[type, ...]
     __wrapobj__: T
     __wrapcfg__: dict
@@ -138,9 +141,8 @@ class Wrapped(Generic[T], metaclass=WrapperMeta):
     def from_config(cls, config):
         """Create an instance from a configuration."""
         assert isinstance(config, dict), f"{config} is not a dictionary"
-        instance_class, = get_args(cls.__orig_bases__[0])
-        assert isinstance(
-            instance_class, type), f"{instance_class} is not a type"
+        (instance_class,) = get_args(cls.__orig_bases__[0])
+        assert isinstance(instance_class, type), f"{instance_class} is not a type"
         return cls(instance_class(**config), config)
 
     def __init__(self, instance, config):
@@ -171,6 +173,5 @@ class Wrapped(Generic[T], metaclass=WrapperMeta):
     def __repr__(self):
         base_class = self.__class__.__name__
         wrapped_class = self.__wrapobj__.__class__.__name__
-        params = ", ".join(f"{key}={val!r}" for key,
-                           val in self.__wrapcfg__.items())
+        params = ", ".join(f"{key}={val!r}" for key, val in self.__wrapcfg__.items())
         return f"{base_class}[{wrapped_class}]({params})"

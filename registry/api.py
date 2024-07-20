@@ -1,9 +1,19 @@
-from typing import TypeVar, _ProtocolMeta, ParamSpec, Annotated, Protocol
-from inspect import isclass, isfunction
-from types import EllipsisType
+import sys
+from typing import TypeVar, Annotated, Protocol
+from typing import Union, Optional, Type, List
+from inspect import isclass
+
 from .cls_registry import ClassRegistry
 from .func_registry import FunctionalRegistry
 from ._pydantic import BuilderValidator
+
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+    from types import EllipsisType
+else:
+    from typing_extensions import ParamSpec
+
+    EllipsisType = type(Ellipsis)
 
 
 class AnyProtocol(Protocol):
@@ -13,17 +23,18 @@ class AnyProtocol(Protocol):
 T = TypeVar("T", bound=AnyProtocol)
 P = ParamSpec("P")
 
+
 def _dict_not_none(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
 
 
 def make_class_registry(
-        name: str,
-        * subcls: type,
-        protocol: type[T] | type = type,
-        coercion: bool = False,
-        domain: str | None = None,
-        description: str | None = None
+    name: str,
+    *subcls: Type,
+    protocol: Union[Type[T], Type] = type,
+    coercion: bool = False,
+    domain: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> ClassRegistry[T]:
     """Make a class registry."""
     assert domain is None, "Domains are not supported"
@@ -32,11 +43,12 @@ def make_class_registry(
 
     class Register(ClassRegistry[protocol]):
         """A class registry."""
+
         ignore_structural_subtyping = protocol is AnyProtocol
         ignore_abcnominal_subtyping = len(subcls) == 0
 
-    Register.__name__ = f'{name}Registry'
-    Register.__qualname__ = f'{name}Registry'
+    Register.__name__ = f"{name}Registry"
+    Register.__qualname__ = f"{name}Registry"
     Register.__module__ = protocol.__module__
     Register.__doc__ = description
 
@@ -48,22 +60,22 @@ def make_class_registry(
 
 
 def make_functional_registry(
-        name: str,
-        args: list[type] | EllipsisType = ...,
-        ret: type[T] = type,
-        coercion: bool = False,
-        domain: str | None = None,
-        description: str | None = None
+    name: str,
+    args: List[type] = ...,
+    ret: Type[T] = type,
+    coercion: bool = False,
+    domain: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> FunctionalRegistry[P, T]:
     """Make a functional registry."""
-    assert domain == '', "Domains are not supported"
+    assert domain == "", "Domains are not supported"
     assert not coercion, "Strict references are not supported"
 
-    class Registry(FunctionalRegistry[args, ret]): # type: ignore
+    class Registry(FunctionalRegistry[args, ret]):  # type: ignore
         """A functional registry."""
 
-    Registry.__name__ = f'{name}Registry'
-    Registry.__qualname__ = f'{name}Registry'
+    Registry.__name__ = f"{name}Registry"
+    Registry.__qualname__ = f"{name}Registry"
     Registry.__module__ = ret.__module__
     Registry.__doc__ = description
 

@@ -2,15 +2,9 @@
 
 from abc import ABC
 import inspect
-from typing import TypeVar, Callable, ParamSpec, Any, Type
-from types import FunctionType
-import sys
+from typing import TypeVar, Callable, Any, Type
+from typing_extensions import ParamSpec
 from typeguard import check_type, TypeCheckError
-
-if sys.version_info >= (3, 9):
-    from typing import Type
-else:
-    Type = type
 
 
 Protocol = TypeVar("Protocol")
@@ -34,20 +28,17 @@ class ValidationError(CoercionError, StructuringError, NominatingError):
 
 def validate_class(subcls: Any) -> Type:
     """Validate a class."""
-    print('validate_class', subcls)
+    print("validate_class", subcls)
     if not inspect.isclass(subcls):
         raise ValidationError(f"{subcls} is not a class")
     return subcls
 
 
 def validate_class_structure(
-        subcls: type,
-        /,
-        expected_type: type[Protocol],
-        coerce_to_type: bool = False
+    subcls: type, /, expected_type: type[Protocol], coerce_to_type: bool = False
 ) -> type:
     """Check the structure of a class."""
-    print('validate_class_structure', subcls)
+    print("validate_class_structure", subcls)
     assert not coerce_to_type, "Coercion is not supported"
     try:
         return check_type(subcls, expected_type)
@@ -56,13 +47,9 @@ def validate_class_structure(
         raise StructuringError(error_msg) from exc
 
 
-def validate_class_hierarchy(
-    subcls: type,
-        /,
-        abc_class: Type[ABC]
-) -> type:
+def validate_class_hierarchy(subcls: type, /, abc_class: Type[ABC]) -> type:
     """Check the hierarchy of a class."""
-    print('validate_class_hierarchy', subcls)
+    print("validate_class_hierarchy", subcls)
     if not issubclass(subcls, abc_class):
         raise NominatingError(f"{subcls} not subclass-of {abc_class}")
     return subcls
@@ -83,14 +70,15 @@ def validate_function(func: Any) -> Callable:
         raise ValidationError(f"{func} is not a function")
     return func
 
+
 def validate_function_parameters(
-        func: Callable,
-        /,
-        expected_type: type[Callable[P, R]], # pyright: ignore[reportInvalidTypeForm]
-        coerce_to_type: bool = False
+    func: Callable,
+    /,
+    expected_type: type[Callable[P, R]],  # pyright: ignore[reportInvalidTypeForm]
+    coerce_to_type: bool = False,
 ) -> Callable[P, R]:
     """Check the structure of a class."""
-    print('validate_function_parameters')
+    print("validate_function_parameters")
     assert not coerce_to_type, "Coercion is not supported"
     try:
         return check_type(func, expected_type)
@@ -101,7 +89,7 @@ def validate_function_parameters(
 
 def validate_instance(instance: Any, /, expected_type: type) -> Any:
     """Validate a class."""
-    print('validate_instance', instance, 'expected_type:=', expected_type.__name__)
+    print("validate_instance", instance, "expected_type:=", expected_type.__name__)
     if not inspect.isclass(instance.__class__):
         raise ValidationError(f"{instance} is not a class instance")
     if not isinstance(instance, expected_type):

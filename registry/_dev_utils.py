@@ -1,16 +1,22 @@
 """Utilities for development."""
 
-from typing import get_args, runtime_checkable, Generic, TypeVar, ParamSpec, Callable, Any
+from typing import get_args, runtime_checkable, Generic, TypeVar, Callable, Any
 from functools import reduce, wraps, partial
 from types import ModuleType
-from inspect import ismodule, isclass, getmembers
+from inspect import ismodule, getmembers
+import sys
 from ._validator import validate_class
+
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
 
 
 def get_protocol(cls: type):
     """Get the protocol from the class."""
     assert issubclass(cls, Generic), f"{cls} is not a generic class"
-    return runtime_checkable(get_args(cls.__orig_bases__[0])[0]) # type: ignore
+    return runtime_checkable(get_args(cls.__orig_bases__[0])[0])  # type: ignore
 
 
 P = ParamSpec("P")
@@ -27,24 +33,20 @@ def get_subclasses(cls: type) -> list[type]:
 
 
 def get_module_members(
-        module: ModuleType,
-        ignore_all_keyword: bool = False
+    module: ModuleType, ignore_all_keyword: bool = False
 ) -> list[Any]:
     """Get members of a module."""
     assert ismodule(module), f"{module} is not a module"
-    if ignore_all_keyword or not hasattr(module, '__all__'):
+    if ignore_all_keyword or not hasattr(module, "__all__"):
         _names, members = zip(*getmembers(module))
     else:
-        _names = module.__all__
         members = map(module.__getattr__, module.__all__)
-        
+
     return list(members)
 
 
 def compose_two_funcs(
-        f: Callable[P, M],
-        g: Callable[[M], R],
-        wrap: bool = True
+    f: Callable[P, M], g: Callable[[M], R], wrap: bool = True
 ) -> Callable[P, R]:
     """Compose two functions"""
     assert callable(f), "First function must be callable"
@@ -59,5 +61,6 @@ def compose_two_funcs(
 def compose(*functions: Callable[..., Any], wrap: bool = True) -> Callable[..., Any]:
     """Compose functions"""
     composed_functions = reduce(
-        partial(compose_two_funcs, wrap=False), reversed(functions))
+        partial(compose_two_funcs, wrap=False), reversed(functions)
+    )
     return wraps(functions[0])(composed_functions) if wrap else composed_functions

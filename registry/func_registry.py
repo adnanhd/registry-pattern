@@ -1,6 +1,7 @@
 """Functional registry for registering functions."""
 
-from typing import TypeVar, ClassVar, Callable, ParamSpec, Any, Generic, Hashable, get_args, cast
+from typing import TypeVar, ClassVar, Callable, Any, Generic, Hashable, get_args
+from typing_extensions import ParamSpec
 from functools import lru_cache
 from pydantic import validate_call
 from ._validator import validate_function, validate_function_parameters, ValidationError
@@ -15,6 +16,7 @@ P = ParamSpec("P")
 # noka: W0223 # pylint: disable=abstract-method
 class _BaseFunctionalRegistry(BaseMutableRegistry[Hashable, Callable[P, R]]):
     """Metaclass for registering functions."""
+
     __orig_bases__: ClassVar[tuple[type, ...]]
     # __check_type__: ClassVar[Callable[P, R]]
     # _registrar: ClassVar[dict[str, Callable[P, R]]]
@@ -44,6 +46,7 @@ class _BaseFunctionalRegistry(BaseMutableRegistry[Hashable, Callable[P, R]]):
 
 class FunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
     """Functional registry for registering functions."""
+
     @classmethod
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -56,15 +59,19 @@ class FunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
         validators: list[Callable[..., Any]] = [validate_function]
 
         if not cls.ignore_structural_subtyping:
+
             @validators.append
             def _validate_function_parameters(value: Any) -> Callable[P, R]:
-                return validate_function_parameters(validate_function(value), expected_type=callable_type)
+                return validate_function_parameters(
+                    validate_function(value), expected_type=callable_type
+                )
 
         cls._validate_item = compose(*validators)
 
 
 class PyFunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
     """Functional registry for registering functions."""
+
     @classmethod
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -78,8 +85,11 @@ class PyFunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
         validators: list[Callable[..., Any]] = [validate_function]
 
         if not cls.ignore_structural_subtyping:
+
             def _validate_function_parameters(value: Any) -> Callable[P, R]:
-                return validate_function_parameters(validate_function(value), expected_type=callable_type)
+                return validate_function_parameters(
+                    validate_function(value), expected_type=callable_type
+                )
 
             validators.append(_validate_function_parameters)
 

@@ -9,9 +9,9 @@ from pydantic_core import CoreSchema, core_schema
 from pydantic import BaseModel, GetCoreSchemaHandler, InstanceOf, ConfigDict
 from pydantic import Field
 from pydantic._internal import _generics
-from .base import BaseRegistry, BaseMutableRegistry
+from .base import BaseRegistry
 
-Builder = TypeVar("Builder") #, bound=RegistryMeta)
+Builder = TypeVar("Builder")  # , bound=RegistryMeta)
 
 
 class Buildable(BaseModel):
@@ -21,11 +21,8 @@ class Buildable(BaseModel):
     builder: Callable[..., Any] = Field(repr=False, exclude=True)
 
     model_config = ConfigDict(
-        extra = "allow",
-        validate_default = True,
-        validate_assignment = True,
-        copy = False
-    ) # type: ignore
+        extra="allow", validate_default=True, validate_assignment=True, copy=False
+    )  # type: ignore
 
     @property
     def build_model_config(self) -> dict:
