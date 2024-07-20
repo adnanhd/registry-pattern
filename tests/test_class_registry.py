@@ -5,7 +5,7 @@ Test class registry.
 from typing import Protocol
 import pytest
 
-from pydantic_pytorch.patterns.registry import make_class_registry, ClassRegistry, StructuringError, RegistryError
+from registry import make_class_registry, ClassRegistry, StructuringError, RegistryError
 
 class Foo(Protocol):
     def test_method(self, x: int, y: int) -> int:
