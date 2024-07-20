@@ -1,7 +1,7 @@
 """Metaclass for registering classes."""
 
 from abc import ABC
-from typing import TypeVar, ClassVar, Any, Hashable, Generic
+from typing import TypeVar, ClassVar, Any, Hashable, Generic, Type
 from functools import lru_cache
 from .base import BaseMutableRegistry
 from ._dev_utils import get_protocol, compose, get_subclasses, get_module_members
@@ -13,7 +13,7 @@ Prtcl = TypeVar("Prtcl")
 
 
 class _BaseClassRegistry(
-    BaseMutableRegistry[Hashable, type[Prtcl]], ABC, Generic[Prtcl]
+    BaseMutableRegistry[Hashable, Type[Prtcl]], ABC, Generic[Prtcl]
 ):
     """Base Class for registering classes."""
 
@@ -25,12 +25,12 @@ class _BaseClassRegistry(
     def __subclasscheck__(cls, value: Any) -> bool:
         return issubclass(value, cls)
 
-    def register_class(self, subcls: type[Prtcl]) -> type[Prtcl]:
+    def register_class(self, subcls: Type[Prtcl]) -> Type[Prtcl]:
         """Register a subclass."""
         self.add_registry_item(subcls.__name__, subcls)
         return subcls
 
-    def unregister_class(self, subcls: type[Prtcl]) -> type[Prtcl]:
+    def unregister_class(self, subcls: Type[Prtcl]) -> Type[Prtcl]:
         """Unregister a subclass."""
         self.del_registry_item(subcls.__name__)
         return subcls
@@ -47,8 +47,8 @@ class _BaseClassRegistry(
         return module
 
     def register_subclasses(
-        self, supercls: type[Prtcl], recursive: bool = False
-    ) -> type[Prtcl]:
+        self, supercls: Type[Prtcl], recursive: bool = False
+    ) -> Type[Prtcl]:
         """Register all subclasses of a given superclass."""
         # self.register(supercls)
         for subcls in get_subclasses(supercls):
@@ -69,19 +69,19 @@ class ClassRegistry(_BaseClassRegistry[Prtcl], Generic[Prtcl]):
         if not cls.ignore_abcnominal_subtyping:
 
             @validators.append
-            def _validate_class_hierarchy(subcls: type) -> type:
+            def _validate_class_hierarchy(subcls: Type) -> Type:
                 return validate_class_hierarchy(subcls, abc_class=cls)
 
         if not cls.ignore_structural_subtyping:
 
             @validators.append
-            def _validate_class_structure(subcls: type) -> type:
+            def _validate_class_structure(subcls: Type) -> Type:
                 return validate_class_structure(subcls, expected_type=get_protocol(cls))
 
         cls._validate_item = compose(*validators)
 
     @classmethod
-    def _validate_item(cls, value: Any) -> type[Prtcl]: ...
+    def _validate_item(cls, value: Any) -> Type[Prtcl]: ...
 
 
 class PyClassRegistry(_BaseClassRegistry[Prtcl], Generic[Prtcl]):
@@ -95,13 +95,13 @@ class PyClassRegistry(_BaseClassRegistry[Prtcl], Generic[Prtcl]):
         if not cls.ignore_abcnominal_subtyping:
 
             @validators.append
-            def _validate_class_hierarchy(subcls: type) -> type:
+            def _validate_class_hierarchy(subcls: Type) -> Type:
                 return validate_class_hierarchy(subcls, abc_class=cls)
 
         if not cls.ignore_structural_subtyping:
 
             @validators.append
-            def _validate_class_structure(subcls: type) -> type:
+            def _validate_class_structure(subcls: Type) -> Type:
                 return validate_class_structure(subcls, expected_type=get_protocol(cls))
 
         cls._validate_item = compose(*validators)

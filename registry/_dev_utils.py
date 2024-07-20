@@ -1,6 +1,6 @@
 """Utilities for development."""
 
-from typing import get_args, runtime_checkable, Generic, TypeVar, Callable, Any
+from typing import get_args, runtime_checkable, Generic, TypeVar, Callable, Any, List
 from functools import reduce, wraps, partial
 from types import ModuleType
 from inspect import ismodule, getmembers
@@ -27,14 +27,14 @@ R = TypeVar("R")
 """Type variable for the result value."""
 
 
-def get_subclasses(cls: type) -> list[type]:
+def get_subclasses(cls: type) -> List[type]:
     """Get subclasses of a class."""
     return validate_class(cls).__subclasses__()
 
 
 def get_module_members(
     module: ModuleType, ignore_all_keyword: bool = False
-) -> list[Any]:
+) -> List[Any]:
     """Get members of a module."""
     assert ismodule(module), f"{module} is not a module"
     if ignore_all_keyword or not hasattr(module, "__all__"):

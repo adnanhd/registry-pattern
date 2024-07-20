@@ -61,7 +61,7 @@ def make_class_registry(
 
 def make_functional_registry(
     name: str,
-    args: List[type] = ...,
+    args: List[Type] = ...,
     ret: Type[T] = type,
     coercion: bool = False,
     domain: Optional[str] = None,

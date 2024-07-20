@@ -1,6 +1,17 @@
 """Functional registry for registering functions."""
 
-from typing import TypeVar, ClassVar, Callable, Any, Generic, Hashable, get_args
+from typing import (
+    TypeVar,
+    ClassVar,
+    Callable,
+    Any,
+    Generic,
+    Hashable,
+    get_args,
+    Type,
+    Tuple,
+    List,
+)
 from typing_extensions import ParamSpec
 from functools import lru_cache
 from pydantic import validate_call
@@ -17,7 +28,7 @@ P = ParamSpec("P")
 class _BaseFunctionalRegistry(BaseMutableRegistry[Hashable, Callable[P, R]]):
     """Metaclass for registering functions."""
 
-    __orig_bases__: ClassVar[tuple[type, ...]]
+    __orig_bases__: ClassVar[Tuple[Type, ...]]
     # __check_type__: ClassVar[Callable[P, R]]
     # _registrar: ClassVar[dict[str, Callable[P, R]]]
     ignore_structural_subtyping: ClassVar[bool] = False
@@ -55,8 +66,8 @@ class FunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
         if not isinstance(param, list):
             param = [param]
 
-        callable_type = Callable[param, ret]  # type: ignore
-        validators: list[Callable[..., Any]] = [validate_function]
+        callable_type: Type[Callable[P, R]] = Callable[param, ret]  # type: ignore
+        validators: List[Callable[..., Any]] = [validate_function]
 
         if not cls.ignore_structural_subtyping:
 
@@ -80,9 +91,9 @@ class PyFunctionalRegistry(_BaseFunctionalRegistry[P, R], Generic[P, R]):
         if not isinstance(param, list):
             param = [param]
 
-        callable_type = Callable[param, ret]  # type: ignore
+        callable_type: Type[Callable[P, R]] = Callable[param, ret]  # type: ignore
 
-        validators: list[Callable[..., Any]] = [validate_function]
+        validators: List[Callable[..., Any]] = [validate_function]
 
         if not cls.ignore_structural_subtyping:
 

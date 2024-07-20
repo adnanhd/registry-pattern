@@ -3,7 +3,7 @@ This module provides compatibility between Pydantic and PyTorch.
 """
 
 import dataclasses
-from typing import TypeVar, Callable, Any
+from typing import TypeVar, Callable, Any, Dict
 from functools import partial
 from pydantic_core import CoreSchema, core_schema
 from pydantic import BaseModel, GetCoreSchemaHandler, InstanceOf, ConfigDict
@@ -54,7 +54,7 @@ class BuilderValidator:
             _generics.get_origin(source_type) or source_type
         )
 
-        def _validate_build_config(value: dict):
+        def _validate_build_config(value: Dict):
             if not isinstance(value, dict) or "type" not in value:
                 raise TypeError(f"{value} is not a dict with a 'type' key")
             builder = self.registry.get_registry_item(value["type"])

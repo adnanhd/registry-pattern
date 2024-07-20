@@ -4,8 +4,8 @@ Base metaclass for registering classes and functions.
 
 import abc
 from functools import lru_cache
-from typing import Any, Hashable, Container, TypeVar, Iterator, ClassVar
-from typing import Generic, Protocol, MutableMapping, Dict, Tuple, Union
+from typing import Any, Hashable, Container, TypeVar, Iterator, ClassVar, Type
+from typing import Generic, Protocol, MutableMapping, Dict, Tuple, Union, List
 
 __all__ = [
     "RegistryError",
@@ -35,7 +35,7 @@ T = TypeVar("T", bound=Stringable)
 class BaseRegistry(Container[T], Generic[K, T]):
     """Metaclass for managing registrations."""
 
-    __orig_bases__: ClassVar[Tuple[type, ...]]
+    __orig_bases__: ClassVar[Tuple[Type, ...]]
     _repository: ClassVar[Union[Dict, MutableMapping]]
 
     @classmethod
@@ -78,12 +78,12 @@ class BaseRegistry(Container[T], Generic[K, T]):
         return self._repository[lookup_key]
 
     @classmethod
-    def keys(cls) -> list[K]:
+    def keys(cls) -> List[K]:
         """Return a list of registered class names."""
         return list(cls._repository.keys())
 
     @classmethod
-    def values(cls) -> list[T]:
+    def values(cls) -> List[T]:
         """Return a list of registered classes."""
         return list(cls._repository.values())
 

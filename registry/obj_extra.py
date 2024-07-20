@@ -1,6 +1,6 @@
 """Object registry pattern."""
 
-from typing import Protocol, Any, TypeVar, Generic, get_args
+from typing import Protocol, Any, TypeVar, Generic, get_args, Type
 from abc import ABCMeta
 import weakref
 
@@ -52,7 +52,7 @@ class WrapperMeta(type):
     """Metaclass for creating wrapper classes."""
 
     def __new__(mcs, name, bases, attrs):
-        cls: type[Wrappable] = super().__new__(mcs, name, bases, attrs)
+        cls: Type[Wrappable] = super().__new__(mcs, name, bases, attrs)
 
         special_methods = [
             "__add__",
@@ -132,7 +132,7 @@ class WrapperMeta(type):
 class Wrapped(Generic[T], metaclass=WrapperMeta):
     """A class for wrapping objects."""
 
-    __orig_bases__: tuple[type, ...]
+    __orig_bases__: tuple[Type, ...]
     __wrapobj__: T
     __wrapcfg__: dict
     __slots__ = ("__wrapobj__", "__wrapcfg__")

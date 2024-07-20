@@ -35,8 +35,8 @@ def validate_class(subcls: Any) -> Type:
 
 
 def validate_class_structure(
-    subcls: type, /, expected_type: type[Protocol], coerce_to_type: bool = False
-) -> type:
+    subcls: Type, /, expected_type: Type[Protocol], coerce_to_type: bool = False
+) -> Type:
     """Check the structure of a class."""
     print("validate_class_structure", subcls)
     assert not coerce_to_type, "Coercion is not supported"
@@ -47,7 +47,7 @@ def validate_class_structure(
         raise StructuringError(error_msg) from exc
 
 
-def validate_class_hierarchy(subcls: type, /, abc_class: Type[ABC]) -> type:
+def validate_class_hierarchy(subcls: Type, /, abc_class: Type[ABC]) -> Type:
     """Check the hierarchy of a class."""
     print("validate_class_hierarchy", subcls)
     if not issubclass(subcls, abc_class):
@@ -74,7 +74,7 @@ def validate_function(func: Any) -> Callable:
 def validate_function_parameters(
     func: Callable,
     /,
-    expected_type: type[Callable[P, R]],  # pyright: ignore[reportInvalidTypeForm]
+    expected_type: Type[Callable[P, R]],  # ff: igre[reportInvalidTypeForm]
     coerce_to_type: bool = False,
 ) -> Callable[P, R]:
     """Check the structure of a class."""
@@ -87,7 +87,7 @@ def validate_function_parameters(
         raise StructuringError(error_msg) from exc
 
 
-def validate_instance(instance: Any, /, expected_type: type) -> Any:
+def validate_instance(instance: Any, /, expected_type: Type) -> Any:
     """Validate a class."""
     print("validate_instance", instance, "expected_type:=", expected_type.__name__)
     if not inspect.isclass(instance.__class__):

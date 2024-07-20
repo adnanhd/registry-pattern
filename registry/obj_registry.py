@@ -3,6 +3,7 @@
 from abc import ABC
 import weakref
 from typing import (
+    Type,
     TypeVar,
     ClassVar,
     MutableMapping,
@@ -11,6 +12,7 @@ from typing import (
     cast,
     Hashable,
     Callable,
+    List,
 )
 from .base import BaseMutableRegistry
 from ._validator import validate_instance, validate_class_structure
@@ -51,7 +53,7 @@ class InstanceRegistry(_BaseInstanceRegistry[Hashable, V]):
         if not cls.ignore_structural_subtyping:
 
             @validators.append
-            def _val_class_structure(value: Any) -> type:
+            def _val_class_structure(value: Any) -> Type:
                 return validate_class_structure(value, expected_type=get_protocol(cls))
 
         cls._validate_item = compose(*validators)
@@ -66,7 +68,7 @@ class InstanceRegistry(_BaseInstanceRegistry[Hashable, V]):
         self.del_registry_item(str(instance))
         return instance
 
-    def track_class_instances(self, cls: type) -> type:
+    def track_class_instances(self, cls: Type) -> Type:
         """Track a class."""
         # TODO: validate if cls is of type V
         kwds = cast(dict[str, Any], ClassTracker[cls].__dict__)
@@ -92,7 +94,7 @@ class InstanceKeyRegistry(_BaseInstanceRegistry[K, CfgT], Generic[K]):
     def __init_subclass__(cls):
         super().__init_subclass__()
         cls._repository = weakref.WeakKeyDictionary[K, CfgT]()
-        validators: list[Callable[..., Any]] = [cls.get_lookup_key.__wrapped__]
+        validators: List[Callable[..., Any]] = [cls.get_lookup_key.__wrapped__]
 
         if not cls.ignore_abcnominal_subtyping:
 
@@ -103,7 +105,7 @@ class InstanceKeyRegistry(_BaseInstanceRegistry[K, CfgT], Generic[K]):
         if not cls.ignore_structural_subtyping:
 
             @validators.append
-            def _val_class_structure(value: Any) -> type:
+            def _val_class_structure(value: Any) -> Type:
                 return validate_class_structure(value, expected_type=get_protocol(cls))
 
         cls.get_lookup_key.__wrapped__ = compose(*validators)
