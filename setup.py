@@ -11,20 +11,20 @@ with open('requirements.txt') as f:
 
 # Setup the package
 setup(
-    name='pydantic_pytorch',
+    name='registry',
     version='0.0.1',
-    description='A collection of utilities for PyTorch',
+    description='A registry pattern for Pydantic models and PyTorch modules.',
     long_description=torchutils_readme,
     long_description_content_type='text/markdown',
     author='adnanharundogan',
     author_email='adnanharundogan@gmail.com',
     license='MIT',
     install_requires=torchutils_requirements,
-    packages=['pydantic_pytorch'],
+    packages=['registry'],
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.9',
 )

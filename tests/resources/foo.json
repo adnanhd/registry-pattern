@@ -1,1 +1,0 @@
-{"model":{"type":"linear","in_features":2,"out_features":12},"optimizer":{"type":"Adam","lr":1e-5},"scheduler":{"type":"StepLR","step":15}}

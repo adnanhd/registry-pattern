@@ -1,1 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" ?><root><model><type>linear</type><in_features>2</in_features><out_features>12</out_features></model><optimizer><type>Adam</type><lr>0.00001</lr></optimizer><scheduler><type>StepLR</type><step>15</step></scheduler></root>

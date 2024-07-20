@@ -1,1 +1,1 @@
-# pydantic_pytorch
+# Registry Pattern
