@@ -1,0 +1,9 @@
+PROJECT_NAME           = "Registry Pattern"
+OUTPUT_DIRECTORY       = "docs"
+INPUT                  = "registry"
+RECURSIVE              = YES
+EXCLUDE                = "tests"
+GENERATE_MAN           = YES
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+FILE_PATTERNS          = *.py
