@@ -1,6 +1,7 @@
 """Object registry pattern."""
 
 from abc import ABC
+from functools import lru_cache, partial
 import weakref
 from typing import (
     Type,
@@ -15,114 +16,88 @@ from typing import (
     Dict,
     List,
 )
-from .base import BaseMutableRegistry
-from ._validator import validate_instance, validate_class_structure
-from ._dev_utils import compose, get_protocol
-from .obj_extra import ClassTracker
+from .base import MutableRegistry
+from ._validator import validate_instance_hierarchy, validate_instance_structure
+from ._validator import ValidationError, ConformanceError, InheritanceError
+from ._dev_utils import compose, get_protocol, _def_checking
 
 
-K = TypeVar("K", bound=Hashable)
 CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
-V = TypeVar("V")
+ObjT = TypeVar("ObjT")
 
 
-class _BaseInstanceRegistry(BaseMutableRegistry[K, V], ABC, Generic[K, V]):
+class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
     """Base class for registering instances."""
 
-    ignore_structural_subtyping: ClassVar[bool] = False
-    ignore_abcnominal_subtyping: ClassVar[bool] = False
+    runtime_conformance_checking: Callable[..., Any] = _def_checking
+    runtime_inheritance_checking: Callable[..., Any] = _def_checking
     __slots__ = ()
 
-
-class InstanceRegistry(_BaseInstanceRegistry[Hashable, V]):
-    """Functional registry for registering instances."""
-
-    _repository: ClassVar[MutableMapping]  # [Hashable, V]
-
     @classmethod
-    def __init_subclass__(cls):
+    def __init_subclass__(cls, strict: bool = False, abstract: bool = False):
         super().__init_subclass__()
-        cls._repository = weakref.WeakValueDictionary[Hashable, V]()
-        validators = []
+        cls._repository = weakref.WeakValueDictionary[Hashable, ObjT]()
 
-        if not cls.ignore_abcnominal_subtyping:
-
-            @validators.append
-            def _val_class_hierarchy(value: Any) -> V:
-                return validate_instance(value, expected_type=cls)
-
-        if not cls.ignore_structural_subtyping:
-
-            @validators.append
-            def _val_class_structure(value: Any) -> Type:
-                return validate_class_structure(value, expected_type=get_protocol(cls))
-
-        cls._validate_item = compose(*validators)
-
-    def register_instance(self, instance: V) -> V:
-        """Register a subclass."""
-        self.add_registry_item(str(instance), instance)
-        return instance
-
-    def unregister_instance(self, instance: V) -> V:
-        """Unregister a subclass."""
-        self.del_registry_item(str(instance))
-        return instance
-
-    def track_class_instances(self, cls: Type) -> Type:
-        """Track a class."""
-        # TODO: validate if cls is of type V
-        kwds = cast(Dict[str, Any], ClassTracker[cls].__dict__)
-        # validator = compose(self.register_instance, ClassTracker[cls].__call__)
-
-        def validator(cls: ClassTracker[cls], *args, **kwargs):
-            print("bok")
-            return self.register_instance(
-                super(cls.__class__, cls).__call__(*args, **kwargs)
+        if abstract:
+            cls.runtime_inheritance_checking = partial(
+                validate_instance_hierarchy, expected_type=cls
             )
 
-        kwds["__call__"] = validator
-        newmcs = type(ClassTracker.__name__, (ClassTracker,), {"__call__": validator})
-        newcls = newmcs(cls.__name__, cls.__bases__, {})
-        print(self.__class__, "registering", newcls)
-        return self.__class__.register(newcls)
-
-
-class InstanceKeyRegistry(_BaseInstanceRegistry[K, CfgT], Generic[K]):
-    """Functional registry for registering instances."""
+        if strict:
+            cls.runtime_conformance_checking = partial(
+                validate_instance_structure, expected_type=get_protocol(cls)
+            )
 
     @classmethod
-    def __init_subclass__(cls):
-        super().__init_subclass__()
-        cls._repository = weakref.WeakKeyDictionary[K, CfgT]()
-        validators: List[Callable[..., Any]] = [cls.get_lookup_key.__wrapped__]
-
-        if not cls.ignore_abcnominal_subtyping:
-
-            @validators.append
-            def _val_class_hierarchy(value: Any) -> K:
-                return validate_instance(value, expected_type=cls)
-
-        if not cls.ignore_structural_subtyping:
-
-            @validators.append
-            def _val_class_structure(value: Any) -> Type:
-                return validate_class_structure(value, expected_type=get_protocol(cls))
-
-        cls.get_lookup_key.__wrapped__ = compose(*validators)
-
-    @classmethod
-    def _validate_item(cls, value: dict) -> CfgT:
-        if not isinstance(value, dict):
-            raise TypeError(f"{value} is not a dict")
+    def validate_item(cls, value: ObjT) -> ObjT:
+        cls.runtime_inheritance_checking(value)
+        cls.runtime_conformance_checking(value)
         return value
 
-    def register_instance(self, cls: K, cfg: Dict[str, Any]) -> K:
-        """Track a class."""
-        self.add_registry_item(cls, cfg)
-        return cls
+    @classmethod
+    def __subclasscheck__(cls, value: Any) -> bool:
+        try:
+            cls.runtime_inheritance_checking(value)
+        except InheritanceError:
+            print("no inheritaion")
+            return False
 
-    def unregister_instance(self, cls: K) -> K:
+        try:
+            cls.runtime_conformance_checking(value)
+        except ConformanceError:
+            print("no conformation")
+            return False
+
+        return True
+
+    @classmethod
+    def register_instance(cls, instance: ObjT) -> ObjT:
+        """Register a subclass."""
+        cls.add_registry_item(instance, instance)
+        return instance
+
+    @classmethod
+    def unregister_instance(cls, instance: ObjT) -> ObjT:
+        """Unregister a subclass."""
+        cls.del_registry_item(instance)
+        return instance
+
+    @classmethod
+    def validate_key(cls, key: ObjT) -> str:
+        return hex(id(key))
+
+    @classmethod
+    def register_class_instances(cls, supercls: Type[ObjT]) -> Type[ObjT]:
         """Track a class."""
-        self.del_registry_item(cls)
-        return cls
+        mcs = type(supercls)
+
+        class newmcs(mcs):
+            def __call__(self, *args: Any, **kwds: Any) -> ObjT:
+                obj = super().__call__(*args, **kwds)
+                return cls.register_instance(obj)
+
+        newmcs.__name__ = mcs.__name__
+        newmcs.__qualname__ = mcs.__qualname__
+        newmcs.__module__ = mcs.__module__
+        newmcs.__doc__ = mcs.__doc__
+        return newmcs(supercls.__name__, (supercls,), {})

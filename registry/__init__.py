@@ -1,26 +1,25 @@
 from .base import RegistryError
-from .cls_registry import ClassRegistry, PyClassRegistry
-from .obj_registry import InstanceRegistry, InstanceKeyRegistry
-from .func_registry import FunctionalRegistry, PyFunctionalRegistry
-from .api import make_class_registry, make_functional_registry
-from ._pydantic import BuilderValidator
-from ._validator import CoercionError, StructuringError
-from ._validator import NominatingError, ValidationError
-
+from .api import type_registry_decorator, type_registry_factory
+from .api import functional_registry_decorator, functional_registry_factory
+from .typ_registry import TypeRegistry
+from .obj_registry import ObjectRegistry
+from .obj_conf_map import ObjectConfigMap
+from .fnc_registry import FunctionalRegistry
+from ._validator import CoercionError, ValidationError
+from ._validator import InheritanceError, ConformanceError
 
 __all__ = [
     "RegistryError",
     "ClassRegistry",
-    "PyClassRegistry",
     "InstanceRegistry",
-    "InstanceKeyRegistry",
+    # "InstanceKeyRegistry",
     "FunctionalRegistry",
-    "PyFunctionalRegistry",
-    "BuilderValidator",
     "make_class_registry",
     "make_functional_registry",
     "CoercionError",
-    "StructuringError",
-    "NominatingError",
+    "ConformanceError",
+    "InheritanceError",
     "ValidationError",
 ]
+
+# TODO: coersion, cache, proxy (instance)

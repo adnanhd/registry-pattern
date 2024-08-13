@@ -12,6 +12,12 @@ if sys.version_info >= (3, 10):
 else:
     from typing_extensions import ParamSpec
 
+T = TypeVar("T")
+
+
+def _def_checking(v: T) -> T:
+    return v
+
 
 def get_protocol(cls: type):
     """Get the protocol from the class."""
@@ -40,7 +46,7 @@ def get_module_members(
     if ignore_all_keyword or not hasattr(module, "__all__"):
         _names, members = zip(*getmembers(module))
     else:
-        members = map(module.__getattr__, module.__all__)
+        members = (getattr(module, name) for name in module.__all__)
 
     return list(members)
 
