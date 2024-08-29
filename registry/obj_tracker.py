@@ -1,8 +1,10 @@
 """Object registry pattern."""
 
-from typing import Protocol, Any, TypeVar, Generic, get_args, Type, Tuple
-from abc import ABCMeta
 import weakref
+from abc import ABCMeta
+from typing import Generic
+from typing import Protocol
+from typing import TypeVar
 
 
 class Stringable(Protocol):

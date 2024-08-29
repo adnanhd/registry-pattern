@@ -1,25 +1,30 @@
-from collections.abc import Callable
 import inspect
 import sys
-from typing import TypeVar, Protocol, Union, Optional, Type, List
-from types import new_class
+from collections.abc import Callable
 from inspect import isclass
+from types import new_class
+from typing import List
+from typing import Optional
+from typing import Protocol
+from typing import Type
+from typing import TypeVar
+from typing import Union
 
-from .typ_registry import TypeRegistry
 from .fnc_registry import FunctionalRegistry
+from .typ_registry import TypeRegistry
 
 if sys.version_info >= (3, 10):
-    from typing import ParamSpec
     from types import EllipsisType
+    from typing import ParamSpec
 else:
     from typing_extensions import ParamSpec
 
     EllipsisType = type(Ellipsis)
 
 if sys.version_info >= (3, 9):
-    from typing import Annotated
+    pass
 else:
-    from typing_extensions import Annotated
+    pass
 
 
 class AnyProtocol(Protocol):

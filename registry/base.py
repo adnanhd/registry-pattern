@@ -2,10 +2,20 @@
 Base metaclass for registering classes and functions.
 """
 
-import abc
 from functools import lru_cache
-from typing import Any, Hashable, Container, TypeVar, Iterator, ClassVar, Type
-from typing import Generic, Protocol, MutableMapping, Dict, Tuple, Union, List
+from typing import Any
+from typing import ClassVar
+from typing import Container
+from typing import Dict
+from typing import Generic
+from typing import Hashable
+from typing import List
+from typing import MutableMapping
+from typing import Protocol
+from typing import Tuple
+from typing import Type
+from typing import TypeVar
+from typing import Union
 
 __all__ = [
     "RegistryError",

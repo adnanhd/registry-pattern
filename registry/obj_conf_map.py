@@ -1,10 +1,19 @@
-from typing import TypeVar, Generic, Hashable, Any, Dict, Callable, List, Type
-from functools import partial, wraps
+from functools import partial
+from functools import wraps
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import Generic
+from typing import Hashable
+from typing import Type
+from typing import TypeVar
 from weakref import WeakKeyDictionary
 
+from ._dev_utils import _def_checking
+from ._dev_utils import get_protocol
+from ._validator import validate_instance_hierarchy
+from ._validator import validate_instance_structure
 from .base import BaseMutableRegistry
-from ._validator import validate_instance_hierarchy, validate_instance_structure
-from ._dev_utils import _def_checking, get_protocol
 
 K = TypeVar("K", bound=Hashable)
 CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])

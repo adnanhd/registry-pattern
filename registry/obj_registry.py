@@ -1,26 +1,23 @@
 """Object registry pattern."""
 
-from abc import ABC
-from functools import lru_cache, partial
 import weakref
-from typing import (
-    Type,
-    TypeVar,
-    ClassVar,
-    MutableMapping,
-    Generic,
-    Any,
-    cast,
-    Hashable,
-    Callable,
-    Dict,
-    List,
-)
-from .base import MutableRegistry
-from ._validator import validate_instance_hierarchy, validate_instance_structure
-from ._validator import ValidationError, ConformanceError, InheritanceError
-from ._dev_utils import compose, get_protocol, _def_checking
+from abc import ABC
+from functools import partial
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import Generic
+from typing import Hashable
+from typing import Type
+from typing import TypeVar
 
+from ._dev_utils import _def_checking
+from ._dev_utils import get_protocol
+from ._validator import ConformanceError
+from ._validator import InheritanceError
+from ._validator import validate_instance_hierarchy
+from ._validator import validate_instance_structure
+from .base import MutableRegistry
 
 CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
 ObjT = TypeVar("ObjT")
@@ -94,7 +91,11 @@ class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
         class newmcs(mcs):
             def __call__(self, *args: Any, **kwds: Any) -> ObjT:
                 obj = super().__call__(*args, **kwds)
-                return cls.register_instance(obj)
+                try:
+                    obj = cls.register_instance(obj)
+                except Exception as e:
+                    print(e)
+                return obj
 
         newmcs.__name__ = mcs.__name__
         newmcs.__qualname__ = mcs.__qualname__

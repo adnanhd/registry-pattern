@@ -1,26 +1,27 @@
 """Metaclass for registering classes."""
 
 from abc import ABC
-from typing import TypeVar, ClassVar, Any, Hashable, Generic, Type, Callable, List
-from functools import lru_cache, partial
-from typing_extensions import Optional
-from .base import MutableRegistry
-from ._dev_utils import (
-    get_protocol,
-    compose,
-    get_subclasses,
-    get_module_members,
-    _def_checking,
-)
-from ._validator import (
-    InheritanceError,
-    ConformanceError,
-    validate_class,
-    validate_init,
-)
-from ._validator import validate_class_hierarchy, validate_class_structure
-from ._validator import ValidationError
+from functools import partial
+from typing import Any
+from typing import Callable
+from typing import Generic
+from typing import Hashable
+from typing import Type
+from typing import TypeVar
 
+from typing_extensions import Literal
+
+from ._dev_utils import _def_checking
+from ._dev_utils import get_module_members
+from ._dev_utils import get_protocol
+from ._dev_utils import get_subclasses
+from ._validator import ConformanceError
+from ._validator import InheritanceError
+from ._validator import ValidationError
+from ._validator import validate_class
+from ._validator import validate_class_hierarchy
+from ._validator import validate_class_structure
+from .base import MutableRegistry
 
 Cls = TypeVar("Cls")
 
@@ -80,13 +81,19 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
     @classmethod
     def register_class(cls, subcls: Type[Cls]) -> Type[Cls]:
         """Register a subclass."""
-        cls.add_registry_item(subcls.__name__, subcls)
+        if hasattr(subcls, "__name__"):
+            cls.add_registry_item(subcls.__name__, subcls)
+        else:
+            ValidationError(f"{subcls} is not a class or type")
         return subcls
 
     @classmethod
     def unregister_class(cls, subcls: Type[Cls]) -> Type[Cls]:
         """Unregister a subclass."""
-        cls.del_registry_item(subcls.__name__)
+        if hasattr(subcls, "__name__"):
+            cls.del_registry_item(subcls.__name__)
+        else:
+            ValidationError(f"{subcls} is not a class or type")
         return subcls
 
     @classmethod
@@ -108,32 +115,43 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
 
     @classmethod
     def register_subclasses(
-        cls, supercls: Type[Cls], recursive: bool = False, raise_error: bool = True
+        cls,
+        supercls: Type[Cls],
+        recursive: bool = False,
+        raise_error: bool = True,
+        mode: Literal["immediate", "deferred", "both"] = "both",
     ) -> Type[Cls]:
         """Register all subclasses of a given superclass."""
         # cls.register(supercls)
-        for subcls in get_subclasses(supercls):
-            if recursive and get_subclasses(subcls):
-                cls.register_subclasses(subcls, recursive)
-            try:
-                cls.register_class(subcls)
-            except ValidationError as e:
-                if raise_error:
-                    raise ValidationError(e)
-                else:
-                    print(e)
+        if mode in {"immediate", "both"}:
+            for subcls in get_subclasses(supercls):
+                if recursive and get_subclasses(subcls):
+                    cls.register_subclasses(subcls, recursive)
+                try:
+                    cls.register_class(subcls)
+                except ValidationError as e:
+                    if raise_error:
+                        raise ValidationError(e)
+                    else:
+                        print(e)
 
-        mcs = type(supercls)
-        register_class = cls.register_class
+        if mode in {"deferred", "both"}:
+            mcs = type(supercls)
+            register_class = cls.register_class
 
-        class newmcs(mcs):
-            def __new__(mcs, name, bases, attrs) -> Type[Cls]:
-                cls = super().__new__(mcs, name, bases, attrs)
-                return register_class(cls)
+            class newmcs(mcs):
+                def __new__(mcs, name, bases, attrs) -> Type[Cls]:
+                    cls = super().__new__(mcs, name, bases, attrs)
+                    try:
+                        cls = register_class(cls)
+                    except Exception as e:
+                        print(e)
+                    return cls
 
-        newmcs.__name__ = mcs.__name__
-        newmcs.__qualname__ = mcs.__qualname__
-        newmcs.__module__ = mcs.__module__
-        newmcs.__doc__ = mcs.__doc__
+            newmcs.__name__ = mcs.__name__
+            newmcs.__qualname__ = mcs.__qualname__
+            newmcs.__module__ = mcs.__module__
+            newmcs.__doc__ = mcs.__doc__
 
-        return newmcs(supercls.__name__, (supercls,), {})
+            supercls = newmcs(supercls.__name__, (supercls,), {})
+        return supercls

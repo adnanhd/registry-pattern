@@ -1,28 +1,25 @@
 """Functional registry for registering functions."""
 
-from typing import (
-    TypeVar,
-    ClassVar,
-    Callable,
-    Any,
-    Generic,
-    Hashable,
-    get_args,
-    Type,
-    Tuple,
-    List,
-)
-from typing_extensions import ParamSpec, Union
-from functools import lru_cache, partial
+from functools import partial
+from typing import Any
+from typing import Callable
+from typing import ClassVar
+from typing import Hashable
+from typing import Tuple
+from typing import Type
+from typing import TypeVar
+from typing import get_args
 from warnings import warn
 
-from ._validator import (
-    validate_function,
-    validate_function_parameters,
-    ValidationError,
-    ConformanceError,
-)
-from ._dev_utils import get_module_members, _def_checking, compose
+from typing_extensions import ParamSpec
+
+from ._dev_utils import _def_checking
+from ._dev_utils import compose
+from ._dev_utils import get_module_members
+from ._validator import ConformanceError
+from ._validator import ValidationError
+from ._validator import validate_function
+from ._validator import validate_function_parameters
 from .base import MutableRegistry
 
 R = TypeVar("R")

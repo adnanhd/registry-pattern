@@ -1,14 +1,14 @@
-from typing import runtime_checkable, Type
-import pytest
-from registry import (
-    TypeRegistry,
-    FunctionalRegistry,
-    ConformanceError,
-    InheritanceError,
-    RegistryError,
-)
 from typing import Protocol
-from registry.api import functional_registry_decorator, type_registry_decorator
+from typing import Type
+from typing import runtime_checkable
+
+import pytest
+
+from registry import ConformanceError
+from registry import RegistryError
+from registry import TypeRegistry
+from registry.api import functional_registry_decorator
+from registry.api import type_registry_decorator
 
 
 # Mock classes and functions for testing
@@ -18,7 +18,10 @@ class MockProtocol(Protocol):
         ...
 
 
-from typing import Protocol, TypeVar, Iterable, SupportsIndex
+from typing import Iterable
+from typing import Protocol
+from typing import SupportsIndex
+from typing import TypeVar
 
 T = TypeVar("T")
 

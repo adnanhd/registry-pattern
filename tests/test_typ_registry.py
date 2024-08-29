@@ -2,16 +2,16 @@
 Test class registry.
 """
 
-from typing import Protocol, Type
+from typing import Protocol
+from typing import Type
+
 import pytest
 
-from registry import (
-    type_registry_decorator,
-    type_registry_factory,
-    TypeRegistry,
-    ConformanceError,
-    RegistryError,
-)
+from registry import ConformanceError
+from registry import RegistryError
+from registry import TypeRegistry
+from registry import type_registry_decorator
+from registry import type_registry_factory
 
 
 @type_registry_decorator()

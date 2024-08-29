@@ -1,11 +1,15 @@
 """Validator module."""
 
-from abc import ABC
 import inspect
-from typing import TypeVar, Callable, Any, Type
-from typing_extensions import ParamSpec
-from typeguard import check_type, TypeCheckError
+from abc import ABC
+from typing import Any
+from typing import Callable
+from typing import Type
+from typing import TypeVar
 
+from typeguard import TypeCheckError
+from typeguard import check_type
+from typing_extensions import ParamSpec
 
 Protocol = TypeVar("Protocol")
 

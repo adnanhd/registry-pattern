@@ -1,23 +1,21 @@
 # test_registry_edge_cases.py
 
-from collections.abc import Sequence
-import pytest
+from typing import Iterable
+from typing import Protocol
+from typing import SupportsIndex
 from typing import Type
-from registry import (
-    TypeRegistry,
-    FunctionalRegistry,
-    ConformanceError,
-    InheritanceError,
-    RegistryError,
-    ValidationError,
-)
-from typing import Protocol, runtime_checkable, Iterable, SupportsIndex
+from typing import runtime_checkable
 
-from registry.api import (
-    functional_registry_factory,
-    type_registry_decorator,
-    type_registry_factory,
-)
+import pytest
+
+from registry import ConformanceError
+from registry import InheritanceError
+from registry import RegistryError
+from registry import TypeRegistry
+from registry import ValidationError
+from registry.api import functional_registry_factory
+from registry.api import type_registry_decorator
+from registry.api import type_registry_factory
 
 
 # Mock classes and functions for testing

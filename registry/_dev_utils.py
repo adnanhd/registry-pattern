@@ -1,10 +1,20 @@
 """Utilities for development."""
 
-from typing import get_args, runtime_checkable, Generic, TypeVar, Callable, Any, List
-from functools import reduce, wraps, partial
-from types import ModuleType
-from inspect import ismodule, getmembers
 import sys
+from functools import partial
+from functools import reduce
+from functools import wraps
+from inspect import getmembers
+from inspect import ismodule
+from types import ModuleType
+from typing import Any
+from typing import Callable
+from typing import Generic
+from typing import List
+from typing import TypeVar
+from typing import get_args
+from typing import runtime_checkable
+
 from ._validator import validate_class
 
 if sys.version_info >= (3, 10):
@@ -48,7 +58,7 @@ def get_module_members(
     else:
         members = (getattr(module, name) for name in module.__all__)
 
-    return list(members)
+    return list(filter(lambda m: hasattr(m, '__name__'), members))
 
 
 def compose_two_funcs(
