@@ -30,9 +30,9 @@ P = ParamSpec("P")
 class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
     """Metaclass for registering functions."""
 
-    runtime_conformance_checking: Callable[
-        [Callable[P, R]], Callable[P, R]
-    ] = _def_checking
+    runtime_conformance_checking: Callable[[Callable[P, R]], Callable[P, R]] = (
+        _def_checking
+    )
     __orig_bases__: ClassVar[Tuple[Type, ...]]
     __slots__ = ()
 

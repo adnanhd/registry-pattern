@@ -1,30 +1,22 @@
 import inspect
 import sys
-from collections.abc import Callable
 from inspect import isclass
 from types import new_class
-from typing import List
-from typing import Optional
-from typing import Protocol
-from typing import Type
-from typing import TypeVar
-from typing import Union
 
 from .fnc_registry import FunctionalRegistry
 from .typ_registry import TypeRegistry
 
-if sys.version_info >= (3, 10):
-    from types import EllipsisType
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
-
-    EllipsisType = type(Ellipsis)
-
-if sys.version_info >= (3, 9):
-    pass
-else:
-    pass
+from typing_compat import (
+    EllipsisType,
+    ParamSpec,
+    Callable,
+    List,
+    Optional,
+    Protocol,
+    Type,
+    TypeVar,
+    Union,
+)
 
 
 class AnyProtocol(Protocol):
@@ -54,8 +46,7 @@ def type_registry_factory(
 
     kwds = {"strict": protocol is not AnyProtocol, "abstract": len(subcls) != 0}
 
-    class Register(TypeRegistry[protocol], **kwds):
-        ...
+    class Register(TypeRegistry[protocol], **kwds): ...
 
     Register.__name__ = f"{name}Registry"
     Register.__qualname__ = f"{name}Registry"
@@ -97,8 +88,7 @@ def functional_registry_factory(
 
     kwds = {"strict": args != ... or ret is not type}
 
-    class Registry(FunctionalRegistry[args, ret], **kwds):
-        ...  # type: ignore
+    class Registry(FunctionalRegistry[args, ret], **kwds): ...  # type: ignore
 
     Registry.__name__ = f"{name}Registry"
     Registry.__qualname__ = f"{name}Registry"

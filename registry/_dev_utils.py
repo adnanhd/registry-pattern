@@ -58,7 +58,7 @@ def get_module_members(
     else:
         members = (getattr(module, name) for name in module.__all__)
 
-    return list(filter(lambda m: hasattr(m, '__name__'), members))
+    return list(filter(lambda m: hasattr(m, "__name__"), members))
 
 
 def compose_two_funcs(

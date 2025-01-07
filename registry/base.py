@@ -35,8 +35,7 @@ class RegistryLookupError(RegistryError):
 class Stringable(Protocol):
     """A protocol for stringable objects."""
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
 
 K = TypeVar("K", bound=Hashable)

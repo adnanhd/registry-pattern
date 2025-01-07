@@ -12,8 +12,7 @@ from typing import get_args
 class Stringable(Protocol):
     """A protocol for stringable objects."""
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
 
 T = TypeVar("T")
