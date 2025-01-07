@@ -22,8 +22,6 @@ logging.basicConfig(
     format="[%(asctime)s] [%(levelname)-5s] [%(name)s:%(lineno)d] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",  # Custom date format
 )
-print(logger)
-
 
 def log_debug(func: Callable) -> Callable:
     """Decorator to log function calls in debug mode."""
