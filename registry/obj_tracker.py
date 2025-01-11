@@ -1,10 +1,9 @@
 """Object registry pattern."""
 
+import sys
 import weakref
 from abc import ABCMeta
-from typing import Generic
-from typing import Protocol
-from typing import TypeVar
+from typing import TypeVar, TYPE_CHECKING, Generic, Protocol
 
 
 class Stringable(Protocol):
@@ -15,16 +14,23 @@ class Stringable(Protocol):
 
 T = TypeVar("T")
 
+if TYPE_CHECKING or sys.version_info >= (3, 9):
+    from weakref import WeakSet
+
+    WeakSetT = weakref.WeakSet[T]  # Use subscriptable WeakSet for Python 3.9+
+else:
+    WeakSetT = weakref.WeakSet  # Unsubscriptable WeakSet for Python < 3.9
+
 
 class ClassTracker(Generic[T], ABCMeta):
     """Metaclass for managing trackable registrations."""
 
-    _artifacts: weakref.WeakSet[T]
+    _artifacts: WeakSetT
     __slots__ = ()
 
     def __init__(cls, name, bases, attrs):
         super().__init__(name, bases, attrs)
-        cls._artifacts = weakref.WeakSet[T]()
+        cls._artifacts = WeakSetT()
 
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
@@ -38,6 +44,6 @@ class ClassTracker(Generic[T], ABCMeta):
         """Check if an instance."""
         return instance in cls._artifacts
 
-    def get_instances(cls) -> weakref.WeakSet[T]:
+    def get_instances(cls) -> WeakSetT:
         """Return the set of instances."""
         return weakref.WeakSet(cls._artifacts)

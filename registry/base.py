@@ -17,6 +17,8 @@ from typing import Type
 from typing import TypeVar
 from typing import Union
 
+from registry._validator import ValidationError
+
 __all__ = [
     "RegistryError",
     "BaseRegistry",
@@ -80,7 +82,10 @@ class BaseRegistry(Container[T], Generic[K, T]):
 
     @classmethod
     def has_registry_item(cls, value: T) -> bool:
-        return cls.validate_item(value) in cls._repository.values()
+        try:
+            return cls.validate_item(value) in cls._repository.values()
+        except ValidationError:
+            return False
 
     @classmethod
     @lru_cache(maxsize=16, typed=False)
@@ -110,6 +115,7 @@ class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
         lookup_key = cls.validate_key(key)
         if lookup_key in cls._repository.keys():
             del cls._repository[lookup_key]
+            cls.get_registry_item.cache_clear()
         else:
             _not_registered_error(cls, key)
 

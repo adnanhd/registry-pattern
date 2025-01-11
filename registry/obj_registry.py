@@ -1,5 +1,6 @@
 """Object registry pattern."""
 
+import sys
 import weakref
 from abc import ABC
 from functools import partial
@@ -21,6 +22,10 @@ from .base import MutableRegistry
 
 CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
 ObjT = TypeVar("ObjT")
+if sys.version_info >= (3, 9):
+    WeakValueDictionaryT = weakref.WeakValueDictionary[Hashable, ObjT]
+else:
+    WeakValueDictionaryT = weakref.WeakValueDictionary
 
 
 class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
@@ -33,7 +38,7 @@ class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
     @classmethod
     def __init_subclass__(cls, strict: bool = False, abstract: bool = False):
         super().__init_subclass__()
-        cls._repository = weakref.WeakValueDictionary[Hashable, ObjT]()
+        cls._repository = WeakValueDictionaryT()
 
         if abstract:
             cls.runtime_inheritance_checking = partial(

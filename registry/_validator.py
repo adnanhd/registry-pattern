@@ -11,6 +11,7 @@ from typing import TypeVar
 
 from functools import wraps, partial, partialmethod
 from typing_extensions import ParamSpec
+
 # TODO: remove typeguard dependency
 from typeguard import TypeCheckError
 from typeguard import check_type
@@ -22,6 +23,7 @@ logging.basicConfig(
     format="[%(asctime)s] [%(levelname)-5s] [%(name)s:%(lineno)d] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",  # Custom date format
 )
+
 
 def log_debug(func: Callable) -> Callable:
     """Decorator to log function calls in debug mode."""
@@ -181,11 +183,36 @@ def validate_function_parameters(
 ) -> Callable[P, R]:
     """Check the structure of a class."""
     assert not coerce_to_type, "Coercion is not supported"
-    try:
-        return check_type(func, expected_type)
-    except TypeCheckError as exc:
-        error_msg = f"{func} is not of type {expected_type}"
-        raise ConformanceError(error_msg) from exc
+    func_signature = inspect.signature(func)
+    expected_args = expected_type.__args__[:-1]
+    expected_return = expected_type.__args__[-1]
+
+    # Check argument count
+    if len(func_signature.parameters) != len(expected_args):
+        raise ConformanceError(
+            f"Function {func.__name__} has {len(func_signature.parameters)} parameters, "
+            f"expected {len(expected_args)}."
+        )
+
+    # Check argument types
+    for param, expected_arg_type in zip(
+        func_signature.parameters.values(), expected_args
+    ):
+        if param.annotation != expected_arg_type:
+            raise ConformanceError(
+                f"Parameter {param.name} of function {func.__name__} has type {param.annotation}, "
+                f"expected {expected_arg_type}."
+            )
+
+    # Check return type
+    if func_signature.return_annotation != expected_return:
+        raise ConformanceError(
+            f"Function {func.__name__} has return type {func_signature.return_annotation}, "
+            f"expected {expected_return}."
+        )
+
+    # If everything is correct, return the function
+    return func
 
 
 #############################################################################

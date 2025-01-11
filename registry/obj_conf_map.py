@@ -1,3 +1,6 @@
+import sys
+import weakref
+
 from functools import partial
 from functools import wraps
 from typing import Any
@@ -17,6 +20,10 @@ from .base import BaseMutableRegistry
 
 K = TypeVar("K", bound=Hashable)
 CfgT = Dict[str, Any]  # TypeVar("CfgT", bound=dict[str, Any])
+if sys.version_info >= (3, 9):
+    WeakKeyDictionaryT = weakref.WeakKeyDictionary[K, CfgT]
+else:
+    WeakKeyDictionaryT = weakref.WeakKeyDictionary
 
 
 class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
@@ -28,9 +35,8 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
 
     @classmethod
     def __init_subclass__(cls, strict: bool = False, abstract: bool = False):
-        print("foo")
         super().__init_subclass__()
-        cls._repository = WeakKeyDictionary[K, CfgT]()
+        cls._repository = WeakKeyDictionaryT()
 
         if abstract:
             cls.runtime_inheritance_checking = partial(

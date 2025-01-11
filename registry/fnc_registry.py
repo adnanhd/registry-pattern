@@ -1,5 +1,7 @@
 """Functional registry for registering functions."""
 
+import sys
+
 from functools import partial
 from typing import Any
 from typing import Callable
@@ -8,6 +10,7 @@ from typing import Hashable
 from typing import Tuple
 from typing import Type
 from typing import TypeVar
+from typing import Iterable
 from typing import get_args
 from warnings import warn
 
@@ -37,6 +40,13 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
     __slots__ = ()
 
     @classmethod
+    def __class_getitem__(cls, params):
+        if sys.version_info < (3, 10):
+            args, kwargs = params
+            params = (Tuple[tuple(args)], kwargs)
+        return super().__class_getitem__(params)  # type: ignore
+
+    @classmethod
     def __init_subclass__(cls, strict: bool = False, coercion: bool = False, **kwargs):
         super().__init_subclass__(**kwargs)
         if coercion:
@@ -44,8 +54,8 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         cls._repository = dict()
         param, ret = get_args(cls.__orig_bases__[0])
 
-        if not isinstance(param, list):
-            param = [param]
+        if sys.version_info < (3, 10):
+            param = list(get_args(param))
 
         callable_type: Type[Callable[P, R]] = Callable[param, ret]  # type: ignore
         # validators: List[Callable[..., Any]] = [validate_function]
@@ -92,13 +102,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
     @classmethod
     def register_module_functions(cls, module, raise_error: bool = True):
         """Register all functions in a given module."""
-        members = filter(callable, get_module_members(module))
+        members: Iterable[Callable] = filter(callable, get_module_members(module))
         for obj in members:
-            try:
-                cls.register_function(obj)  # type: ignore
-            except ValidationError as e:
-                if raise_error:
-                    raise ValidationError(e)
-                else:
-                    print(e)
+            cls.register_function(obj)
         return module

@@ -5,8 +5,12 @@ from ._validator import ValidationError
 from .base import RegistryError
 from .fnc_registry import FunctionalRegistry
 from .obj_registry import ObjectRegistry
+from .obj_conf_map import ObjectConfigMap
+from .obj_tracker import ClassTracker
+from .obj_deletage import Wrapped
 from .typ_registry import TypeRegistry
 from .api import type_registry_factory, type_registry_decorator
+from ._version import __version__
 
 __all__ = [
     "RegistryError",
