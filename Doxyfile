@@ -7,3 +7,16 @@ GENERATE_MAN           = YES
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 FILE_PATTERNS          = *.py
+
+# Enable the use of the dot tool (Graphviz)
+HAVE_DOT = YES
+
+# (Optional) If dot is not in your PATH, specify its location:
+DOT_PATH = /usr/local/bin
+
+# These options allow you to automatically generate call graphs, caller graphs, etc.
+CALL_GRAPH = YES
+CALLER_GRAPH = YES
+
+# (Optional) Control the output format of the generated images.
+DOT_IMAGE_FORMAT = svg

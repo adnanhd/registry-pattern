@@ -21,8 +21,9 @@ from registry._validator import ValidationError
 
 __all__ = [
     "RegistryError",
-    "BaseRegistry",
-    "BaseMutableRegistry",
+    "RegistryLookupError",
+    "Registry",
+    "MutableRegistry",
 ]
 
 
