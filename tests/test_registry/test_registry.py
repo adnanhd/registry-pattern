@@ -1,14 +1,10 @@
 import pytest
 from functools import lru_cache
-from typing import Any
+from typing import Any, Dict
 
 # Import the classes and exceptions from your registry module.
-# Adjust the import path according to your project structure.
-from registry import RegistryError, RegistryLookupError, ValidationError
-from registry.base import (
-    Registry,
-    MutableRegistry,
-)
+# Adjust the import paths according to your project structure.
+from registry import RegistryError, RegistryLookupError, ValidationError, Registry, MutableRegistry
 
 # -------------------------------------------------------------------
 # Define concrete registry classes for testing.
@@ -165,3 +161,47 @@ def test_validate_item_error():
         TestValidationRegistry.add_registry_item("neg", -10)
     # Ensure that the key "neg" was not added.
     assert not TestValidationRegistry.has_registry_key("neg")
+
+
+def test_validate_item_accept():
+    """
+    Test that a positive value passes the validation in TestValidationRegistry.
+    """
+    TestValidationRegistry.add_registry_item("pos", 10)
+    assert TestValidationRegistry.get_registry_item("pos") == 10
+
+
+# -------------------------------------------------------------------
+# Additional tests.
+# -------------------------------------------------------------------
+
+
+def test_contains_operator():
+    """
+    Test that the __contains__ operator works on the registry instance.
+    """
+    TestMutableRegistry.add_registry_item("a", 1)
+    instance = TestMutableRegistry()
+    assert "a" in instance
+    assert "b" not in instance
+
+
+def test_cache_behavior():
+    """
+    Test the caching behavior of get_registry_item.
+
+    After the initial lookup, modify the underlying repository directly
+    and verify that the cached value remains until the cache is cleared.
+    """
+    TestMutableRegistry.add_registry_item("a", 1)
+    # Populate the cache.
+    value1 = TestMutableRegistry.get_registry_item("a")
+    # Modify the repository directly.
+    TestMutableRegistry._repository["a"] = 42
+    # The cached value should still be returned.
+    value2 = TestMutableRegistry.get_registry_item("a")
+    assert value1 == value2 == 1
+    # Now clear the cache.
+    TestMutableRegistry.get_registry_item.cache_clear()
+    value3 = TestMutableRegistry.get_registry_item("a")
+    assert value3 == 42

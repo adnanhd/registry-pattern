@@ -1,65 +1,126 @@
 import pytest
 from types import new_class
-from registry import ObjectConfigMap
-from registry.base import RegistryError
+from registry import ObjectRegistry, RegistryError
+
+# -----------------------------------------------------------------------------
+# Test Class Definition
+# -----------------------------------------------------------------------------
 
 
-class TestObject:
-    """A simple class for testing ObjectConfigMap."""
-
-    __test__ = False
+class MyObject:
+    """A simple class for testing the ObjectRegistry."""
 
     def __init__(self, name: str):
         self.name = name
 
 
+# -----------------------------------------------------------------------------
+# Fixture for ObjectRegistry
+# -----------------------------------------------------------------------------
+
+
 @pytest.fixture
-def ObjConfigMap():
-    """Fixture for ObjectConfigMap."""
-    return new_class("ConfMap", (ObjectConfigMap[TestObject],))
+def ObjRegistry():
+    """
+    Fixture for creating an ObjectRegistry specialized for MyObject.
+
+    The registry is dynamically created using new_class and is based on
+    ObjectRegistry[MyObject].
+    """
+    return new_class("ObjRegistry", (ObjectRegistry[MyObject],), {})
 
 
-def test_register_instance(ObjConfigMap: ObjectConfigMap):
-    """Test registering an object with configuration."""
-    obj = TestObject("test")
-    config = {"param1": 42, "param2": "value"}
-    ObjConfigMap.register_instance(obj, config)
-
-    assert ObjConfigMap.has_registry_item(config)
-    assert ObjConfigMap.get_registry_item(obj) == config
+# -----------------------------------------------------------------------------
+# Test Cases for ObjectRegistry
+# -----------------------------------------------------------------------------
 
 
-def test_unregister_instance(ObjConfigMap: ObjectConfigMap):
-    """Test unregistering an object."""
-    obj = TestObject("test")
-    config = {"param1": 42, "param2": "value"}
-    ObjConfigMap.register_instance(obj, config)
-    ObjConfigMap.unregister_instance(obj)
+def test_register_instance(ObjRegistry: ObjectRegistry):
+    """
+    Test that an instance is registered correctly.
 
-    assert not ObjConfigMap.has_registry_item(config)
+    The instance should be stored as both the key and value in the registry.
+    """
+    obj = MyObject("test")
+    ObjRegistry.register_instance(obj)
+
+    # Verify that the object is present in the registry.
+    assert ObjRegistry.has_registry_item(obj)
+    # Retrieve the registered item; it should be the same as the object.
+    assert ObjRegistry.get_registry_item(obj) == obj
 
 
-def test_register_duplicate_instance(ObjConfigMap: ObjectConfigMap):
-    """Test registering the same object multiple times."""
-    obj = TestObject("test")
-    config1 = {"param1": 42}
-    config2 = {"param1": 43}
+def test_unregister_instance(ObjRegistry: ObjectRegistry):
+    """
+    Test that an instance can be unregistered.
 
-    ObjConfigMap.register_instance(obj, config1)
+    After unregistration, the object should no longer be in the registry.
+    """
+    obj = MyObject("test")
+    ObjRegistry.register_instance(obj)
+    ObjRegistry.unregister_instance(obj)
+
+    # Verify that the object is no longer registered.
+    assert not ObjRegistry.has_registry_item(obj)
+
+
+def test_register_duplicate_instance(ObjRegistry: ObjectRegistry):
+    """
+    Test that attempting to register the same instance twice raises a RegistryError.
+
+    The registry should not allow duplicate registrations; the original configuration
+    should remain unchanged.
+    """
+    obj = MyObject("test")
+    ObjRegistry.register_instance(obj)
+
     with pytest.raises(RegistryError):
-        ObjConfigMap.register_instance(obj, config2)  # Overwrite with new config
+        ObjRegistry.register_instance(obj)  # Attempt duplicate registration.
 
-    assert ObjConfigMap.has_registry_item(config1)
-    assert not ObjConfigMap.has_registry_item(config2)
-    assert ObjConfigMap.get_registry_item(obj) == config1
+    # Confirm that the object is still registered.
+    assert ObjRegistry.has_registry_item(obj)
+    assert ObjRegistry.get_registry_item(obj) == obj
 
 
-def test_validate_item(ObjConfigMap: ObjectConfigMap):
-    """Test validating an item."""
-    config = {"param1": 42}
-    valid_config = ObjConfigMap.validate_item(config)
+def test_validate_key(ObjRegistry: ObjectRegistry):
+    """
+    Test that the validate_key method returns the correct key.
 
-    assert valid_config == config
+    The default key generation returns the hexadecimal representation of the
+    object's id.
+    """
+    obj = MyObject("test")
+    key = ObjRegistry.validate_key(obj)
+    assert key == hex(id(obj))
 
-    with pytest.raises(TypeError):
-        ObjConfigMap.validate_item("invalid config")
+
+def test_register_class_instances(ObjRegistry: ObjectRegistry):
+    """
+    Test that using register_class_instances correctly wraps a class for automatic
+    instance registration.
+
+    Instances created from the wrapped class should be automatically tracked in
+    the registry.
+    """
+
+    @ObjRegistry.register_class_instances
+    class MySubObject(MyObject):
+        pass
+
+    instance = MySubObject("example")
+
+    # Verify that the instance is automatically registered.
+    assert ObjRegistry.has_registry_item(instance)
+    assert ObjRegistry.get_registry_item(instance) == instance
+
+
+def test_lookup_unregistered_instance(ObjRegistry: ObjectRegistry):
+    """
+    Test that attempting to retrieve an unregistered instance raises RegistryError.
+
+    This ensures that get_registry_item does not return a value for keys that are
+    not present in the registry.
+    """
+    obj = MyObject("unregistered")
+    with pytest.raises(RegistryError):
+        ObjRegistry.get_registry_item(obj)
