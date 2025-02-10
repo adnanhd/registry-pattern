@@ -3,8 +3,7 @@ import sys
 from inspect import isclass
 from types import new_class
 
-from .fnc_registry import FunctionalRegistry
-from .typ_registry import TypeRegistry
+from ..core import FunctionalRegistry, TypeRegistry
 
 from typing_compat import (
     EllipsisType,
