@@ -22,13 +22,10 @@ import os
 import inspect
 import logging
 from abc import ABC
-from typing import Any, Callable, Type, TypeVar
+from typing_compat import Any, Callable, Type, TypeVar, ParamSpec, get_args, TypeAlias
+
 
 from functools import wraps, partial, partialmethod
-from typing_extensions import ParamSpec
-
-# TODO: remove typeguard dependency
-from typeguard import TypeCheckError, check_type
 
 # -----------------------------------------------------------------------------
 # Logging Configuration
@@ -313,9 +310,9 @@ def validate_function_signature(
 
 @log_debug
 def validate_function_parameters(
-    func: Callable,
+    func: Callable[P, R],
     /,
-    expected_type: Type[Callable[P, R]],
+    expected_type: TypeAlias, # Type[Callable[P, R]],
     coerce_to_type: bool = False,
 ) -> Callable[P, R]:
     """
@@ -340,8 +337,7 @@ def validate_function_parameters(
 
     func_signature = inspect.signature(func)
     # Extract expected argument types and return type from the expected callable.
-    expected_args = expected_type.__args__[:-1]
-    expected_return = expected_type.__args__[-1]
+    expected_args, expected_return = get_args(expected_type)
 
     # Check that the number of parameters is correct.
     if len(func_signature.parameters) != len(expected_args):
@@ -401,30 +397,68 @@ def validate_instance_hierarchy(instance: Obj, /, expected_type: Type) -> Obj:
 
 @log_debug
 def validate_instance_structure(
-    obj: Obj, /, expected_type: Type[Obj], coerce_to_type: bool = False
-) -> Obj:
+    obj: Any, /, expected_type: Type, coerce_to_type: bool = False
+) -> Any:
     """
-    Validate that an instance conforms to an expected type using runtime type checking.
+    Validate that an instance conforms to the structure of an expected type.
 
-    This function leverages 'check_type' from the typeguard package to
-    enforce type conformity.
+    This function checks that all public (non-underscore-prefixed) attributes,
+    and, in particular, callables (methods) defined in the expected type are
+    present on the instance and that their signatures match.
 
     Parameters:
-        obj (Obj): The instance to validate.
-        expected_type (Type[Obj]): The expected type of the instance.
+        obj (Any): The instance to validate.
+        expected_type (Type): The expected protocol or interface.
         coerce_to_type (bool): Flag for coercion support (currently not supported).
 
     Returns:
-        Obj: The validated instance.
+        Any: The validated instance.
 
     Raises:
-        ConformanceError: If the instance does not conform to the expected type.
+        ConformanceError: If the instance does not implement required methods or if
+                          method signatures do not match.
+        ValidationError: If the provided object is not a proper instance.
     """
-    # Coercion is not supported.
-    assert not coerce_to_type, "Coercion is not supported"
-    try:
-        # check_type performs runtime type checking.
-        return check_type(obj, expected_type)  # type: ignore
-    except TypeCheckError as exc:
-        error_msg = f"{obj} is not of type {expected_type}"
-        raise ConformanceError(error_msg) from exc
+    if coerce_to_type:
+        raise ValueError("Coercion is not supported")
+
+    # Ensure that obj is indeed an instance of a class.
+    if not hasattr(obj, "__class__") or not inspect.isclass(obj.__class__):
+        raise ValidationError(f"{obj} is not a valid instance")
+
+    # Iterate over attributes in the expected type.
+    for attr_name in dir(expected_type):
+        if attr_name.startswith("_"):
+            continue
+
+        # Check that the attribute is present on the instance.
+        if not hasattr(obj, attr_name):
+            raise ConformanceError(
+                f"Instance of {obj.__class__.__name__} does not implement attribute '{attr_name}'"
+            )
+
+        expected_attr = getattr(expected_type, attr_name)
+        obj_attr = getattr(obj, attr_name)
+
+        # If both expected and object attributes are callable, validate their signatures.
+        if callable(expected_attr) and not callable(obj_attr):
+            raise ConformanceError(
+                f"Attribute '{attr_name}' in {obj.__class__.__name__} is not callable"
+            )
+        elif not callable(expected_attr) and callable(obj_attr):
+            raise ConformanceError(
+                f"Attribute '{attr_name}' in {obj.__class__.__name__} is not a method"
+            )
+        else:
+            # if obj_attr is a method, unwrap it to get the underlying function.
+            if inspect.ismethod(obj_attr):
+                obj_attr = obj_attr.__func__
+
+            # if expected_attr is a method, unwrap it to get the underlying function.
+            if inspect.ismethod(expected_attr):
+                expected_attr = expected_attr.__func__
+
+            # Validate that the function signatures match.
+            validate_function_signature(obj_attr, expected_attr)
+
+    return obj

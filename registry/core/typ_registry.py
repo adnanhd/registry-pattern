@@ -17,9 +17,7 @@ digraph TypeRegistry {
 
 from abc import ABC
 from functools import partial
-from typing_compat import Any, Callable, Generic, Hashable, Type, TypeVar
-
-from typing_extensions import Literal
+from typing_compat import Any, Callable, Generic, Hashable, Type, TypeVar, Literal
 
 from ..utils import (
     # base
@@ -268,12 +266,12 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
 
         if mode in {"deferred", "both"}:
             # Define a dynamic metaclass for deferred registration.
-            mcs = type(supercls)
+            meta: Type[Any] = type(supercls)
             register_class_func = cls.register_class
 
-            class newmcs(mcs):
-                def __new__(mcs, name, bases, attrs) -> Type[Cls]:
-                    new_class = super().__new__(mcs, name, bases, attrs)
+            class newmcs(meta):
+                def __new__(cls, name, bases, attrs) -> Type[Cls]:
+                    new_class = super().__new__(cls, name, bases, attrs)
                     try:
                         new_class = register_class_func(new_class)
                     except Exception as e:
@@ -281,10 +279,10 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
                     return new_class
 
             # Copy meta attributes from the original metaclass.
-            newmcs.__name__ = mcs.__name__
-            newmcs.__qualname__ = mcs.__qualname__
-            newmcs.__module__ = mcs.__module__
-            newmcs.__doc__ = mcs.__doc__
+            newmcs.__name__ = meta.__name__
+            newmcs.__qualname__ = meta.__qualname__
+            newmcs.__module__ = meta.__module__
+            newmcs.__doc__ = meta.__doc__
 
             # Re-create the superclass using the new metaclass for deferred registration.
             supercls = newmcs(supercls.__name__, (supercls,), {})

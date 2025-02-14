@@ -69,9 +69,9 @@ class WrapperMeta(type):
 
     def __new__(
         mcs, name: str, bases: Tuple[Type, ...], attrs: dict
-    ) -> Type[Wrappable]:
+    ) -> "WrapperMeta": # Type[Wrapped]
         # Create the new class using the standard type.__new__.
-        cls: Type[Wrappable] = super().__new__(mcs, name, bases, attrs)
+        cls: WrapperMeta = super().__new__(mcs, name, bases, attrs)
 
         # List of special method names to be delegated to the wrapped object.
         special_methods = [

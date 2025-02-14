@@ -28,8 +28,8 @@ def test_register_valid_function(FuncRegistry: FunctionalRegistry):
     def add(x: int, y: int) -> int:
         return x + y
 
-    assert FuncRegistry.artifact_exists(add)
-    assert FuncRegistry.get_artifact("add") == add
+    assert FuncRegistry.artifact_exists(add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == add, "add function not registered"
 
 
 def test_register_invalid_function_missing_argument(FuncRegistry: FunctionalRegistry):
@@ -41,8 +41,8 @@ def test_register_invalid_function_missing_argument(FuncRegistry: FunctionalRegi
     def add(x: int) -> int:
         return x + 1
 
-    assert FuncRegistry.artifact_exists(add)
-    assert FuncRegistry.get_artifact("add") == add
+    assert FuncRegistry.artifact_exists(add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == add, "add function not registered"
 
 
 def test_register_invalid_function_extra_argument(FuncRegistry: FunctionalRegistry):
@@ -54,8 +54,8 @@ def test_register_invalid_function_extra_argument(FuncRegistry: FunctionalRegist
     def add(x: int, y: int, z: int) -> int:
         return x + y + z
 
-    assert FuncRegistry.artifact_exists(add)
-    assert FuncRegistry.get_artifact("add") == add
+    assert FuncRegistry.artifact_exists(add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == add, "add function not registered"
 
 
 def test_register_invalid_function_wrong_return_type(FuncRegistry: FunctionalRegistry):
@@ -67,8 +67,8 @@ def test_register_invalid_function_wrong_return_type(FuncRegistry: FunctionalReg
     def add(x: int, y: int) -> str:
         return f"{x + y}"
 
-    assert FuncRegistry.artifact_exists(add)
-    assert FuncRegistry.get_artifact("add") == add
+    assert FuncRegistry.artifact_exists(add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == add, "add function not registered"
 
 
 def test_register_module_functions(FuncRegistry: FunctionalRegistry):
@@ -89,11 +89,11 @@ def test_register_module_functions(FuncRegistry: FunctionalRegistry):
 
     FuncRegistry.register_module_functions(module)
 
-    assert FuncRegistry.artifact_exists(module.add)
-    assert FuncRegistry.get_artifact("add") == module.add
+    assert FuncRegistry.artifact_exists(module.add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == module.add, "add function not registered"
 
-    assert FuncRegistry.artifact_exists(module.sub)
-    assert FuncRegistry.get_artifact("sub") == module.sub
+    assert FuncRegistry.artifact_exists(module.sub), "sub function not registered"
+    assert FuncRegistry.get_artifact("sub") == module.sub, "sub function not registered"
 
 
 def test_unregister_function(FuncRegistry: FunctionalRegistry):
@@ -105,11 +105,11 @@ def test_unregister_function(FuncRegistry: FunctionalRegistry):
     def add(x: int, y: int) -> int:
         return x + y
 
-    assert FuncRegistry.artifact_exists(add)
-    assert FuncRegistry.get_artifact("add") == add
+    assert FuncRegistry.artifact_exists(add), "add function not registered"
+    assert FuncRegistry.get_artifact("add") == add, "add function not registered"
 
     FuncRegistry.unregister_function(add)
-    assert not FuncRegistry.artifact_exists(add)
+    assert not FuncRegistry.artifact_exists(add), "add function not unregistered"
     with pytest.raises(RegistryError):
         FuncRegistry.get_artifact("add")
 
@@ -142,9 +142,9 @@ def test_contains_operator(FuncRegistry: FunctionalRegistry):
         return x + y
 
     instance = FuncRegistry()
-    assert "add" in instance
+    assert "add" in instance, "add function not present in instance"
     # Test that a non-registered function name is not reported as present.
-    assert "nonexistent" not in instance
+    assert "nonexistent" not in instance, "nonexistent function reported as present"
 
 
 def test_instance_setitem_and_delitem(FuncRegistry: FunctionalRegistry):
@@ -154,7 +154,7 @@ def test_instance_setitem_and_delitem(FuncRegistry: FunctionalRegistry):
     instance = FuncRegistry()
     # Use __setitem__ to register a function.
     instance["multiply"] = lambda x, y: x * y
-    assert instance["multiply"](3, 4) == 12
+    assert instance["multiply"](3, 4) == 12, "multiply function not registered"
 
     # Use __delitem__ to unregister the function.
     del instance["multiply"]

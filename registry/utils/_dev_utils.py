@@ -5,33 +5,34 @@ from functools import partial
 from functools import reduce
 from functools import wraps
 from inspect import getmembers
-from inspect import ismodule
+from inspect import ismodule, isclass
 from types import ModuleType
-from typing import Any
-from typing import Callable
-from typing import Generic
-from typing import List
-from typing import TypeVar
-from typing import get_args
-from typing import runtime_checkable
 
-from ._validator import validate_class
+from typing_compat import (
+    Any,
+    Callable,
+    Generic,
+    List,
+    Type,
+    TypeVar,
+    ParamSpec,
+    get_args,
+    runtime_checkable,
+)
 
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
+from ._validator import validate_class, validate_function, ValidationError
 
 T = TypeVar("T")
 
 
-def _def_checking(v: T) -> T:
+def _def_checking(v: Any) -> Any:
     return v
 
 
 def get_protocol(cls: type):
     """Get the protocol from the class."""
-    assert issubclass(cls, Generic), f"{cls} is not a generic class"
+    assert isclass(cls), f"{cls} is not a class"
+    assert Generic in cls.mro(), f"{cls} is not a generic class"
     return runtime_checkable(get_args(cls.__orig_bases__[0])[0])  # type: ignore
 
 
@@ -56,9 +57,23 @@ def get_module_members(
     if ignore_all_keyword or not hasattr(module, "__all__"):
         _names, members = zip(*getmembers(module))
     else:
-        members = (getattr(module, name) for name in module.__all__)
+        _members = filter(lambda m: isinstance(m, str), module.__all__)
+        _members = filter(lambda m: hasattr(module, m), _members)
+        members = tuple(map(lambda m: getattr(module, m), _members))
 
-    return list(filter(lambda m: hasattr(m, "__name__"), members))
+    result = []
+    for member in filter(
+        lambda m: hasattr(m, "__name__") and not m.__name__.startswith("_"), members
+    ):
+        try:
+            result.append(validate_class(member))
+        except ValidationError:
+            pass
+        try:
+            result.append(validate_function(member))
+        except ValidationError:
+            pass
+    return result
 
 
 def compose_two_funcs(

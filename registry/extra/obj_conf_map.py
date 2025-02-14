@@ -196,9 +196,9 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
         Returns:
             Type[K]: A new class that wraps the original class and automatically registers instances.
         """
-        mcs = type(supercls)
+        meta: Type[Any] = type(supercls)
 
-        class newmcs(mcs):
+        class newmeta(meta):
             def __call__(self, **kwds: Any) -> K:
                 # Create an instance of the original class.
                 obj = super().__call__(**kwds)
@@ -206,12 +206,12 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
                 return cls.register_instance(obj, kwds)
 
         # Copy metadata from the original metaclass.
-        newmcs.__name__ = mcs.__name__
-        newmcs.__qualname__ = mcs.__qualname__
-        newmcs.__module__ = mcs.__module__
-        newmcs.__doc__ = mcs.__doc__
+        newmeta.__name__ = meta.__name__
+        newmeta.__qualname__ = meta.__qualname__
+        newmeta.__module__ = meta.__module__
+        newmeta.__doc__ = meta.__doc__
         # Return the new tracked class.
-        return newmcs(supercls.__name__, (supercls,), {})
+        return newmeta(supercls.__name__, (supercls,), {})
 
     @classmethod
     def register_builder(cls, func: Callable[..., K]) -> Callable[..., K]:

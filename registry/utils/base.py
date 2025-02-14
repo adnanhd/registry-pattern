@@ -25,14 +25,15 @@ digraph RegistryPattern {
 """
 
 from functools import lru_cache
-from typing import (
+from typing_compat import (
     Any,
     ClassVar,
-    Container,
     Dict,
     Generic,
     Hashable,
+    Iterator,
     List,
+    Mapping,
     MutableMapping,
     Protocol,
     Tuple,
@@ -135,7 +136,7 @@ def _dup_registered_error(cls: Type, key: Hashable) -> None:
 # -----------------------------------------------------------------------------
 
 
-class BaseRegistry(Container[T], Generic[K, T]):
+class BaseRegistry(Mapping[K, T], Generic[K, T]):
     r"""
     Base class for managing a registry of items.
 
@@ -171,6 +172,24 @@ class BaseRegistry(Container[T], Generic[K, T]):
         """
         lookup_key: K = self.validate_artifact_id(key)
         return lookup_key in self.__class__._repository
+
+    def __iter__(self) -> Iterator[K]:
+        """
+        Get an iterator over the keys in the registry.
+
+        Returns:
+            KeysView[K]: An iterator over the keys.
+        """
+        return self.__class__._repository.__iter__()
+
+    def __len__(self) -> int:
+        """
+        Get the number of items in the registry.
+
+        Returns:
+            int: The total count of items in the registry.
+        """
+        return len(self.__class__._repository)
 
     @classmethod
     # The lru_cache decorator can be uncommented to cache key validations.

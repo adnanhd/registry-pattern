@@ -216,9 +216,9 @@ class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
             Type[ObjT]: A new class that behaves like the original but automatically
                         registers its instances.
         """
-        mcs = type(supercls)
+        meta: Type[Any] = type(supercls)
 
-        class newmcs(mcs):
+        class newmcs(meta):
             def __call__(self, *args: Any, **kwds: Any) -> ObjT:
                 # Create a new instance using the original __call__.
                 obj = super().__call__(*args, **kwds)
@@ -229,11 +229,11 @@ class ObjectRegistry(MutableRegistry[Hashable, ObjT], ABC, Generic[ObjT]):
                     print(e)
                 return obj
 
-        # Copy the metadata from the original metaclass.
-        newmcs.__name__ = mcs.__name__
-        newmcs.__qualname__ = mcs.__qualname__
-        newmcs.__module__ = mcs.__module__
-        newmcs.__doc__ = mcs.__doc__
+        # Copy meta attributes from the original metaclass.
+        newmcs.__name__ = meta.__name__
+        newmcs.__qualname__ = meta.__qualname__
+        newmcs.__module__ = meta.__module__
+        newmcs.__doc__ = meta.__doc__
 
         # Create and return the new tracked class.
         return newmcs(supercls.__name__, (supercls,), {})

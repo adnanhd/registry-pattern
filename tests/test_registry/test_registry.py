@@ -23,6 +23,8 @@ class TestMutableRegistry(MutableRegistry[str, int]):
     keyed by strings.
     """
 
+    __test__ = False
+
     # Initialize the repository as an empty dict.
     _repository = {}
 
@@ -32,6 +34,8 @@ class TestValidationRegistry(MutableRegistry[str, int]):
     A registry that validates items such that negative integers
     are rejected.
     """
+
+    __test__ = False
 
     _repository = {}
 
