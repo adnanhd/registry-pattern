@@ -34,9 +34,9 @@ def test_register_instance(ObjConfigMap: ObjectConfigMap):
     ObjConfigMap.register_instance(obj, config)
 
     # Verify that the object is used as the key in the registry.
-    assert ObjConfigMap.has_registry_key(obj)
+    assert ObjConfigMap.artifact_id_exists(obj)
     # Verify that the configuration associated with the object is correct.
-    assert ObjConfigMap.get_registry_item(obj) == config
+    assert ObjConfigMap.get_artifact(obj) == config
 
 
 def test_unregister_instance(ObjConfigMap: ObjectConfigMap):
@@ -52,7 +52,7 @@ def test_unregister_instance(ObjConfigMap: ObjectConfigMap):
     ObjConfigMap.unregister_instance(obj)
 
     # After unregistration, the object should not be found in the registry.
-    assert not ObjConfigMap.has_registry_key(obj)
+    assert not ObjConfigMap.artifact_id_exists(obj)
 
 
 def test_register_duplicate_instance(ObjConfigMap: ObjectConfigMap):
@@ -73,11 +73,11 @@ def test_register_duplicate_instance(ObjConfigMap: ObjectConfigMap):
         ObjConfigMap.register_instance(obj, config2)
 
     # Verify that the object is registered with the original configuration.
-    assert ObjConfigMap.has_registry_key(obj)
-    assert ObjConfigMap.get_registry_item(obj) == config1
+    assert ObjConfigMap.artifact_id_exists(obj)
+    assert ObjConfigMap.get_artifact(obj) == config1
 
 
-def test_validate_item(ObjConfigMap: ObjectConfigMap):
+def test_validate_artifact(ObjConfigMap: ObjectConfigMap):
     """
     Test validating an item (configuration dictionary).
 
@@ -85,8 +85,8 @@ def test_validate_item(ObjConfigMap: ObjectConfigMap):
     whereas a non-dictionary value should raise a TypeError.
     """
     config = {"param1": 42}
-    valid_config = ObjConfigMap.validate_item(config)
+    valid_config = ObjConfigMap.validate_artifact(config)
     assert valid_config == config
 
     with pytest.raises(TypeError):
-        ObjConfigMap.validate_item("invalid config")
+        ObjConfigMap.validate_artifact("invalid config")

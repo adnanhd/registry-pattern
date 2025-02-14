@@ -28,8 +28,8 @@ def test_register_valid_function(FuncRegistry: FunctionalRegistry):
     def add(x: int, y: int) -> int:
         return x + y
 
-    assert FuncRegistry.has_registry_item(add)
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    assert FuncRegistry.get_artifact("add") == add
 
 
 def test_register_invalid_function_missing_argument(FuncRegistry: FunctionalRegistry):
@@ -41,8 +41,8 @@ def test_register_invalid_function_missing_argument(FuncRegistry: FunctionalRegi
     def add(x: int) -> int:
         return x + 1
 
-    assert FuncRegistry.has_registry_item(add)
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    assert FuncRegistry.get_artifact("add") == add
 
 
 def test_register_invalid_function_extra_argument(FuncRegistry: FunctionalRegistry):
@@ -54,8 +54,8 @@ def test_register_invalid_function_extra_argument(FuncRegistry: FunctionalRegist
     def add(x: int, y: int, z: int) -> int:
         return x + y + z
 
-    assert FuncRegistry.has_registry_item(add)
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    assert FuncRegistry.get_artifact("add") == add
 
 
 def test_register_invalid_function_wrong_return_type(FuncRegistry: FunctionalRegistry):
@@ -67,8 +67,8 @@ def test_register_invalid_function_wrong_return_type(FuncRegistry: FunctionalReg
     def add(x: int, y: int) -> str:
         return f"{x + y}"
 
-    assert FuncRegistry.has_registry_item(add)
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    assert FuncRegistry.get_artifact("add") == add
 
 
 def test_register_module_functions(FuncRegistry: FunctionalRegistry):
@@ -89,11 +89,11 @@ def test_register_module_functions(FuncRegistry: FunctionalRegistry):
 
     FuncRegistry.register_module_functions(module)
 
-    assert FuncRegistry.has_registry_item(module.add)
-    assert FuncRegistry.get_registry_item("add") == module.add
+    assert FuncRegistry.artifact_exists(module.add)
+    assert FuncRegistry.get_artifact("add") == module.add
 
-    assert FuncRegistry.has_registry_item(module.sub)
-    assert FuncRegistry.get_registry_item("sub") == module.sub
+    assert FuncRegistry.artifact_exists(module.sub)
+    assert FuncRegistry.get_artifact("sub") == module.sub
 
 
 def test_unregister_function(FuncRegistry: FunctionalRegistry):
@@ -105,13 +105,13 @@ def test_unregister_function(FuncRegistry: FunctionalRegistry):
     def add(x: int, y: int) -> int:
         return x + y
 
-    assert FuncRegistry.has_registry_item(add)
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    assert FuncRegistry.get_artifact("add") == add
 
     FuncRegistry.unregister_function(add)
-    assert not FuncRegistry.has_registry_item(add)
+    assert not FuncRegistry.artifact_exists(add)
     with pytest.raises(RegistryError):
-        FuncRegistry.get_registry_item("add")
+        FuncRegistry.get_artifact("add")
 
 
 # -------------------------------------------------------------------

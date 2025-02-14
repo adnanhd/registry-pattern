@@ -59,8 +59,8 @@ def test_registry_valid_entry(CommandRegistry: TypeRegistry):
         def test_method(self, x: int, y: int) -> int:
             return x + y
 
-    assert CommandRegistry.has_registry_item(AdditionCommand)
-    assert CommandRegistry.get_registry_item("AdditionCommand") == AdditionCommand
+    assert CommandRegistry.artifact_exists(AdditionCommand)
+    assert CommandRegistry.get_artifact("AdditionCommand") == AdditionCommand
 
 
 def test_registry_invalid_method_different_method_name(CommandRegistry: TypeRegistry):
@@ -77,8 +77,8 @@ def test_registry_invalid_method_different_method_name(CommandRegistry: TypeRegi
         def test_method2(self, x: int, y: int) -> int:
             return x - y
 
-    assert CommandRegistry.has_registry_item(SubtractionCommand)
-    assert CommandRegistry.get_registry_item("SubtractionCommand") == SubtractionCommand
+    assert CommandRegistry.artifact_exists(SubtractionCommand)
+    assert CommandRegistry.get_artifact("SubtractionCommand") == SubtractionCommand
 
 
 def test_unregister_class(CommandRegistry: TypeRegistry):
@@ -90,9 +90,9 @@ def test_unregister_class(CommandRegistry: TypeRegistry):
             return f"Temporary {data}"
 
     CommandRegistry.unregister_class(TempClass)
-    assert not CommandRegistry.has_registry_item(TempClass)
+    assert not CommandRegistry.artifact_exists(TempClass)
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("TempClass")
+        CommandRegistry.get_artifact("TempClass")
 
 
 def test_register_module_subclasses(CommandRegistry: TypeRegistry):
@@ -109,8 +109,8 @@ def test_register_module_subclasses(CommandRegistry: TypeRegistry):
 
     CommandRegistry.register_subclasses(ParentClass)
 
-    assert CommandRegistry.has_registry_item(ParentClass)
-    assert CommandRegistry.has_registry_item(ChildClass)
+    assert CommandRegistry.artifact_exists(ParentClass)
+    assert CommandRegistry.artifact_exists(ChildClass)
 
 
 # -------------------------------------------------------------------
@@ -142,5 +142,5 @@ def test_strict_registry_valid(StrictCommandRegistry: TypeRegistry):
         def test_method(self, x: int, y: int) -> int:
             return x * y
 
-    assert StrictCommandRegistry.has_registry_item(ValidCommand)
-    assert StrictCommandRegistry.get_registry_item("ValidCommand") == ValidCommand
+    assert StrictCommandRegistry.artifact_exists(ValidCommand)
+    assert StrictCommandRegistry.get_artifact("ValidCommand") == ValidCommand

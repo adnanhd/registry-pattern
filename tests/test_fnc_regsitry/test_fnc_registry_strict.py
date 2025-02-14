@@ -35,9 +35,9 @@ def test_register_valid_function(FuncRegistry: FunctionalRegistry):
         return x + y
 
     # Check that the function is in the registry.
-    assert FuncRegistry.has_registry_item(add)
-    # Also, verify that get_registry_item returns the same function.
-    assert FuncRegistry.get_registry_item("add") == add
+    assert FuncRegistry.artifact_exists(add)
+    # Also, verify that get_artifact returns the same function.
+    assert FuncRegistry.get_artifact("add") == add
 
 
 def test_register_invalid_function_missing_argument(FuncRegistry: FunctionalRegistry):
@@ -111,7 +111,7 @@ def test_register_module_functions(FuncRegistry: FunctionalRegistry):
         FuncRegistry.register_module_functions(module)
 
     # Verify that the function is not registered.
-    assert not FuncRegistry.has_registry_item(module.add)
+    assert not FuncRegistry.artifact_exists(module.add)
 
     with pytest.raises(RegistryError):
-        FuncRegistry.get_registry_item("add")
+        FuncRegistry.get_artifact("add")

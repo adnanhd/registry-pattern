@@ -39,6 +39,8 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    KeysView,
+    ValuesView,
 )
 
 from ._validator import ValidationError
@@ -167,13 +169,13 @@ class BaseRegistry(Container[T], Generic[K, T]):
         Returns:
             bool: True if the key exists, False otherwise.
         """
-        lookup_key: K = self.validate_key(key)
+        lookup_key: K = self.validate_artifact_id(key)
         return lookup_key in self.__class__._repository
 
     @classmethod
     # The lru_cache decorator can be uncommented to cache key validations.
     # @lru_cache(maxsize=16, typed=False)
-    def validate_key(cls, key: Any) -> K:
+    def validate_artifact_id(cls, key: Any) -> K:
         """
         Validate and convert the input key to a registry key.
 
@@ -188,7 +190,7 @@ class BaseRegistry(Container[T], Generic[K, T]):
         return key  # type: ignore
 
     @classmethod
-    def has_registry_key(cls, value: K) -> bool:
+    def artifact_id_exists(cls, value: K) -> bool:
         """
         Check if a validated key exists in the registry.
 
@@ -198,10 +200,10 @@ class BaseRegistry(Container[T], Generic[K, T]):
         Returns:
             bool: True if the key exists, False otherwise.
         """
-        return cls.validate_key(value) in cls._repository
+        return cls.validate_artifact_id(value) in cls._repository
 
     @classmethod
-    def validate_item(cls, value: T) -> T:
+    def validate_artifact(cls, value: T) -> T:
         """
         Validate the item before registration.
 
@@ -216,7 +218,7 @@ class BaseRegistry(Container[T], Generic[K, T]):
         return value
 
     @classmethod
-    def has_registry_item(cls, value: T) -> bool:
+    def artifact_exists(cls, value: T) -> bool:
         """
         Check if a validated item exists in the registry.
 
@@ -227,13 +229,13 @@ class BaseRegistry(Container[T], Generic[K, T]):
             bool: True if the item exists, False otherwise.
         """
         try:
-            return cls.validate_item(value) in cls._repository.values()
+            return cls.validate_artifact(value) in cls._repository.values()
         except ValidationError:
             return False
 
     @classmethod
     @lru_cache(maxsize=16, typed=False)
-    def get_registry_item(cls, key: K) -> T:
+    def get_artifact(cls, key: K) -> T:
         """
         Retrieve an item from the registry by key.
 
@@ -248,7 +250,7 @@ class BaseRegistry(Container[T], Generic[K, T]):
         Raises:
             RegistryLookupError: If the key is not found in the registry.
         """
-        lookup_key: K = cls.validate_key(key)
+        lookup_key: K = cls.validate_artifact_id(key)
         if lookup_key not in cls._repository:
             _not_registered_error(cls, key)  # Raise a lookup error.
         return cls._repository[lookup_key]
@@ -270,7 +272,7 @@ class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
     """
 
     @classmethod
-    def add_registry_item(cls, key: K, value: T) -> None:
+    def register_artifact(cls, key: K, value: T) -> None:
         """
         Register a new item with the given key.
 
@@ -281,14 +283,14 @@ class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
         Raises:
             RegistryError: If the key is already registered.
         """
-        lookup_key: K = cls.validate_key(key)
+        lookup_key: K = cls.validate_artifact_id(key)
         if lookup_key not in cls._repository:
-            cls._repository[lookup_key] = cls.validate_item(value)
+            cls._repository[lookup_key] = cls.validate_artifact(value)
         else:
             _dup_registered_error(cls, key)
 
     @classmethod
-    def del_registry_item(cls, key: K) -> None:
+    def unregister_artifacts(cls, key: K) -> None:
         """
         Delete a registered item by key.
 
@@ -298,16 +300,16 @@ class BaseMutableRegistry(BaseRegistry[K, T], Generic[K, T]):
         Raises:
             RegistryLookupError: If the key is not found.
         """
-        lookup_key: K = cls.validate_key(key)
+        lookup_key: K = cls.validate_artifact_id(key)
         if lookup_key in cls._repository:
             del cls._repository[lookup_key]
-            # Clear the cache of get_registry_item to maintain consistency.
-            cls.get_registry_item.cache_clear()
+            # Clear the cache of get_artifact to maintain consistency.
+            cls.get_artifact.cache_clear()
         else:
             _not_registered_error(cls, key)
 
     @classmethod
-    def clear_registry(cls) -> None:
+    def clear_artifacts(cls) -> None:
         """
         Clear all registered items from the registry.
         """
@@ -339,7 +341,7 @@ class Registry(BaseRegistry[K, T], Generic[K, T]):
         Returns:
             T: The registered item.
         """
-        return self.get_registry_item(key)
+        return self.get_artifact(key)
 
     @classmethod
     def len(cls) -> int:
@@ -352,7 +354,7 @@ class Registry(BaseRegistry[K, T], Generic[K, T]):
         return len(cls._repository)
 
     @classmethod
-    def keys(cls) -> List[K]:
+    def list_artifact_ids(cls) -> List[K]:
         """
         Get a list of all registered keys.
 
@@ -362,7 +364,7 @@ class Registry(BaseRegistry[K, T], Generic[K, T]):
         return list(cls._repository.keys())
 
     @classmethod
-    def values(cls) -> List[T]:
+    def list_artifacts(cls) -> List[T]:
         """
         Get a list of all registered items.
 
@@ -397,7 +399,7 @@ class MutableRegistry(BaseMutableRegistry[K, T], Registry[K, T], Generic[K, T]):
             key (K): The key to register.
             value (T): The item to associate with the key.
         """
-        self.add_registry_item(key, value)
+        self.register_artifact(key, value)
 
     def __delitem__(self, key: K) -> None:
         """
@@ -406,4 +408,4 @@ class MutableRegistry(BaseMutableRegistry[K, T], Registry[K, T], Generic[K, T]):
         Parameters:
             key (K): The key of the item to remove.
         """
-        self.del_registry_item(key)
+        self.unregister_artifacts(key)

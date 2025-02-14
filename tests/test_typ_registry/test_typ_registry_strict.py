@@ -45,8 +45,8 @@ def test_registry_valid_entry(CommandRegistry: TypeRegistry):
         def test_method(self, x: int, y: int) -> int:
             return x + y
 
-    assert CommandRegistry.has_registry_item(AdditionCommand)
-    assert CommandRegistry.get_registry_item("AdditionCommand") == AdditionCommand
+    assert CommandRegistry.artifact_exists(AdditionCommand)
+    assert CommandRegistry.get_artifact("AdditionCommand") == AdditionCommand
 
 
 def test_registry_invalid_entry_with_missing_method(CommandRegistry: TypeRegistry):
@@ -62,7 +62,7 @@ def test_registry_invalid_entry_with_missing_method(CommandRegistry: TypeRegistr
                 return x - y
 
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("SubtractionCommand")
+        CommandRegistry.get_artifact("SubtractionCommand")
 
 
 def test_registry_invalid_entry_with_extra_argument(CommandRegistry: TypeRegistry):
@@ -77,7 +77,7 @@ def test_registry_invalid_entry_with_extra_argument(CommandRegistry: TypeRegistr
                 return x - y + z
 
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("SubtractionCommand")
+        CommandRegistry.get_artifact("SubtractionCommand")
 
 
 def test_registry_invalid_entry_with_wrong_argument_type(CommandRegistry: TypeRegistry):
@@ -93,7 +93,7 @@ def test_registry_invalid_entry_with_wrong_argument_type(CommandRegistry: TypeRe
                 return int(x - y)
 
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("SubtractionCommand1")
+        CommandRegistry.get_artifact("SubtractionCommand1")
 
     with pytest.raises(ConformanceError):
 
@@ -103,7 +103,7 @@ def test_registry_invalid_entry_with_wrong_argument_type(CommandRegistry: TypeRe
                 return int(x - y)
 
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("SubtractionCommand2")
+        CommandRegistry.get_artifact("SubtractionCommand2")
 
     with pytest.raises(ConformanceError):
 
@@ -113,12 +113,12 @@ def test_registry_invalid_entry_with_wrong_argument_type(CommandRegistry: TypeRe
                 return x - y
 
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("SubtractionCommand3")
+        CommandRegistry.get_artifact("SubtractionCommand3")
 
 
-def test_validate_item(CommandRegistry: TypeRegistry):
+def test_validate_artifact(CommandRegistry: TypeRegistry):
     """
-    Test the validate_item method in strict mode.
+    Test the validate_artifact method in strict mode.
     Validation should pass for a conforming class and fail for a non-conforming one.
     """
 
@@ -127,7 +127,7 @@ def test_validate_item(CommandRegistry: TypeRegistry):
             return x - y
 
     # Validation should pass for a conforming class.
-    validated = CommandRegistry.validate_item(ValidClass)
+    validated = CommandRegistry.validate_artifact(ValidClass)
     assert validated is ValidClass
 
     # Validation should fail for a non-conforming class.
@@ -136,7 +136,7 @@ def test_validate_item(CommandRegistry: TypeRegistry):
             return f"Data {data}"
 
     with pytest.raises(ConformanceError):
-        CommandRegistry.validate_item(InvalidClass)
+        CommandRegistry.validate_artifact(InvalidClass)
 
 
 # -------------------------------------------------------------------
@@ -170,12 +170,12 @@ def test_unregister_class(CommandRegistry: TypeRegistry):
             return x * y
 
     # Ensure the class is registered.
-    assert CommandRegistry.has_registry_item(TempCommand)
+    assert CommandRegistry.artifact_exists(TempCommand)
     # Unregister the class.
     CommandRegistry.unregister_class(TempCommand)
     # Verify that the class is no longer in the registry.
     with pytest.raises(RegistryError):
-        CommandRegistry.get_registry_item("TempCommand")
+        CommandRegistry.get_artifact("TempCommand")
 
 
 def test_register_module_subclasses(CommandRegistry: TypeRegistry):
@@ -194,5 +194,5 @@ def test_register_module_subclasses(CommandRegistry: TypeRegistry):
 
     CommandRegistry.register_subclasses(ParentCommand)
 
-    assert CommandRegistry.has_registry_item(ParentCommand)
-    assert CommandRegistry.has_registry_item(ChildCommand)
+    assert CommandRegistry.artifact_exists(ParentCommand)
+    assert CommandRegistry.artifact_exists(ChildCommand)

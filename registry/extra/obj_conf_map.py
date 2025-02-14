@@ -113,7 +113,7 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
             )
 
     @classmethod
-    def validate_item(cls, value: dict) -> CfgT:
+    def validate_artifact(cls, value: dict) -> CfgT:
         """
         Validate a configuration item.
 
@@ -133,7 +133,7 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
         return value
 
     @classmethod
-    def validate_key(cls, key: Any) -> K:
+    def validate_artifact_id(cls, key: Any) -> K:
         """
         Validate a key before registration.
 
@@ -164,7 +164,7 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
         Returns:
             K: The registered instance.
         """
-        cls.add_registry_item(obj, cfg)
+        cls.register_artifact(obj, cfg)
         return obj
 
     @classmethod
@@ -178,7 +178,7 @@ class ObjectConfigMap(BaseMutableRegistry[K, CfgT], Generic[K]):
         Returns:
             K: The unregistered instance.
         """
-        cls.del_registry_item(obj)
+        cls.unregister_artifacts(obj)
         return obj
 
     @classmethod

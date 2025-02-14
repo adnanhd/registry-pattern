@@ -45,9 +45,9 @@ def test_register_instance(ObjRegistry: ObjectRegistry):
     ObjRegistry.register_instance(obj)
 
     # Verify that the object is present in the registry.
-    assert ObjRegistry.has_registry_item(obj)
+    assert ObjRegistry.artifact_exists(obj)
     # Retrieve the registered item; it should be the same as the object.
-    assert ObjRegistry.get_registry_item(obj) == obj
+    assert ObjRegistry.get_artifact(obj) == obj
 
 
 def test_unregister_instance(ObjRegistry: ObjectRegistry):
@@ -61,7 +61,7 @@ def test_unregister_instance(ObjRegistry: ObjectRegistry):
     ObjRegistry.unregister_instance(obj)
 
     # Verify that the object is no longer registered.
-    assert not ObjRegistry.has_registry_item(obj)
+    assert not ObjRegistry.artifact_exists(obj)
 
 
 def test_register_duplicate_instance(ObjRegistry: ObjectRegistry):
@@ -78,19 +78,19 @@ def test_register_duplicate_instance(ObjRegistry: ObjectRegistry):
         ObjRegistry.register_instance(obj)  # Attempt duplicate registration.
 
     # Confirm that the object is still registered.
-    assert ObjRegistry.has_registry_item(obj)
-    assert ObjRegistry.get_registry_item(obj) == obj
+    assert ObjRegistry.artifact_exists(obj)
+    assert ObjRegistry.get_artifact(obj) == obj
 
 
-def test_validate_key(ObjRegistry: ObjectRegistry):
+def test_validate_artifact_id(ObjRegistry: ObjectRegistry):
     """
-    Test that the validate_key method returns the correct key.
+    Test that the validate_artifact_id method returns the correct key.
 
     The default key generation returns the hexadecimal representation of the
     object's id.
     """
     obj = MyObject("test")
-    key = ObjRegistry.validate_key(obj)
+    key = ObjRegistry.validate_artifact_id(obj)
     assert key == hex(id(obj))
 
 
@@ -110,17 +110,17 @@ def test_register_class_instances(ObjRegistry: ObjectRegistry):
     instance = MySubObject("example")
 
     # Verify that the instance is automatically registered.
-    assert ObjRegistry.has_registry_item(instance)
-    assert ObjRegistry.get_registry_item(instance) == instance
+    assert ObjRegistry.artifact_exists(instance)
+    assert ObjRegistry.get_artifact(instance) == instance
 
 
 def test_lookup_unregistered_instance(ObjRegistry: ObjectRegistry):
     """
     Test that attempting to retrieve an unregistered instance raises RegistryError.
 
-    This ensures that get_registry_item does not return a value for keys that are
+    This ensures that get_artifact does not return a value for keys that are
     not present in the registry.
     """
     obj = MyObject("unregistered")
     with pytest.raises(RegistryError):
-        ObjRegistry.get_registry_item(obj)
+        ObjRegistry.get_artifact(obj)

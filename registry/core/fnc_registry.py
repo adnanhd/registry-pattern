@@ -125,7 +125,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
             )
 
     @classmethod
-    def validate_item(cls, value: Callable[P, R]) -> Callable[P, R]:
+    def validate_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
         """
         Validate a function before registration.
 
@@ -174,7 +174,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
 
         return True
         # Note: The following line is unreachable and has been removed:
-        # cls._validate_item = compose(*validators)
+        # cls._validate_artifact = compose(*validators)
 
     @classmethod
     def register_function(cls, func: Callable[P, R]) -> Callable[P, R]:
@@ -189,7 +189,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         Returns:
             Callable[P, R]: The registered function.
         """
-        cls.add_registry_item(func.__name__, func)
+        cls.register_artifact(func.__name__, func)
         return func
 
     @classmethod
@@ -205,7 +205,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         Returns:
             Callable[P, R]: The unregistered function.
         """
-        cls.del_registry_item(func.__name__)
+        cls.unregister_artifacts(func.__name__)
         return func
 
     @classmethod

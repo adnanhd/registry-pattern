@@ -97,7 +97,7 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
             )
 
     @classmethod
-    def validate_item(cls, value: Type[Cls]) -> Type[Cls]:
+    def validate_artifact(cls, value: Type[Cls]) -> Type[Cls]:
         """
         Validate a class before registration.
 
@@ -171,7 +171,7 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
             ValidationError: If the provided value is not a class (i.e., lacks a __name__).
         """
         if hasattr(subcls, "__name__"):
-            cls.add_registry_item(subcls.__name__, subcls)
+            cls.register_artifact(subcls.__name__, subcls)
         else:
             # Raising error to indicate that the value cannot be registered.
             raise ValidationError(f"{subcls} is not a class or type")
@@ -194,7 +194,7 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
             ValidationError: If the provided value is not a class (i.e., lacks a __name__).
         """
         if hasattr(subcls, "__name__"):
-            cls.del_registry_item(subcls.__name__)
+            cls.unregister_artifacts(subcls.__name__)
         else:
             raise ValidationError(f"{subcls} is not a class or type")
         return subcls
