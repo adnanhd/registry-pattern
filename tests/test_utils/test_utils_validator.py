@@ -1,10 +1,9 @@
 import inspect
 import pytest
-import logging
 
 # Import functions and exceptions from your validator module.
 # Adjust the import if your module is organized differently.
-from registry.utils._validator import (
+from registry.core._validator import (
     validate_class,
     validate_class_structure,
     validate_class_hierarchy,
@@ -17,7 +16,6 @@ from registry.utils._validator import (
     ConformanceError,
     InheritanceError,
     ValidationError,
-    get_func_name,
 )
 
 # -----------------------------------------------------------------------------

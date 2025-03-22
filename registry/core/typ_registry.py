@@ -8,7 +8,7 @@ Doxygen Dot Graph of Inheritance:
 -----------------------------------
 \dot
 digraph TypeRegistry {
-    "MutableRegistry" -> "TypeRegistry";
+    "MutableRegistryValidatorMixin" -> "TypeRegistry";
     "ABC" -> "TypeRegistry";
     "Generic" -> "TypeRegistry";
 }
@@ -16,17 +16,16 @@ digraph TypeRegistry {
 """
 
 from abc import ABC
-from functools import partial
-from typing_compat import Any, Callable, Generic, Hashable, Type, TypeVar, Literal
+from typing_compat import Any, Generic, Hashable, Type, TypeVar, Literal
 
-from ..utils import (
-    # base
-    MutableRegistry,
+from ..mixin import MutableRegistryValidatorMixin
+from ._dev_utils import (
     # _dev_utils
-    _def_checking,
     get_module_members,
     get_protocol,
     get_subclasses,
+)
+from ._validator import (
     # _validator
     ConformanceError,
     InheritanceError,
@@ -40,28 +39,33 @@ from ..utils import (
 Cls = TypeVar("Cls")
 
 
-class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
+class TypeRegistry(
+    MutableRegistryValidatorMixin[Hashable, Type[Cls]], ABC, Generic[Cls]
+):
     """
     Base class for registering classes.
 
-    This metaclass extends MutableRegistry to enable runtime registration and validation
+    This class extends MutableRegistryValidatorMixin to enable runtime registration and validation
     of classes. It performs validations for:
       - Ensuring the provided value is a class.
       - Verifying that the class inherits from the expected base (if marked as abstract).
       - Enforcing protocol conformance (if strict mode is enabled).
 
     Attributes:
-        runtime_conformance_checking (Callable[[Type], Type]):
-            A function used to check that a class conforms to a specific protocol.
-        runtime_inheritance_checking (Callable[[Type], Type]):
-            A function used to verify that a class inherits from an expected abstract base.
+        _repository (dict): Dictionary for storing registered classes.
+        _strict (bool): Whether to enforce protocol conformance.
+        _abstract (bool): Whether to enforce inheritance validation.
     """
 
-    # Default functions for runtime validations; these can be replaced in subclasses.
-    runtime_conformance_checking: Callable[[Type[Any]], Type[Any]] = _def_checking
-    runtime_inheritance_checking: Callable[[Type[Any]], Type[Any]] = _def_checking
-
+    _repository: dict
+    _strict: bool = False
+    _abstract: bool = False
     __slots__ = ()
+
+    @classmethod
+    def _get_mapping(cls):
+        """Return the repository dictionary."""
+        return cls._repository
 
     @classmethod
     def __init_subclass__(
@@ -70,8 +74,8 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
         """
         Initialize a subclass of TypeRegistry.
 
-        This method initializes the registry repository and configures runtime validation
-        functions based on the provided flags.
+        This method initializes the registry repository and sets the validation
+        flags based on the provided parameters.
 
         Parameters:
             strict (bool): If True, enforce protocol conformance checking.
@@ -81,76 +85,73 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
         super().__init_subclass__(**kwargs)
         # Initialize the repository for registered classes.
         cls._repository = dict()
-
-        # Configure runtime inheritance checking if the class is marked as abstract.
-        if abstract:
-            cls.runtime_inheritance_checking = partial(
-                validate_class_hierarchy, abc_class=cls
-            )
-
-        # Configure runtime conformance checking if strict mode is enabled.
-        if strict:
-            cls.runtime_conformance_checking = partial(
-                validate_class_structure, expected_type=get_protocol(cls)
-            )
+        # Store validation flags
+        cls._strict = strict
+        cls._abstract = abstract
 
     @classmethod
-    def validate_artifact(cls, value: Type[Cls]) -> Type[Cls]:
+    def _probe_artifact(cls, value: Any) -> Type[Cls]:
         """
         Validate a class before registration.
 
         The validation process includes:
           1. Verifying that the value is indeed a class.
-          2. Checking that it adheres to the required inheritance structure.
-          3. Ensuring that it conforms to the expected protocol.
+          2. Checking that it adheres to the required inheritance structure (if _abstract is True).
+          3. Ensuring that it conforms to the expected protocol (if _strict is True).
+
+        Parameters:
+            value (Any): The class to validate.
+
+        Returns:
+            Type[Cls]: The validated class.
+
+        Raises:
+            ValidationError: If value is not a class.
+            InheritanceError: If value does not inherit from the required base class.
+            ConformanceError: If value does not conform to the required protocol.
+        """
+        # Basic validation to ensure it's a class
+        value = validate_class(value)
+
+        # Apply inheritance checking if abstract mode is enabled
+        if cls._abstract:
+            value = validate_class_hierarchy(value, abc_class=cls)
+
+        # Apply conformance checking if strict mode is enabled
+        if cls._strict:
+            value = validate_class_structure(value, expected_type=get_protocol(cls))
+
+        return value
+
+    @classmethod
+    def _seal_artifact(cls, value: Type[Cls]) -> Type[Cls]:
+        """
+        Validate a class when retrieving from the registry.
+
+        This method is a no-op by default, as validation is primarily
+        done during registration. Override this method to add validation
+        during retrieval if needed.
 
         Parameters:
             value (Type[Cls]): The class to validate.
 
         Returns:
             Type[Cls]: The validated class.
-
-        Raises:
-            ValidationError: If any validation step fails.
         """
-        value = validate_class(value)
-        value = cls.runtime_inheritance_checking(value)
-        value = cls.runtime_conformance_checking(value)
         return value
 
     @classmethod
-    def __subclasscheck__(cls, value: Any) -> bool:
+    def validate_class(cls, value: Type[Cls]) -> Type[Cls]:
         """
-        Custom subclass check to perform runtime validation.
-
-        This method overrides the standard subclass check to ensure that the value
-        passes class, inheritance, and protocol validations.
+        Validate a class when retrieving from the registry.
 
         Parameters:
-            value (Any): The class to check.
+            value (Type[Cls]): The class to validate.
 
         Returns:
-            bool: True if the class passes all validations, False otherwise.
+            Type[Cls]: The validated class.
         """
-        try:
-            validate_class(value)
-        except ValidationError:
-            print("no validation")
-            return False
-
-        try:
-            cls.runtime_inheritance_checking(value)
-        except InheritanceError:
-            print("no inheritaion")
-            return False
-
-        try:
-            cls.runtime_conformance_checking(value)
-        except ConformanceError:
-            print("no conformation")
-            return False
-
-        return True
+        return cls._seal_artifact(cls._probe_artifact(value))
 
     @classmethod
     def register_class(cls, subcls: Type[Cls]) -> Type[Cls]:
@@ -164,38 +165,44 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
 
         Returns:
             Type[Cls]: The registered subclass.
-
-        Raises:
-            ValidationError: If the provided value is not a class (i.e., lacks a __name__).
         """
-        if hasattr(subcls, "__name__"):
-            cls.register_artifact(subcls.__name__, subcls)
-        else:
-            # Raising error to indicate that the value cannot be registered.
-            raise ValidationError(f"{subcls} is not a class or type")
+        cls.register_artifact(subcls.__name__, subcls)
         return subcls
 
     @classmethod
-    def unregister_class(cls, subcls: Type[Cls]) -> Type[Cls]:
+    def unregister_class(cls, subcls_or_name: Any) -> None:
         """
         Unregister a subclass from the registry.
 
-        The class is removed from the registry using its __name__ attribute as the key.
+        Parameters:
+            subcls_or_name (Any): The class or its name to unregister.
+        """
+        if hasattr(subcls_or_name, "__name__"):
+            key = subcls_or_name.__name__
+        else:
+            key = subcls_or_name
+        cls.unregister_artifact(key)
+
+    @classmethod
+    def __subclasscheck__(cls, value: Any) -> bool:
+        """
+        Custom subclass check to perform runtime validation.
+
+        This method uses the configured validation methods to determine
+        whether the given value meets the criteria for being considered a subclass.
 
         Parameters:
-            subcls (Type[Cls]): The subclass to unregister.
+            value (Any): The class to check.
 
         Returns:
-            Type[Cls]: The unregistered subclass.
-
-        Raises:
-            ValidationError: If the provided value is not a class (i.e., lacks a __name__).
+            bool: True if the value passes all validations; False otherwise.
         """
-        if hasattr(subcls, "__name__"):
-            cls.unregister_artifacts(subcls.__name__)
+        try:
+            cls._probe_artifact(value)
+        except (ValidationError, InheritanceError, ConformanceError):
+            return False
         else:
-            raise ValidationError(f"{subcls} is not a class or type")
-        return subcls
+            return True
 
     @classmethod
     def register_module_subclasses(cls, module: Any, raise_error: bool = True) -> Any:
@@ -255,7 +262,7 @@ class TypeRegistry(MutableRegistry[Hashable, Type[Cls]], ABC, Generic[Cls]):
             # Perform immediate registration of current subclasses.
             for subcls in get_subclasses(supercls):
                 if recursive and get_subclasses(subcls):
-                    cls.register_subclasses(subcls, recursive)
+                    cls.register_subclasses(subcls, recursive, mode="immediate")
                 try:
                     cls.register_class(subcls)
                 except ValidationError as e:

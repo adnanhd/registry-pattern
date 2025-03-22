@@ -44,6 +44,32 @@ logging.basicConfig(
 # -----------------------------------------------------------------------------
 
 
+def get_func_name(func: Callable, qualname: bool = False) -> str:
+    """
+    Retrieve the qualified name of a function, resolving partial functions.
+
+    Parameters:
+        func (Callable): The function or partial function.
+        qualname (bool): Whether to return the qualified name.
+
+    Returns:
+        str: The qualified name of the underlying function.
+    """
+    if isinstance(func, (partial, partialmethod)):
+        return get_func_name(func.func, qualname)
+    elif qualname:
+        return func.__qualname__
+    else:
+        return func.__name__
+
+
+def get_type_name(type: Type, qualname: bool = False) -> str:
+    if qualname:
+        return type.__qualname__
+    else:
+        return type.__name__
+
+
 def log_debug(func: Callable) -> Callable:
     """
     Decorator to log function calls in debug mode.
@@ -57,8 +83,11 @@ def log_debug(func: Callable) -> Callable:
     Returns:
         Callable: The decorated function.
     """
-    if os.getenv("VALIDATOR_QUIET", "FALSE").upper() == "TRUE":
+    if os.getenv("REGISTRY_VALIDATOR_DEBUG", "FALSE").upper() != "TRUE":
         return func
+
+    func_name = get_func_name(func)
+    logger = logging.getLogger(func_name)
 
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -67,26 +96,10 @@ def log_debug(func: Callable) -> Callable:
             arg_str = ", ".join(repr(a) for a in args)
             kwarg_str = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
             all_args = ", ".join(filter(None, [arg_str, kwarg_str]))
-            logger.debug(f"{func.__name__}({all_args})")
+            logger.debug(f"{func_name}({all_args})")
         return func(*args, **kwargs)
 
     return wrapper
-
-
-def get_func_name(func: Callable) -> str:
-    """
-    Retrieve the qualified name of a function, resolving partial functions.
-
-    Parameters:
-        func (Callable): The function or partial function.
-
-    Returns:
-        str: The qualified name of the underlying function.
-    """
-    if isinstance(func, (partial, partialmethod)):
-        return get_func_name(func.func)
-    else:
-        return func.__qualname__
 
 
 # -----------------------------------------------------------------------------
@@ -97,25 +110,17 @@ def get_func_name(func: Callable) -> str:
 class ValidationError(Exception):
     """Base exception for validation errors."""
 
-    pass
-
 
 class CoercionError(ValueError, ValidationError):
     """Exception raised when coercion of a value fails."""
-
-    pass
 
 
 class ConformanceError(TypeError, ValidationError):
     """Exception raised when a function or class does not conform to expected type signatures."""
 
-    pass
-
 
 class InheritanceError(TypeError, ValidationError):
     """Exception raised when a class does not inherit from an expected abstract base class."""
-
-    pass
 
 
 # -----------------------------------------------------------------------------
@@ -286,7 +291,8 @@ def validate_function_signature(
         raise ConformanceError(
             f"Function '{get_func_name(func)}' does not match "
             f"argument count of protocol.\n"
-            f"Expected: {len(protocol_params)} arguments, Found: {len(cls_params)}"
+            f"Expected: {len(protocol_params)} arguments, "
+            f"Found: {len(cls_params)}"
         )
 
     # Validate each parameter's type annotation.
@@ -295,14 +301,15 @@ def validate_function_signature(
             raise ConformanceError(
                 f"Parameter '{protocol_param.name}' in function '{get_func_name(func)}' "
                 f"does not match type annotation.\n"
-                f"Expected: {protocol_param.annotation}, Found: {cls_param.annotation}"
+                f"Expected: {get_type_name(protocol_param.annotation)}, "
+                f"Found: {get_type_name(cls_param.annotation)}"
             )
 
     # Validate the return type annotation.
     if expected_signature.return_annotation != func_signature.return_annotation:
         raise ConformanceError(
             f"Return type of method '{get_func_name(func)}' does not match.\n"
-            f"Expected: {expected_signature.return_annotation}, Found: {func_signature.return_annotation}"
+            f"Expected: {get_type_name(expected_signature.return_annotation)}, Found: {get_type_name(func_signature.return_annotation)}"
         )
 
     return func
@@ -312,7 +319,7 @@ def validate_function_signature(
 def validate_function_parameters(
     func: Callable[P, R],
     /,
-    expected_type: TypeAlias, # Type[Callable[P, R]],
+    expected_type: TypeAlias,  # Type[Callable[P, R]],
     coerce_to_type: bool = False,
 ) -> Callable[P, R]:
     """
@@ -342,7 +349,8 @@ def validate_function_parameters(
     # Check that the number of parameters is correct.
     if len(func_signature.parameters) != len(expected_args):
         raise ConformanceError(
-            f"Function {func.__name__} has {len(func_signature.parameters)} parameters, "
+            f"Function {func.__name__} "
+            f"has {len(func_signature.parameters)} parameters, "
             f"expected {len(expected_args)}."
         )
 
@@ -352,15 +360,18 @@ def validate_function_parameters(
     ):
         if param.annotation != expected_arg_type:
             raise ConformanceError(
-                f"Parameter {param.name} of function {func.__name__} has type {param.annotation}, "
-                f"expected {expected_arg_type}."
+                f"Parameter {param.name} "
+                f"of function {func.__name__} "
+                f"has type {get_type_name(param.annotation)}, "
+                f"expected {get_type_name(expected_arg_type)}."
             )
 
     # Validate the return type.
     if func_signature.return_annotation != expected_return:
         raise ConformanceError(
-            f"Function {func.__name__} has return type {func_signature.return_annotation}, "
-            f"expected {expected_return}."
+            f"Function {func.__name__} "
+            f"has return type {get_type_name(func_signature.return_annotation)}, "
+            f"expected {get_type_name(expected_return)}."
         )
 
     return func
@@ -391,7 +402,9 @@ def validate_instance_hierarchy(instance: Obj, /, expected_type: Type) -> Obj:
     if not inspect.isclass(instance.__class__):
         raise ValidationError(f"{instance} is not a class instance")
     if not isinstance(instance, expected_type):
-        raise ValidationError(f"{instance} not instance-of {expected_type}")
+        raise InheritanceError(
+            f"{instance} not instance-of {get_type_name(expected_type)}"
+        )
     return instance
 
 
@@ -434,7 +447,7 @@ def validate_instance_structure(
         # Check that the attribute is present on the instance.
         if not hasattr(obj, attr_name):
             raise ConformanceError(
-                f"Instance of {obj.__class__.__name__} does not implement attribute '{attr_name}'"
+                f"Instance of {get_type_name(obj.__class__)} does not implement attribute '{attr_name}'"
             )
 
         expected_attr = getattr(expected_type, attr_name)
@@ -443,11 +456,11 @@ def validate_instance_structure(
         # If both expected and object attributes are callable, validate their signatures.
         if callable(expected_attr) and not callable(obj_attr):
             raise ConformanceError(
-                f"Attribute '{attr_name}' in {obj.__class__.__name__} is not callable"
+                f"Attribute '{attr_name}' in {get_type_name(obj.__class__)} is not callable"
             )
         elif not callable(expected_attr) and callable(obj_attr):
             raise ConformanceError(
-                f"Attribute '{attr_name}' in {obj.__class__.__name__} is not a method"
+                f"Attribute '{attr_name}' in {get_type_name(obj.__class__)} is not a method"
             )
         else:
             # if obj_attr is a method, unwrap it to get the underlying function.

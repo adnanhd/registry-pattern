@@ -8,13 +8,13 @@ Doxygen Dot Graph of Inheritance:
 -----------------------------------
 \dot
 digraph FunctionalRegistry {
-    "MutableRegistry" -> "FunctionalRegistry";
+    "MutableRegistryValidatorMixin" -> "FunctionalRegistry";
 }
 \enddot
 """
 
 import sys
-from functools import partial
+from abc import ABC
 from typing_compat import (
     Any,
     Callable,
@@ -23,19 +23,18 @@ from typing_compat import (
     Tuple,
     Type,
     TypeVar,
-    Iterable,
     get_args,
     ParamSpec,
 )
 from warnings import warn
 
-from ..utils import (
-    # base
-    MutableRegistry,
+from ..mixin import MutableRegistryValidatorMixin
+
+from ._dev_utils import (
     # _dev_utils
-    _def_checking,
-    compose,
     get_module_members,
+)
+from ._validator import (
     # _validator
     ConformanceError,
     ValidationError,
@@ -49,9 +48,9 @@ P = ParamSpec("P")
 
 
 # pylint: disable=abstract-method
-class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
+class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]], ABC):
     """
-    Metaclass for registering functions.
+    Class for registering functions.
 
     This registry performs runtime validations for functions, ensuring that they
     conform to expected signatures and behaviors. It provides utility methods for
@@ -59,15 +58,19 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
     found in a module.
 
     Attributes:
-        runtime_conformance_checking (Callable[[Callable[P, R]], Callable[P, R]]):
-            Function used to validate the conformance of registered functions.
+        _repository (dict): Dictionary for storing registered functions.
+        _strict (bool): Whether to enforce signature conformance.
     """
 
-    runtime_conformance_checking: Callable[[Callable[P, R]], Callable[P, R]] = (
-        _def_checking
-    )
+    _repository: dict
+    _strict: bool = False
     __orig_bases__: ClassVar[Tuple[Type, ...]]
     __slots__ = ()
+
+    @classmethod
+    def _get_mapping(cls):
+        """Return the repository dictionary."""
+        return cls._repository
 
     @classmethod
     def __class_getitem__(cls, params: Any) -> Any:
@@ -94,13 +97,11 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         """
         Initialize a subclass of FunctionalRegistry.
 
-        This method sets up the function repository and configures runtime
-        conformance checking based on the provided flags. The 'coercion' flag is
-        currently not supported.
+        This method sets up the function repository and configures validation
+        based on the provided flags.
 
         Parameters:
-            strict (bool): If True, enforce strict signature validation using
-                           validate_function_parameters.
+            strict (bool): If True, enforce strict signature validation.
             coercion (bool): If True, attempt to enable coercion (currently not supported).
             **kwargs: Additional keyword arguments passed to the superclass initializer.
         """
@@ -109,23 +110,11 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
             warn("Coercion not yet supported! Thus, it has no effect :(")
         # Initialize the registry repository as an empty dictionary.
         cls._repository = dict()
-
-        # Retrieve the function type parameters from the original bases.
-        param, ret = get_args(cls.__orig_bases__[0])
-        if sys.version_info < (3, 10):
-            param = list(get_args(param))
-
-        # Construct a Callable type for validation.
-        callable_type: Type[Callable[P, R]] = Callable[param, ret]  # type: ignore
-
-        # If strict mode is enabled, set the runtime conformance checking function.
-        if strict:
-            cls.runtime_conformance_checking = partial(
-                validate_function_parameters, expected_type=callable_type
-            )
+        # Store validation flags
+        cls._strict = strict
 
     @classmethod
-    def validate_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
+    def _probe_artifact(cls, value: Any) -> Callable[P, R]:
         """
         Validate a function before registration.
 
@@ -133,18 +122,44 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         conforms to the expected signature (if strict mode is enabled).
 
         Parameters:
-            value (Callable[P, R]): The function to validate.
+            value (Any): The function to validate.
 
         Returns:
             Callable[P, R]: The validated function.
 
         Raises:
-            ValidationError: If the function fails validation.
+            ValidationError: If value is not a function.
+            ConformanceError: If value does not match the expected signature.
         """
-        # Check that 'value' is a valid function.
-        validate_function(value)
-        # Run the conformance checking (which may be a no-op if not in strict mode).
-        return cls.runtime_conformance_checking(value)
+        # Check that 'value' is a valid function
+        value = validate_function(value)
+
+        # Apply signature validation if strict mode is enabled
+        if cls._strict:
+            param, ret = get_args(cls.__orig_bases__[0])
+            if sys.version_info < (3, 10):
+                param = list(get_args(param))
+            callable_type = Callable[param, ret]  # type: ignore
+            value = validate_function_parameters(value, expected_type=callable_type)
+
+        return value
+
+    @classmethod
+    def _seal_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
+        """
+        Validate a function when retrieving from the registry.
+
+        This method is a no-op by default, as validation is primarily
+        done during registration. Override this method to add validation
+        during retrieval if needed.
+
+        Parameters:
+            value (Callable[P, R]): The function to validate.
+
+        Returns:
+            Callable[P, R]: The validated function.
+        """
+        return value
 
     @classmethod
     def __subclasscheck__(cls, value: Any) -> bool:
@@ -152,7 +167,7 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         Perform a runtime subclass check for functions.
 
         This custom subclass check ensures that a function not only is callable
-        but also passes the conformance validation.
+        but also passes the validation.
 
         Parameters:
             value (Any): The function to check.
@@ -161,20 +176,24 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
             bool: True if the function passes validation; False otherwise.
         """
         try:
-            validate_function(value)
-        except ValidationError:
-            print("no validation")
+            # Use _probe_artifact for validation during subclass check
+            cls._probe_artifact(value)
+            return True
+        except (ValidationError, ConformanceError):
             return False
 
-        try:
-            cls.runtime_conformance_checking(value)
-        except ConformanceError:
-            print("no conformation")
-            return False
+    @classmethod
+    def validate_function(cls, func: Callable[P, R]) -> Callable[P, R]:
+        """
+        Validate a function.
 
-        return True
-        # Note: The following line is unreachable and has been removed:
-        # cls._validate_artifact = compose(*validators)
+        Parameters:
+            func (Callable[P, R]): The function to validate.
+
+        Returns:
+            Callable[P, R]: The validated function.
+        """
+        return cls._seal_artifact(cls._probe_artifact(func))
 
     @classmethod
     def register_function(cls, func: Callable[P, R]) -> Callable[P, R]:
@@ -193,20 +212,16 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         return func
 
     @classmethod
-    def unregister_function(cls, func: Callable[P, R]) -> Callable[P, R]:
+    def unregister_function(cls, key: Hashable) -> None:
         """
         Unregister a function from the registry.
 
         The function is removed from the registry using its __name__ attribute.
 
         Parameters:
-            func (Callable[P, R]): The function to unregister.
-
-        Returns:
-            Callable[P, R]: The unregistered function.
+            key (Hashable): The key of the function to unregister.
         """
-        cls.unregister_artifacts(func.__name__)
-        return func
+        cls.unregister_artifact(key)
 
     @classmethod
     def register_module_functions(cls, module: Any, raise_error: bool = True) -> Any:
@@ -224,8 +239,16 @@ class FunctionalRegistry(MutableRegistry[Hashable, Callable[P, R]]):
         Returns:
             Any: The module after processing its members.
         """
-        # Retrieve all module members and filter for callables.
-        members: Iterable[Callable] = filter(callable, get_module_members(module))
+        # Retrieve all module members
+        members = get_module_members(module)
+        # Try to register each member as a function
         for obj in members:
-            cls.register_function(obj)
+            try:
+                validate_function(obj)  # Pre-filter for functions
+                cls.register_function(obj)
+            except ValidationError as e:
+                if raise_error:
+                    raise ValidationError(e)
+                else:
+                    print(e)
         return module

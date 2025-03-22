@@ -69,7 +69,7 @@ class WrapperMeta(type):
 
     def __new__(
         mcs, name: str, bases: Tuple[Type, ...], attrs: dict
-    ) -> "WrapperMeta": # Type[Wrapped]
+    ) -> "WrapperMeta":  # Type[Wrapped]
         # Create the new class using the standard type.__new__.
         cls: WrapperMeta = super().__new__(mcs, name, bases, attrs)
 

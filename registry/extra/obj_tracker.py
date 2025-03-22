@@ -38,7 +38,7 @@ T = TypeVar("T")
 
 # For Python 3.9+, WeakSet is subscriptable. Otherwise, we fall back to the unsubscriptable version.
 if TYPE_CHECKING or sys.version_info >= (3, 9):
-    from weakref import WeakSet
+    pass
 
     WeakSetT = weakref.WeakSet[T]  # Type alias for a subscriptable WeakSet.
 else:

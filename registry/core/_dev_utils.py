@@ -1,6 +1,5 @@
 """Utilities for development."""
 
-import sys
 from functools import partial
 from functools import reduce
 from functools import wraps
@@ -13,7 +12,6 @@ from typing_compat import (
     Callable,
     Generic,
     List,
-    Type,
     TypeVar,
     ParamSpec,
     get_args,
@@ -33,7 +31,19 @@ def get_protocol(cls: type):
     """Get the protocol from the class."""
     assert isclass(cls), f"{cls} is not a class"
     assert Generic in cls.mro(), f"{cls} is not a generic class"
-    return runtime_checkable(get_args(cls.__orig_bases__[0])[0])  # type: ignore
+
+    type_arg = get_args(cls.__orig_bases__[0])[0]
+
+    # If it's already a runtime_checkable Protocol, just return it
+    if hasattr(type_arg, "_is_runtime_protocol") and type_arg._is_runtime_protocol:
+        return type_arg
+
+    # If it's a Protocol but not runtime_checkable, make it so
+    if hasattr(type_arg, "_is_protocol") and type_arg._is_protocol:
+        return runtime_checkable(type_arg)
+
+    # Otherwise, it's just a regular type, so return it as is
+    return type_arg
 
 
 P = ParamSpec("P")

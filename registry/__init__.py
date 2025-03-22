@@ -1,31 +1,24 @@
 # from . import utils, core, extra
 
-from .utils import (
-    RegistryError,
-    RegistryLookupError,
-    Registry,
-    MutableRegistry,
+from .core import (
+    ValidationError,
     CoercionError,
     ConformanceError,
     InheritanceError,
-    ValidationError,
 )
+from .mixin import RegistryError
 
 # Alias TypeRegistry to ClassRegistry and ObjectRegistry to InstanceRegistry
-from .core import TypeRegistry, FunctionalRegistry, ObjectRegistry
-from .extra import ObjectConfigMap, ClassTracker, Wrapped
+from .core import TypeRegistry, FunctionalRegistry, ObjectRegistry, ConfigRegistry
 
-# Alias the factory functions to the names expected in __all__
-from .utils.api import type_registry_factory, type_registry_decorator
-from ._version import __version__
+from .extra import ClassTracker, Wrapped
 
 __all__ = [
     "RegistryError",
     "TypeRegistry",
     "ObjectRegistry",
     "FunctionalRegistry",
-    "type_registry_factory",
-    "type_registry_decorator",
+    "ConfigRegistry",
     "CoercionError",
     "ConformanceError",
     "InheritanceError",
