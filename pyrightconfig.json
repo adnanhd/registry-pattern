@@ -1,7 +1,7 @@
-{
+j{
   "include": ["registry", "tests"],
   "exclude": ["**/node_modules", "**/__pycache__"],
-  "pythonVersion": "3.9",
-  "reportMissingTypeStubs": true
+  "pythonVersion": "3.8",
+  "reportMissingTypeStubs": false
 }
 
