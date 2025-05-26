@@ -26,14 +26,7 @@ digraph RegistryPattern {
 
 from __future__ import annotations
 
-from typing_compat import (
-    Dict,
-    Hashable,
-    Mapping,
-    MutableMapping,
-    TypeVar,
-    Union,
-)
+from typing_compat import Dict, Hashable, Mapping, MutableMapping, TypeVar, Union
 
 from .accessor import RegistryAccessorMixin, RegistryError
 

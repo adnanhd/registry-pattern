@@ -17,7 +17,8 @@ digraph ClassTracker {
 import sys
 import weakref
 from abc import ABCMeta
-from typing_compat import TypeVar, TYPE_CHECKING, Generic, Protocol
+
+from typing_compat import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 # -----------------------------------------------------------------------------
 # Protocol Definitions

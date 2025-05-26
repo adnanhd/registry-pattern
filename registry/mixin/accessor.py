@@ -30,12 +30,11 @@ from typing_compat import (
     Dict,
     Generic,
     Hashable,
-    MutableMapping,
     Iterator,
+    MutableMapping,
     TypeVar,
     Union,
 )
-
 
 __all__ = [
     "RegistryError",
