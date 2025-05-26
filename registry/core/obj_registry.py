@@ -17,21 +17,19 @@ digraph ObjectRegistry {
 \enddot
 """
 
+import logging
 import weakref
 from abc import ABC
+
 from typing_compat import Any, Dict, Generic, Hashable, Type, TypeVar
 
 from registry.mixin.accessor import RegistryError
 
 from ..mixin import MutableRegistryValidatorMixin
-from ._dev_utils import (
-    # _dev_utils
-    get_protocol,
-)
+from ._dev_utils import get_protocol  # _dev_utils
+from ._validator import InheritanceError  # _validator
 from ._validator import (
-    # _validator
     ConformanceError,
-    InheritanceError,
     ValidationError,
     validate_instance_hierarchy,
     validate_instance_structure,
@@ -39,6 +37,7 @@ from ._validator import (
 
 # Type variable representing the object type to be registered.
 ObjT = TypeVar("ObjT")
+logger = logging.getLogger(__name__)
 
 
 class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic[ObjT]):
@@ -245,7 +244,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                     # Register the new instance with itself as the key
                     obj = cls.register_instance(obj, obj)
                 except Exception as e:
-                    print(f"Registration error: {e}")
+                    logger.debug(f"Registration error: {e}")
                 return obj
 
         # Copy meta attributes from the original metaclass.

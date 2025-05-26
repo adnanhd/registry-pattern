@@ -18,17 +18,14 @@ digraph ConfigRegistry {
 
 import weakref
 from abc import ABC
-from typing_compat import Any, Dict, Generic, Hashable, Type, TypeVar, Optional
+
+from typing_compat import Any, Dict, Generic, Hashable, Optional, Type, TypeVar
 
 from ..mixin import MutableRegistryValidatorMixin, RegistryError
-from ._dev_utils import (
-    # _dev_utils
-    get_protocol,
-)
+from ._dev_utils import get_protocol  # _dev_utils
+from ._validator import InheritanceError  # _validator
 from ._validator import (
-    # _validator
     ConformanceError,
-    InheritanceError,
     ValidationError,
     validate_instance_hierarchy,
     validate_instance_structure,

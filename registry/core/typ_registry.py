@@ -15,20 +15,16 @@ digraph TypeRegistry {
 \enddot
 """
 
+import logging
 from abc import ABC
-from typing_compat import Any, Generic, Hashable, Type, TypeVar, Literal
+
+from typing_compat import Any, Generic, Hashable, Literal, Type, TypeVar
 
 from ..mixin import MutableRegistryValidatorMixin
-from ._dev_utils import (
-    # _dev_utils
-    get_module_members,
-    get_protocol,
-    get_subclasses,
-)
+from ._dev_utils import get_module_members, get_protocol, get_subclasses  # _dev_utils
+from ._validator import InheritanceError  # _validator
 from ._validator import (
-    # _validator
     ConformanceError,
-    InheritanceError,
     ValidationError,
     validate_class,
     validate_class_hierarchy,
@@ -37,6 +33,7 @@ from ._validator import (
 
 # Type variable for classes to be registered.
 Cls = TypeVar("Cls")
+logger = logging.getLogger(__name__)
 
 
 class TypeRegistry(
@@ -225,12 +222,12 @@ class TypeRegistry(
             try:
                 cls.register_class(obj)
             except AssertionError:
-                print(f"Could not register {obj}")
+                logger.debug(f"Could not register {obj}")
             except ValidationError as e:
                 if raise_error:
                     raise ValidationError(e)
                 else:
-                    print(e)
+                    logger.debug(e)
         return module
 
     @classmethod
@@ -269,7 +266,7 @@ class TypeRegistry(
                     if raise_error:
                         raise ValidationError(e)
                     else:
-                        print(e)
+                        logger.debug(e)
 
         if mode in {"deferred", "both"}:
             # Define a dynamic metaclass for deferred registration.
@@ -282,7 +279,7 @@ class TypeRegistry(
                     try:
                         new_class = register_class_func(new_class)
                     except Exception as e:
-                        print(e)
+                        logger.debug(e)
                     return new_class
 
             # Copy meta attributes from the original metaclass.

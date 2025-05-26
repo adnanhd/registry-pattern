@@ -1,10 +1,7 @@
 """Utilities for development."""
 
-from functools import partial
-from functools import reduce
-from functools import wraps
-from inspect import getmembers
-from inspect import ismodule, isclass
+from functools import partial, reduce, wraps
+from inspect import getmembers, isclass, ismodule
 from types import ModuleType
 
 from typing_compat import (
@@ -12,13 +9,13 @@ from typing_compat import (
     Callable,
     Generic,
     List,
-    TypeVar,
     ParamSpec,
+    TypeVar,
     get_args,
     runtime_checkable,
 )
 
-from ._validator import validate_class, validate_function, ValidationError
+from ._validator import ValidationError, validate_class, validate_function
 
 T = TypeVar("T")
 

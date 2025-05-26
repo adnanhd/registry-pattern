@@ -13,31 +13,28 @@ digraph FunctionalRegistry {
 \enddot
 """
 
+import logging
 import sys
 from abc import ABC
+from warnings import warn
+
 from typing_compat import (
     Any,
     Callable,
     ClassVar,
     Hashable,
+    ParamSpec,
     Tuple,
     Type,
     TypeVar,
     get_args,
-    ParamSpec,
 )
-from warnings import warn
 
 from ..mixin import MutableRegistryValidatorMixin
-
-from ._dev_utils import (
-    # _dev_utils
-    get_module_members,
-)
+from ._dev_utils import get_module_members  # _dev_utils
+from ._validator import ValidationError  # _validator
 from ._validator import (
-    # _validator
     ConformanceError,
-    ValidationError,
     validate_function,
     validate_function_parameters,
 )
@@ -45,6 +42,7 @@ from ._validator import (
 # Type variables for function return type and parameters.
 R = TypeVar("R")
 P = ParamSpec("P")
+logger = logging.getLogger(__name__)
 
 
 # pylint: disable=abstract-method
@@ -250,5 +248,5 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
                 if raise_error:
                     raise ValidationError(e)
                 else:
-                    print(e)
+                    logger.debug(e)
         return module

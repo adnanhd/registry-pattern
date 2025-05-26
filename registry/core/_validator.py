@@ -18,14 +18,13 @@ digraph ExceptionHierarchy {
 \enddot
 """
 
-import os
 import inspect
 import logging
+import os
 from abc import ABC
-from typing_compat import Any, Callable, Type, TypeVar, ParamSpec, get_args, TypeAlias
+from functools import partial, partialmethod, wraps
 
-
-from functools import wraps, partial, partialmethod
+from typing_compat import Any, Callable, ParamSpec, Type, TypeAlias, TypeVar, get_args
 
 # -----------------------------------------------------------------------------
 # Logging Configuration
