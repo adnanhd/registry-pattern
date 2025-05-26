@@ -2,6 +2,8 @@ j{
   "include": ["registry", "tests"],
   "exclude": ["**/node_modules", "**/__pycache__"],
   "pythonVersion": "3.8",
-  "reportMissingTypeStubs": false
+  "reportMissingTypeStubs": false,
+  "venv": "registry",
+  "venvPath": "/home/ceng796/miniconda3/envs/"
 }
 
