@@ -35,7 +35,7 @@ class BaseObjectRegistryTest:
         """Return a registry class for testing. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement this fixture")
 
-    def test_register_instance(self, registry_class):
+    def test_register_artifact(self, registry_class):
         """Test that an instance can be registered and retrieved."""
 
         class DummyObject:
@@ -44,12 +44,12 @@ class BaseObjectRegistryTest:
         obj = DummyObject()
         obj_id = hex(id(obj))
 
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
         assert registry_class.has_identifier(obj_id)
         assert registry_class.has_artifact(obj)
         assert registry_class.get_artifact(obj_id) is obj
 
-    def test_unregister_instance(self, registry_class):
+    def test_unregister_artifact(self, registry_class):
         """Test that an instance can be unregistered."""
 
         class DummyObject:
@@ -58,10 +58,10 @@ class BaseObjectRegistryTest:
         obj = DummyObject()
         obj_id = hex(id(obj))
 
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
         assert registry_class.has_artifact(obj)
 
-        registry_class.unregister_instance(obj_id)
+        registry_class.unregister_artifact(obj_id)
         assert not registry_class.has_artifact(obj)
         with pytest.raises(RegistryError):
             registry_class.get_artifact(obj_id)
@@ -75,9 +75,9 @@ class BaseObjectRegistryTest:
         obj = DummyObject()
         obj_id = hex(id(obj))
 
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
         with pytest.raises(RegistryError):
-            registry_class.register_instance(obj_id, obj)
+            registry_class.register_artifact(obj_id, obj)
 
     def test_register_class_instances(self, registry_class):
         """Test automatic registration of instances via register_class_instances."""
@@ -114,16 +114,16 @@ class TestNonStrictObjectRegistry(BaseObjectRegistryTest):
     def test_register_any_instance(self, registry_class):
         """Test that any type of instance can be registered in non-strict mode."""
         # Register an integer
-        registry_class.register_instance("int_key", 42)
+        registry_class.register_artifact("int_key", 42)
         assert registry_class.get_artifact("int_key") == 42
 
         # Register a string
-        registry_class.register_instance("str_key", "hello")
+        registry_class.register_artifact("str_key", "hello")
         assert registry_class.get_artifact("str_key") == "hello"
 
         # Register a list
         my_list = [1, 2, 3]
-        registry_class.register_instance("list_key", my_list)
+        registry_class.register_artifact("list_key", my_list)
         assert registry_class.get_artifact("list_key") is my_list
 
 
@@ -152,7 +152,7 @@ class TestStrictObjectRegistry:
         obj = ValidExecutable()
         obj_id = hex(id(obj))
 
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
         assert registry_class.has_artifact(obj)
         assert registry_class.get_artifact(obj_id) is obj
 
@@ -167,7 +167,7 @@ class TestStrictObjectRegistry:
         obj_id = hex(id(obj))
 
         with pytest.raises(ConformanceError):
-            registry_class.register_instance(obj_id, obj)
+            registry_class.register_artifact(obj_id, obj)
 
         # Should not be registered
         assert not registry_class.has_artifact(obj)
@@ -187,13 +187,13 @@ class TestStrictObjectRegistry:
 
         # Valid instance should pass validation
         valid_obj = ValidExecutable()
-        inner_artifact = registry_class._probe_artifact(valid_obj)
-        assert registry_class._seal_artifact(inner_artifact) is valid_obj
+        inner_artifact = registry_class._intern_artifact(valid_obj)
+        assert registry_class._extern_artifact(inner_artifact) is valid_obj
 
         # Invalid instance should fail validation
         invalid_obj = InvalidObject()
         with pytest.raises(ConformanceError):
-            registry_class._probe_artifact(invalid_obj)
+            registry_class._intern_artifact(invalid_obj)
 
 
 # -------------------------------------------------------------------
@@ -222,7 +222,7 @@ class TestAbstractObjectRegistry:
         obj = InheritingClass()
         obj_id = hex(id(obj))
 
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
         assert registry_class.has_artifact(obj)
         assert registry_class.get_artifact(obj_id) is obj
 
@@ -236,7 +236,7 @@ class TestAbstractObjectRegistry:
         obj_id = hex(id(obj))
 
         with pytest.raises(InheritanceError):
-            registry_class.register_instance(obj_id, obj)
+            registry_class.register_artifact(obj_id, obj)
 
         # Should not be registered
         assert not registry_class.has_artifact(obj)
@@ -268,7 +268,7 @@ class TestWeakRefBehavior:
         obj_id = hex(id(obj))
 
         # Register the object
-        registry_class.register_instance(obj_id, obj)
+        registry_class.register_artifact(obj_id, obj)
 
         # Verify it's registered
         assert registry_class.has_artifact(obj)
@@ -299,7 +299,7 @@ class TestWeakRefBehavior:
         # Create an object and register it
         obj1 = RefObject()
         obj_id = hex(id(obj1))
-        registry_class.register_instance(obj_id, obj1)
+        registry_class.register_artifact(obj_id, obj1)
 
         # Create another reference to the same object
         obj2 = obj1

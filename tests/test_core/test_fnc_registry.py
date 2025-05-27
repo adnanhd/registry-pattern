@@ -23,7 +23,7 @@ class BaseFunctionalRegistryTest:
     def test_register_valid_function(self, registry_class):
         """Test that a valid function can be registered."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def add(x: int, y: int) -> int:
             return x + y
 
@@ -33,22 +33,22 @@ class BaseFunctionalRegistryTest:
     def test_duplicate_registration(self, registry_class):
         """Test that registering the same function twice raises an error."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def duplicate(x: int, y: int) -> int:
             return x + y
 
         with pytest.raises(RegistryError):
-            registry_class.register_function(duplicate)
+            registry_class.register_artifact(duplicate)
 
-    def test_unregister_function(self, registry_class):
+    def test_unregister_artifact(self, registry_class):
         """Test that a function can be unregistered."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def temp(x: int, y: int) -> int:
             return x * y
 
         assert registry_class.has_artifact(temp)
-        registry_class.unregister_function("temp")
+        registry_class.unregister_artifact("temp")
         assert not registry_class.has_artifact(temp)
         with pytest.raises(RegistryError):
             registry_class.get_artifact("temp")
@@ -92,30 +92,30 @@ class TestNonStrictFunctionalRegistry(BaseFunctionalRegistryTest):
         """Create a non-strict registry for functions with signature Callable[[int, int], int]."""
         return new_class("FuncRegistry", (FunctionalRegistry[[int, int], int],))
 
-    def test_register_function_missing_argument(self, registry_class):
+    def test_register_artifact_missing_argument(self, registry_class):
         """Test that a function with a missing argument can be registered in non-strict mode."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def add_one(x: int) -> int:
             return x + 1
 
         assert registry_class.has_artifact(add_one)
         assert registry_class.get_artifact("add_one") is add_one
 
-    def test_register_function_extra_argument(self, registry_class):
+    def test_register_artifact_extra_argument(self, registry_class):
         """Test that a function with an extra argument can be registered in non-strict mode."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def add_three(x: int, y: int, z: int) -> int:
             return x + y + z
 
         assert registry_class.has_artifact(add_three)
         assert registry_class.get_artifact("add_three") is add_three
 
-    def test_register_function_wrong_return_type(self, registry_class):
+    def test_register_artifact_wrong_return_type(self, registry_class):
         """Test that a function with a wrong return type can be registered in non-strict mode."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def add_str(x: int, y: int) -> str:
             return f"{x + y}"
 
@@ -143,18 +143,18 @@ class TestStrictFunctionalRegistry:
     def test_register_valid_function(self, registry_class):
         """Test that a valid function can be registered in strict mode."""
 
-        @registry_class.register_function
+        @registry_class.register_artifact
         def add(x: int, y: int) -> int:
             return x + y
 
         assert registry_class.has_artifact(add)
         assert registry_class.get_artifact("add") is add
 
-    def test_register_function_missing_argument(self, registry_class):
+    def test_register_artifact_missing_argument(self, registry_class):
         """Test that a function with a missing argument cannot be registered in strict mode."""
         with pytest.raises(ConformanceError):
 
-            @registry_class.register_function
+            @registry_class.register_artifact
             def add_one(x: int) -> int:
                 return x + 1
 
@@ -162,11 +162,11 @@ class TestStrictFunctionalRegistry:
         with pytest.raises(RegistryError):
             registry_class.get_artifact("add_one")
 
-    def test_register_function_extra_argument(self, registry_class):
+    def test_register_artifact_extra_argument(self, registry_class):
         """Test that a function with an extra argument cannot be registered in strict mode."""
         with pytest.raises(ConformanceError):
 
-            @registry_class.register_function
+            @registry_class.register_artifact
             def add_three(x: int, y: int, z: int) -> int:
                 return x + y + z
 
@@ -174,11 +174,11 @@ class TestStrictFunctionalRegistry:
         with pytest.raises(RegistryError):
             registry_class.get_artifact("add_three")
 
-    def test_register_function_wrong_return_type(self, registry_class):
+    def test_register_artifact_wrong_return_type(self, registry_class):
         """Test that a function with a wrong return type cannot be registered in strict mode."""
         with pytest.raises(ConformanceError):
 
-            @registry_class.register_function
+            @registry_class.register_artifact
             def add_str(x: int, y: int) -> str:
                 return f"{x + y}"
 
@@ -186,14 +186,14 @@ class TestStrictFunctionalRegistry:
         with pytest.raises(RegistryError):
             registry_class.get_artifact("add_str")
 
-    def test_validate_function(self, registry_class):
+    def test_validate_artifact(self, registry_class):
         """Test that validate_artifact correctly validates a function in strict mode."""
 
         def valid_func(x: int, y: int) -> int:
             return x + y
 
         # Validation should pass for a conforming function
-        validated = registry_class.validate_function(valid_func)
+        validated = registry_class.validate_artifact(valid_func)
         assert validated is valid_func
 
         # Validation should fail for a non-conforming function
@@ -201,7 +201,7 @@ class TestStrictFunctionalRegistry:
             return x + 1
 
         with pytest.raises(ConformanceError):
-            registry_class.validate_function(invalid_func)
+            registry_class.validate_artifact(invalid_func)
 
 
 # -------------------------------------------------------------------

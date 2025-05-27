@@ -201,20 +201,20 @@ class TestImmutableRegistryValidatorMixin:
         def _get_mapping(cls) -> Dict[str, int]:
             return cls._repository
 
-    def test_seal_identifier(self):
-        """Test that _seal_identifier validates keys."""
+    def test_extern_identifier(self):
+        """Test that _extern_identifier validates keys."""
         # String is hashable, should be accepted
         key = "test"
-        assert self.DummyImmutableValidator._seal_identifier(key) == key
+        assert self.DummyImmutableValidator._extern_identifier(key) == key
 
         # List is not hashable, should be rejected
         with pytest.raises(TypeError):
-            self.DummyImmutableValidator._seal_identifier([1, 2, 3])
+            self.DummyImmutableValidator._extern_identifier([1, 2, 3])
 
-    def test_seal_artifact(self):
-        """Test that _seal_artifact is a pass-through by default."""
+    def test_extern_artifact(self):
+        """Test that _extern_artifact is a pass-through by default."""
         value = 42
-        assert self.DummyImmutableValidator._seal_artifact(value) == value
+        assert self.DummyImmutableValidator._extern_artifact(value) == value
 
     def test_get_artifact(self):
         """Test that get_artifact retrieves and validates values."""
@@ -256,20 +256,20 @@ class TestMutableRegistryValidatorMixin:
         def _get_mapping(cls) -> Dict[str, int]:
             return cls._repository
 
-    def test_probe_identifier(self):
-        """Test that _probe_identifier validates keys."""
+    def test_intern_identifier(self):
+        """Test that _intern_identifier validates keys."""
         # String is hashable, should be accepted
         key = "test"
-        assert self.DummyMutableValidator._probe_identifier(key) == key
+        assert self.DummyMutableValidator._intern_identifier(key) == key
 
         # List is not hashable, should be rejected
         with pytest.raises(TypeError):
-            self.DummyMutableValidator._probe_identifier([1, 2, 3])
+            self.DummyMutableValidator._intern_identifier([1, 2, 3])
 
-    def test_probe_artifact(self):
-        """Test that _probe_artifact is a pass-through by default."""
+    def test_intern_artifact(self):
+        """Test that _intern_artifact is a pass-through by default."""
         value = 42
-        assert self.DummyMutableValidator._probe_artifact(value) == value
+        assert self.DummyMutableValidator._intern_artifact(value) == value
 
     def test_register_artifact(self):
         """Test that register_artifact validates and adds key-value pairs."""
@@ -334,7 +334,7 @@ class TestCustomValidators:
             return cls._repository
 
         @classmethod
-        def _probe_artifact(cls, value: Any) -> int:
+        def _intern_artifact(cls, value: Any) -> int:
             # Custom validation to ensure value is positive
             if not isinstance(value, int):
                 raise TypeError("Value must be an integer")
@@ -343,7 +343,7 @@ class TestCustomValidators:
             return value
 
         @classmethod
-        def _probe_identifier(cls, key: Any) -> str:
+        def _intern_identifier(cls, key: Any) -> str:
             # Custom validation to ensure key is a non-empty string
             if not isinstance(key, str):
                 raise TypeError("Key must be a string")
@@ -355,33 +355,33 @@ class TestCustomValidators:
         """Reset repository before each test."""
         self.CustomValidator._repository = {}
 
-    def test_custom_probe_artifact(self):
-        """Test that custom _probe_artifact validation works."""
+    def test_custom_intern_artifact(self):
+        """Test that custom _intern_artifact validation works."""
         # Positive integer should be accepted
-        assert self.CustomValidator._probe_artifact(42) == 42
+        assert self.CustomValidator._intern_artifact(42) == 42
 
         # Non-integer should be rejected
         with pytest.raises(TypeError):
-            self.CustomValidator._probe_artifact("not an int")
+            self.CustomValidator._intern_artifact("not an int")
 
         # Non-positive integer should be rejected
         with pytest.raises(ValueError):
-            self.CustomValidator._probe_artifact(0)
+            self.CustomValidator._intern_artifact(0)
         with pytest.raises(ValueError):
-            self.CustomValidator._probe_artifact(-1)
+            self.CustomValidator._intern_artifact(-1)
 
-    def test_custom_probe_identifier(self):
-        """Test that custom _probe_identifier validation works."""
+    def test_custom_intern_identifier(self):
+        """Test that custom _intern_identifier validation works."""
         # Non-empty string should be accepted
-        assert self.CustomValidator._probe_identifier("valid") == "valid"
+        assert self.CustomValidator._intern_identifier("valid") == "valid"
 
         # Non-string should be rejected
         with pytest.raises(TypeError):
-            self.CustomValidator._probe_identifier(42)
+            self.CustomValidator._intern_identifier(42)
 
         # Empty string should be rejected
         with pytest.raises(ValueError):
-            self.CustomValidator._probe_identifier("")
+            self.CustomValidator._intern_identifier("")
 
     def test_register_with_custom_validation(self):
         """Test registration with custom validation."""

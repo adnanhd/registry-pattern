@@ -29,7 +29,7 @@ class BaseTypeRegistryTest:
     def test_register_valid_class(self, registry_class):
         """Test that a valid class can be registered."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class AddCommand:
             def execute(self, x: int, y: int) -> int:
                 return x + y
@@ -40,38 +40,38 @@ class BaseTypeRegistryTest:
     def test_duplicate_registration(self, registry_class):
         """Test that registering the same class twice raises an error."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class DuplicateCommand:
             def execute(self, x: int, y: int) -> int:
                 return x + y
 
         with pytest.raises(RegistryError):
-            registry_class.register_class(DuplicateCommand)
+            registry_class.register_artifact(DuplicateCommand)
 
-    def test_unregister_class(self, registry_class):
+    def test_unregister_artifact(self, registry_class):
         """Test that a class can be unregistered."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class TempCommand:
             def execute(self, x: int, y: int) -> int:
                 return x * y
 
         assert registry_class.has_artifact(TempCommand)
-        registry_class.unregister_class(TempCommand)
+        registry_class.unregister_artifact(TempCommand)
         assert not registry_class.has_artifact(TempCommand)
         with pytest.raises(RegistryError):
             registry_class.get_artifact("TempCommand")
 
-    def test_unregister_class_by_name(self, registry_class):
+    def test_unregister_artifact_by_name(self, registry_class):
         """Test that a class can be unregistered by name."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class TempCommand:
             def execute(self, x: int, y: int) -> int:
                 return x * y
 
         assert registry_class.has_artifact(TempCommand)
-        registry_class.unregister_class("TempCommand")
+        registry_class.unregister_artifact("TempCommand")
         assert not registry_class.has_artifact(TempCommand)
         with pytest.raises(RegistryError):
             registry_class.get_artifact("TempCommand")
@@ -79,7 +79,7 @@ class BaseTypeRegistryTest:
     def test_register_subclasses(self, registry_class):
         """Test registering all subclasses of a class."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class ParentCommand:
             def execute(self, x: int, y: int) -> int:
                 return x + y
@@ -110,7 +110,7 @@ class TestNonStrictTypeRegistry(BaseTypeRegistryTest):
     def test_register_non_conforming_class(self, registry_class):
         """Test that a non-conforming class can be registered in non-strict mode."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class NonConformingCommand:
             def different_method(self, a: str, b: str) -> str:
                 return a + b
@@ -120,10 +120,10 @@ class TestNonStrictTypeRegistry(BaseTypeRegistryTest):
             registry_class.get_artifact("NonConformingCommand") is NonConformingCommand
         )
 
-    def test_register_class_wrong_signature(self, registry_class):
+    def test_register_artifact_wrong_signature(self, registry_class):
         """Test that a class with wrong method signatures can still be registered in non-strict mode."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class WrongSignatureCommand:
             def execute(self, x: str, y: str) -> str:
                 return x + y
@@ -153,7 +153,7 @@ class TestStrictTypeRegistry:
     def test_register_valid_class(self, registry_class):
         """Test that a valid class can be registered in strict mode."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class ValidCommand:
             def execute(self, x: int, y: int) -> int:
                 return x * y
@@ -165,7 +165,7 @@ class TestStrictTypeRegistry:
         """Test that a non-conforming class cannot be registered in strict mode."""
         with pytest.raises(ConformanceError):
 
-            @registry_class.register_class
+            @registry_class.register_artifact
             class NonConformingCommand:
                 def different_method(self, a: str, b: str) -> str:
                     return a + b
@@ -173,11 +173,11 @@ class TestStrictTypeRegistry:
         with pytest.raises(RegistryError):
             registry_class.get_artifact("NonConformingCommand")
 
-    def test_register_class_wrong_signature(self, registry_class):
+    def test_register_artifact_wrong_signature(self, registry_class):
         """Test that a class with wrong method signatures cannot be registered in strict mode."""
         with pytest.raises(ConformanceError):
 
-            @registry_class.register_class
+            @registry_class.register_artifact
             class WrongSignatureCommand:
                 def execute(self, x: str, y: str) -> str:
                     return x + y
@@ -185,15 +185,15 @@ class TestStrictTypeRegistry:
         with pytest.raises(RegistryError):
             registry_class.get_artifact("WrongSignatureCommand")
 
-    def test_validate_class(self, registry_class):
-        """Test that validate_class correctly validates a class in strict mode."""
+    def test_validate_artifact(self, registry_class):
+        """Test that validate_artifact correctly validates a class in strict mode."""
 
         class ValidClass:
             def execute(self, x: int, y: int) -> int:
                 return x - y
 
         # Validation should pass for a conforming class.
-        validated = registry_class.validate_class(ValidClass)
+        validated = registry_class.validate_artifact(ValidClass)
         assert validated is ValidClass
 
         # Validation should fail for a non-conforming class.
@@ -202,7 +202,7 @@ class TestStrictTypeRegistry:
                 return f"Data {data}"
 
         with pytest.raises(ConformanceError):
-            registry_class.validate_class(InvalidClass)
+            registry_class.validate_artifact(InvalidClass)
 
 
 # -------------------------------------------------------------------
@@ -239,7 +239,7 @@ class TestAbstractTypeRegistry:
             def execute(self, x: int, y: int) -> int:
                 return x * y
 
-        registry_class.register_class(InheritingCommand)
+        registry_class.register_artifact(InheritingCommand)
         assert registry_class.has_artifact(InheritingCommand)
         assert registry_class.get_artifact("InheritingCommand") is InheritingCommand
 
@@ -251,7 +251,7 @@ class TestAbstractTypeRegistry:
                 return x - y
 
         with pytest.raises(InheritanceError):
-            registry_class.register_class(NonInheritingCommand)
+            registry_class.register_artifact(NonInheritingCommand)
 
         assert not registry_class.has_artifact(NonInheritingCommand)
         with pytest.raises(RegistryError):
@@ -274,7 +274,7 @@ class TestTypeRegistryAdvanced:
     def test_recursive_register_subclasses(self, registry_class):
         """Test recursive registration of subclasses."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class GrandparentCommand:
             def execute(self, x: int, y: int) -> int:
                 return x + y
@@ -296,7 +296,7 @@ class TestTypeRegistryAdvanced:
     def test_register_with_different_modes(self, registry_class):
         """Test registration with different modes."""
 
-        @registry_class.register_class
+        @registry_class.register_artifact
         class BaseCommand:
             def execute(self, x: int, y: int) -> int:
                 return x + y

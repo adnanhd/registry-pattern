@@ -43,30 +43,81 @@ logging.basicConfig(
 # -----------------------------------------------------------------------------
 
 
+from functools import partial, partialmethod
+from types import FunctionType, MethodType
+from typing import Callable, Type, Union
+
+
 def get_func_name(func: Callable, qualname: bool = False) -> str:
     """
-    Retrieve the qualified name of a function, resolving partial functions.
+    Retrieve the (qualified) name of a function, resolving partials and wrappers.
 
     Parameters:
-        func (Callable): The function or partial function.
-        qualname (bool): Whether to return the qualified name.
+        func (Callable): The function, partial function, method, or wrapped callable.
+        qualname (bool): If True, return the qualified name (e.g., including class/module).
 
     Returns:
-        str: The qualified name of the underlying function.
+        str: The resolved function name.
+
+    Raises:
+        TypeError: If the input is not a recognizable callable.
     """
-    if isinstance(func, (partial, partialmethod)):
-        return get_func_name(func.func, qualname)
-    elif qualname:
-        return func.__qualname__
-    else:
-        return func.__name__
+    # Resolve functools.partial or partialmethod
+    while isinstance(func, (partial, partialmethod)):
+        func = func.func
+
+    # Resolve wrapped functions (e.g., from decorators)
+    while hasattr(func, '__wrapped__'):
+        func = getattr(func, "__wrapped__")
+
+    # Handle bound or unbound methods
+    if isinstance(func, (FunctionType, MethodType)):
+        return func.__qualname__ if qualname else func.__name__
+
+    # Callable object (e.g., class with __call__)
+    if hasattr(func, '__call__'):
+        func = getattr(func, '__call__')
+        return get_func_name(func, qualname)
+
+    raise TypeError(f"Cannot resolve name from non-callable object: {func!r}")
 
 
-def get_type_name(type: Type, qualname: bool = False) -> str:
+def get_type_name(cls: Type, qualname: bool = False) -> str:
+    """
+    Retrieve the name or qualified name of a type.
+
+    Parameters:
+        cls (Type): The class or type object.
+        qualname (bool): If True, return the qualified name.
+
+    Returns:
+        str: The type's name.
+
+    Raises:
+        TypeError: If the type cannot be resolved.
+    """
     if qualname:
-        return type.__qualname__
-    else:
-        return type.__name__
+        if hasattr(cls, "__qualname__"):
+            return getattr(cls, "__qualname__")
+    elif hasattr(cls, "__name__"):
+        return getattr(cls, "__name__")
+
+    raise TypeError(f"Cannot resolve name from non-callable object: {cls!r}")
+
+
+def get_mem_addr(obj: Any, with_prefix: bool = True) -> str:
+    """
+    Return the memory address of an object in hexadecimal format.
+
+    Parameters:
+        obj (Any): The object whose memory address is to be returned.
+        with_prefix (bool): If True, return address with '0x' prefix (default: True).
+
+    Returns:
+        str: The memory address of the object as a hex string.
+    """
+    addr = id(obj)
+    return f"{addr:#x}" if with_prefix else f"{addr:x}"
 
 
 def log_debug(func: Callable) -> Callable:

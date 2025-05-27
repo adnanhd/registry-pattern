@@ -21,6 +21,8 @@ from warnings import warn
 from typing_compat import (
     Any,
     Callable,
+    Union,
+    Optional,
     ClassVar,
     Hashable,
     ParamSpec,
@@ -29,11 +31,13 @@ from typing_compat import (
     TypeVar,
     get_args,
 )
+from typing import overload
 
 from ..mixin import MutableRegistryValidatorMixin
 from ._dev_utils import get_module_members  # _dev_utils
 from ._validator import ValidationError  # _validator
 from ._validator import (
+    get_func_name,
     ConformanceError,
     validate_function,
     validate_function_parameters,
@@ -112,7 +116,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
         cls._strict = strict
 
     @classmethod
-    def _probe_artifact(cls, value: Any) -> Callable[P, R]:
+    def _intern_artifact(cls, value: Any) -> Callable[P, R]:
         """
         Validate a function before registration.
 
@@ -143,7 +147,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
         return value
 
     @classmethod
-    def _seal_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
+    def _extern_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
         """
         Validate a function when retrieving from the registry.
 
@@ -160,6 +164,19 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
         return value
 
     @classmethod
+    def _identifier_of(cls, item: Callable[P, R]) -> Hashable:
+        """
+        Generate a unique identifier for a function.
+
+        Parameters:
+            item (Callable[P, R]): The function to generate an identifier for.
+
+        Returns:
+            Hashable: A unique identifier for the function.
+        """
+        return get_func_name(validate_function(item))
+
+    @classmethod
     def __subclasscheck__(cls, value: Any) -> bool:
         """
         Perform a runtime subclass check for functions.
@@ -174,52 +191,12 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
             bool: True if the function passes validation; False otherwise.
         """
         try:
-            # Use _probe_artifact for validation during subclass check
-            cls._probe_artifact(value)
+            # Use _intern_artifact for validation during subclass check
+            cls._intern_artifact(value)
             return True
         except (ValidationError, ConformanceError):
             return False
 
-    @classmethod
-    def validate_function(cls, func: Callable[P, R]) -> Callable[P, R]:
-        """
-        Validate a function.
-
-        Parameters:
-            func (Callable[P, R]): The function to validate.
-
-        Returns:
-            Callable[P, R]: The validated function.
-        """
-        return cls._seal_artifact(cls._probe_artifact(func))
-
-    @classmethod
-    def register_function(cls, func: Callable[P, R]) -> Callable[P, R]:
-        """
-        Register a function in the registry.
-
-        The function is stored in the registry under its __name__ attribute.
-
-        Parameters:
-            func (Callable[P, R]): The function to register.
-
-        Returns:
-            Callable[P, R]: The registered function.
-        """
-        cls.register_artifact(func.__name__, func)
-        return func
-
-    @classmethod
-    def unregister_function(cls, key: Hashable) -> None:
-        """
-        Unregister a function from the registry.
-
-        The function is removed from the registry using its __name__ attribute.
-
-        Parameters:
-            key (Hashable): The key of the function to unregister.
-        """
-        cls.unregister_artifact(key)
 
     @classmethod
     def register_module_functions(cls, module: Any, raise_error: bool = True) -> Any:
@@ -243,7 +220,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
         for obj in members:
             try:
                 validate_function(obj)  # Pre-filter for functions
-                cls.register_function(obj)
+                cls.register_artifact(obj)
             except ValidationError as e:
                 if raise_error:
                     raise ValidationError(e)

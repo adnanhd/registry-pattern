@@ -82,7 +82,7 @@ class ConfigRegistry(
         cls._abstract = abstract
 
     @classmethod
-    def _probe_identifier(cls, value: ObjT) -> Any:
+    def _intern_identifier(cls, value: ObjT) -> Any:
         """
         Validate and transform a value before storing in the registry.
 
@@ -114,7 +114,7 @@ class ConfigRegistry(
         return weakref.ref(value)
 
     @classmethod
-    def _seal_identifier(cls, value: Any) -> ObjT:
+    def _extern_identifier(cls, value: Any) -> ObjT:
         """
         Validate and transform a value when retrieving from the registry.
 
@@ -146,7 +146,7 @@ class ConfigRegistry(
         return value
 
     @classmethod
-    def _probe_artifact(cls, value: CfgT) -> CfgT:
+    def _intern_artifact(cls, value: CfgT) -> CfgT:
         """
         Validate a configuration before storing in the registry.
 
@@ -166,7 +166,7 @@ class ConfigRegistry(
         return value
 
     @classmethod
-    def _seal_artifact(cls, value: CfgT) -> CfgT:
+    def _extern_artifact(cls, value: CfgT) -> CfgT:
         """
         Validate a configuration when retrieving from the registry.
 
@@ -240,22 +240,6 @@ class ConfigRegistry(
         return cls._repository[weakref_key]
 
     @classmethod
-    def validate_artifact(cls, value: Any) -> CfgT:
-        """
-        Validate a configuration dictionary.
-
-        Parameters:
-            value: The configuration to validate.
-
-        Returns:
-            CfgT: The validated configuration.
-
-        Raises:
-            TypeError: If the value is not a dictionary.
-        """
-        return cls._probe_artifact(value)
-
-    @classmethod
     def __subclasscheck__(cls, value: Any) -> bool:
         """
         Custom subclass check for runtime validation.
@@ -268,38 +252,10 @@ class ConfigRegistry(
         """
         try:
             # Check if the value can be used as a key
-            cls._probe_identifier(value)
+            cls._intern_identifier(value)
             return True
         except (ValidationError, InheritanceError, ConformanceError, TypeError):
             return False
-
-    @classmethod
-    def register_config(cls, obj: ObjT, config: CfgT) -> CfgT:
-        """
-        Register a configuration for an object.
-
-        Parameters:
-            obj (ObjT): The object to associate with the configuration.
-            config (CfgT): The configuration to register.
-
-        Returns:
-            CfgT: The registered configuration.
-        """
-        cls.register_artifact(obj, config)
-        return config
-
-    @classmethod
-    def unregister_config(cls, obj: Any) -> None:
-        """
-        Unregister a configuration for an object.
-
-        Parameters:
-            obj: The object whose configuration should be unregistered.
-        """
-        weakref_key = cls._find_weakref_key(obj)
-        if weakref_key is None:
-            raise RegistryError(f"Key '{obj}' is not found in the repository")
-        del cls._repository[weakref_key]
 
     @classmethod
     def register_class_configs(cls, supercls: Type[ObjT]) -> Type[ObjT]:

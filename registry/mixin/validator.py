@@ -1,4 +1,4 @@
-from typing import Any, Generic, Hashable, Iterator, TypeVar
+from typing import Any, Generic, Hashable, Iterator, TypeVar, overload, Union, Optional, cast
 
 from registry.core._validator import ValidationError
 
@@ -28,7 +28,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
     """
 
     @classmethod
-    def _probe_identifier(cls, value: Any) -> K:
+    def _intern_identifier(cls, value: Any) -> K:
         """
         Validate an identifier when storing in registry.
 
@@ -43,7 +43,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
         return value  # type: ignore
 
     @classmethod
-    def _probe_artifact(cls, value: T) -> T:
+    def _intern_artifact(cls, value: T) -> T:
         """
         Validate an artifact when storing in registry.
 
@@ -56,7 +56,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
         return value
 
     @classmethod
-    def _seal_identifier(cls, value: Any) -> K:
+    def _extern_identifier(cls, value: Any) -> K:
         """
         Validate an identifier when retrieving from registry.
 
@@ -71,7 +71,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
         return value  # type: ignore
 
     @classmethod
-    def _seal_artifact(cls, value: T) -> T:
+    def _extern_artifact(cls, value: T) -> T:
         """
         Validate an artifact when retrieving from registry.
 
@@ -97,9 +97,9 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
         Raises:
             RegistryError: If the key is not in the registry.
         """
-        validated_key = cls._probe_identifier(key)
+        validated_key = cls._intern_identifier(key)
         item = cls._get_artifact(validated_key)
-        return cls._seal_artifact(item)
+        return cls._extern_artifact(item)
 
     @classmethod
     def has_identifier(cls, key: K) -> bool:
@@ -113,7 +113,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             True if the artifact exists, False otherwise.
         """
         try:
-            validated_key = cls._probe_identifier(key)
+            validated_key = cls._intern_identifier(key)
             return cls._has_identifier(validated_key)
         except ValidationError:
             return False
@@ -130,7 +130,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             True if the artifact exists, False otherwise.
         """
         try:
-            validated_item = cls._probe_artifact(item)
+            validated_item = cls._intern_artifact(item)
             return cls._has_artifact(validated_item)
         except ValidationError:
             return False
@@ -145,6 +145,23 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
         """
         return cls._iter_mapping()
 
+    @classmethod
+    def validate_artifact(cls, item: Any) -> T:
+        """
+        Validate an artifact and return its key.
+
+        Parameters:
+            item: The artifact to validate.
+
+        Returns:
+            The key of the validated artifact.
+
+        Raises:
+            ValidationError: If the artifact is invalid.
+        """
+        validated_item = cls._intern_artifact(item)
+        validated_artifact = cls._extern_artifact(validated_item)
+        return validated_artifact
 
 # -----------------------------------------------------------------------------
 # Mutable Registry Validator Mixin
@@ -162,23 +179,56 @@ class MutableRegistryValidatorMixin(
     methods for probing identifiers and artifacts, which validate keys and
     values during storage operations.
     """
+    @classmethod
+    def _identifier_of(cls, item: T) -> K:
+        """Extract the identifier from an artifact."""
+        raise NotImplementedError("Subclasses must implement identifier_of")
+
+    @overload
+    @classmethod
+    def register_artifact(cls, key: K, item: T) -> T:
+        """Register an artifact with explicit key."""
+        ...
+
+    @overload
+    @classmethod
+    def register_artifact(cls, key: T, item: None = None) -> T:
+        """Register an artifact using extracted key."""
+        ...
 
     @classmethod
-    def register_artifact(cls, key: K, item: T) -> None:
+    def register_artifact(cls, key: Union[K, T], item: Optional[T] = None) -> T:
         """
         Register an artifact in the registry with validation.
 
-        Parameters:
-            key: The key of the artifact to register.
-            item: The artifact to register.
+        Supports two calling patterns:
+        1. register_artifact(key, item) - explicit key
+        2. register_artifact(item) - extracted key from item
 
-        Raises:
-            TypeError: If the key is not hashable.
-            RegistryError: If the key already exists in the registry.
+        Parameters:
+            key: Either the explicit key or the item itself
+            item: The item to register (None for single-argument form)
+
+        Returns:
+            The registered item
         """
-        validated_key = cls._probe_identifier(key)
-        validated_item = cls._probe_artifact(item)
-        cls._set_artifact(validated_key, validated_item)
+        if item is None:
+            # Single argument case: register_artifact(item)
+            artifact = cast(T, key)  # key is actually the item in this case
+            identifier = cls._identifier_of(artifact)
+            # Extract key from the artifact using _intern_identifier
+            validated_item = cls._intern_artifact(artifact)
+            validated_key = cls._intern_identifier(identifier)
+            cls._set_artifact(validated_key, validated_item)
+            return artifact
+        else:
+            # Two argument case: register_artifact(key, item)
+            actual_key = key  # key is actually the key in this case
+            artifact = item
+            validated_key = cls._intern_identifier(actual_key)
+            validated_item = cls._intern_artifact(artifact)
+            cls._set_artifact(validated_key, validated_item)
+            return artifact
 
     @classmethod
     def unregister_artifact(cls, key: K) -> None:
@@ -192,7 +242,7 @@ class MutableRegistryValidatorMixin(
             TypeError: If the key is not hashable.
             RegistryError: If the key does not exist in the registry.
         """
-        validated_key = cls._seal_identifier(key)  # Use seal for deletion
+        validated_key = cls._extern_identifier(key)  # Use seal for deletion
         cls._del_artifact(validated_key)
 
     @classmethod

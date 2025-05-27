@@ -29,6 +29,7 @@ from ..mixin import MutableRegistryValidatorMixin
 from ._dev_utils import get_protocol  # _dev_utils
 from ._validator import InheritanceError  # _validator
 from ._validator import (
+    get_mem_addr,
     ConformanceError,
     ValidationError,
     validate_instance_hierarchy,
@@ -89,7 +90,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         cls._strict_weakref = strict_weakref
 
     @classmethod
-    def _probe_artifact(cls, value: Any) -> ObjT:
+    def _intern_artifact(cls, value: Any) -> ObjT:
         """
         Validate an instance before registration.
 
@@ -125,7 +126,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         return value
 
     @classmethod
-    def _seal_artifact(cls, value: Any) -> ObjT:
+    def _extern_artifact(cls, value: Any) -> ObjT:
         """
         Validate an instance when retrieving from the registry.
 
@@ -155,7 +156,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         return value
 
     @classmethod
-    def _probe_identifier(cls, value: Any) -> Hashable:
+    def _intern_identifier(cls, value: Any) -> Hashable:
         """
         Validate an identifier before storing in the registry.
 
@@ -168,10 +169,10 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         Returns:
             Hashable: The validated value.
         """
-        return super()._probe_identifier(value)
+        return super()._intern_identifier(value)
 
     @classmethod
-    def _seal_identifier(cls, value: Any) -> Hashable:
+    def _extern_identifier(cls, value: Any) -> Hashable:
         """
         Validate an identifier when retrieving from the registry.
 
@@ -184,39 +185,11 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         Returns:
             Hashable: The validated value.
         """
-        return super()._seal_identifier(value)
+        return super()._extern_identifier(value)
 
     @classmethod
-    def register_instance(cls, key: Hashable, item: ObjT) -> ObjT:
-        """
-        Register an instance in the registry.
-
-        The instance is stored in the registry using the provided key.
-        It is stored as a weak reference to avoid memory leaks.
-
-        Parameters:
-            key (Hashable): The key to use for the instance.
-            item (ObjT): The instance to register.
-
-        Returns:
-            ObjT: The registered instance.
-        """
-        # Use the existing register_artifact but wrap the item in a weak reference
-        # after it's been validated by _probe_artifact
-        cls.register_artifact(key, item)
-        return item
-
-    @classmethod
-    def unregister_instance(cls, key: Hashable) -> None:
-        """
-        Unregister an instance from the registry.
-
-        The instance is removed from the registry using the provided key.
-
-        Parameters:
-            key (Hashable): The key of the instance to unregister.
-        """
-        cls.unregister_artifact(key)
+    def _identifier_of(cls, item: Type[ObjT]) -> Hashable:
+        return get_mem_addr(item)
 
     @classmethod
     def register_class_instances(cls, supercls: Type[ObjT]) -> Type[ObjT]:
@@ -242,7 +215,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                 obj = super().__call__(*args, **kwds)
                 try:
                     # Register the new instance with itself as the key
-                    obj = cls.register_instance(obj, obj)
+                    obj = cls.register_artifact(obj, obj)
                 except Exception as e:
                     logger.debug(f"Registration error: {e}")
                 return obj

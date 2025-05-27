@@ -24,6 +24,7 @@ from ..mixin import MutableRegistryValidatorMixin
 from ._dev_utils import get_module_members, get_protocol, get_subclasses  # _dev_utils
 from ._validator import InheritanceError  # _validator
 from ._validator import (
+    get_type_name,
     ConformanceError,
     ValidationError,
     validate_class,
@@ -87,7 +88,7 @@ class TypeRegistry(
         cls._abstract = abstract
 
     @classmethod
-    def _probe_artifact(cls, value: Any) -> Type[Cls]:
+    def _intern_artifact(cls, value: Any) -> Type[Cls]:
         """
         Validate a class before registration.
 
@@ -120,8 +121,26 @@ class TypeRegistry(
 
         return value
 
+
     @classmethod
-    def _seal_artifact(cls, value: Type[Cls]) -> Type[Cls]:
+    def _identifier_of(cls, item: Type[Cls]) -> Hashable:
+        """
+        Generate a unique identifier for a class.
+
+        This method is used to generate a unique identifier for a class
+        when registering it in the registry. The identifier is typically
+        used as a key in the registry's internal data structure.
+
+        Parameters:
+            item (Type[Cls]): The class to generate an identifier for.
+
+        Returns:
+            Hashable: The generated identifier.
+        """
+        return get_type_name(validate_class(item))
+
+    @classmethod
+    def _extern_artifact(cls, value: Type[Cls]) -> Type[Cls]:
         """
         Validate a class when retrieving from the registry.
 
@@ -138,49 +157,6 @@ class TypeRegistry(
         return value
 
     @classmethod
-    def validate_class(cls, value: Type[Cls]) -> Type[Cls]:
-        """
-        Validate a class when retrieving from the registry.
-
-        Parameters:
-            value (Type[Cls]): The class to validate.
-
-        Returns:
-            Type[Cls]: The validated class.
-        """
-        return cls._seal_artifact(cls._probe_artifact(value))
-
-    @classmethod
-    def register_class(cls, subcls: Type[Cls]) -> Type[Cls]:
-        """
-        Register a subclass in the registry.
-
-        The class is registered using its __name__ attribute as the key.
-
-        Parameters:
-            subcls (Type[Cls]): The subclass to register.
-
-        Returns:
-            Type[Cls]: The registered subclass.
-        """
-        cls.register_artifact(subcls.__name__, subcls)
-        return subcls
-
-    @classmethod
-    def unregister_class(cls, subcls_or_name: Any) -> None:
-        """
-        Unregister a subclass from the registry.
-
-        Parameters:
-            subcls_or_name (Any): The class or its name to unregister.
-        """
-        if hasattr(subcls_or_name, "__name__"):
-            key = subcls_or_name.__name__
-        else:
-            key = subcls_or_name
-        cls.unregister_artifact(key)
-
-    @classmethod
     def __subclasscheck__(cls, value: Any) -> bool:
         """
         Custom subclass check to perform runtime validation.
@@ -195,7 +171,7 @@ class TypeRegistry(
             bool: True if the value passes all validations; False otherwise.
         """
         try:
-            cls._probe_artifact(value)
+            cls._intern_artifact(value)
         except (ValidationError, InheritanceError, ConformanceError):
             return False
         else:
@@ -220,7 +196,7 @@ class TypeRegistry(
         module_members = get_module_members(module)
         for obj in module_members:
             try:
-                cls.register_class(obj)
+                cls.register_artifact(obj)
             except AssertionError:
                 logger.debug(f"Could not register {obj}")
             except ValidationError as e:
@@ -261,7 +237,7 @@ class TypeRegistry(
                 if recursive and get_subclasses(subcls):
                     cls.register_subclasses(subcls, recursive, mode="immediate")
                 try:
-                    cls.register_class(subcls)
+                    cls.register_artifact(subcls)
                 except ValidationError as e:
                     if raise_error:
                         raise ValidationError(e)
@@ -271,16 +247,16 @@ class TypeRegistry(
         if mode in {"deferred", "both"}:
             # Define a dynamic metaclass for deferred registration.
             meta: Type[Any] = type(supercls)
-            register_class_func = cls.register_class
+            register_artifact_func = cls.register_artifact
 
             class newmcs(meta):
                 def __new__(cls, name, bases, attrs) -> Type[Cls]:
-                    new_class = super().__new__(cls, name, bases, attrs)
+                    new_artifact = super().__new__(cls, name, bases, attrs)
                     try:
-                        new_class = register_class_func(new_class)
+                        new_artifact = register_artifact_func(new_artifact)
                     except Exception as e:
                         logger.debug(e)
-                    return new_class
+                    return new_artifact
 
             # Copy meta attributes from the original metaclass.
             newmcs.__name__ = meta.__name__

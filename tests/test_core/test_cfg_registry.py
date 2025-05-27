@@ -34,24 +34,24 @@ class BaseConfigRegistryTest:
         """Return a registry class for testing. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement this fixture")
 
-    def test_register_config(self, registry_class):
+    def test_register_artifact(self, registry_class):
         """Test registering an object with configuration."""
         obj = TestObject("test")
         config = {"param1": 42, "param2": "value"}
 
-        registry_class.register_config(obj, config)
+        registry_class.register_artifact(obj, config)
 
         # Verify registration
         assert registry_class.has_identifier(obj)
         assert registry_class.get_artifact(obj) == config
 
-    def test_unregister_config(self, registry_class):
+    def test_unregister_artifact(self, registry_class):
         """Test unregistering a configuration."""
         obj = TestObject("test")
         config = {"param1": 42, "param2": "value"}
 
-        registry_class.register_config(obj, config)
-        registry_class.unregister_config(obj)
+        registry_class.register_artifact(obj, config)
+        registry_class.unregister_artifact(obj)
 
         # After unregistration, the object should not be in the registry
         assert not registry_class.has_identifier(obj)
@@ -64,9 +64,9 @@ class BaseConfigRegistryTest:
         config1 = {"param1": 42}
         config2 = {"param1": 43}
 
-        registry_class.register_config(obj, config1)
+        registry_class.register_artifact(obj, config1)
         with pytest.raises(RegistryError):
-            registry_class.register_config(obj, config2)
+            registry_class.register_artifact(obj, config2)
 
         # Original config should remain
         assert registry_class.has_identifier(obj)
@@ -129,7 +129,7 @@ class TestConfigRegistry(BaseConfigRegistryTest):
         # Register an object
         obj = TestObject("test_weak_ref")
         config = {"some": "data"}
-        registry_class.register_config(obj, config)
+        registry_class.register_artifact(obj, config)
 
         # Get the repository and check that it contains a weakref
         repo = registry_class._repository
@@ -180,7 +180,7 @@ class TestCustomConfigRegistry:
             ConfigRegistry[CustomObject, Dict[str, Any]], strict=True
         ):
             @classmethod
-            def _probe_artifact(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+            def _intern_artifact(cls, value: Dict[str, Any]) -> Dict[str, Any]:
                 # Custom validation to ensure config has required fields
                 if not isinstance(value, dict):
                     raise TypeError("Configuration must be a dictionary")
@@ -203,7 +203,7 @@ class TestCustomConfigRegistry:
         obj = CustomObject("valid")
         config = {"name": "valid", "extra": "data"}
 
-        registry_class.register_config(obj, config)
+        registry_class.register_artifact(obj, config)
         assert registry_class.has_identifier(obj)
         assert registry_class.get_artifact(obj) == config
 
@@ -221,7 +221,7 @@ class TestCustomConfigRegistry:
         invalid_config = {"missing_name": "value"}
 
         with pytest.raises(ValueError):
-            registry_class.register_config(obj, invalid_config)
+            registry_class.register_artifact(obj, invalid_config)
 
         # Object should not be registered
         assert not registry_class.has_identifier(obj)
@@ -238,7 +238,7 @@ class TestCustomConfigRegistry:
         config = {"name": "test"}
 
         with pytest.raises(ConformanceError):
-            registry_class.register_config(obj, config)
+            registry_class.register_artifact(obj, config)
 
         # Object should not be registered
         assert not registry_class.has_identifier(obj)
@@ -262,7 +262,7 @@ class TestWeakReferenceBehavior:
         # Register an object
         obj = TestObject("temporary")
         config = {"temporary": True}
-        registry_class.register_config(obj, config)
+        registry_class.register_artifact(obj, config)
 
         # Verify registration
         assert registry_class.has_identifier(obj)
@@ -295,7 +295,7 @@ class TestWeakReferenceBehavior:
         # Register multiple objects
         objs = [TestObject(f"obj{i}") for i in range(3)]
         for i, obj in enumerate(objs):
-            registry_class.register_config(obj, {"index": i})
+            registry_class.register_artifact(obj, {"index": i})
 
         # Verify all are registered
         for obj in objs:
