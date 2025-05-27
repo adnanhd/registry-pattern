@@ -1,9 +1,8 @@
-r"""Validator module.
+r"""Enhanced validator module.
 
 This module provides functions and decorators for validating classes,
-functions, and instances. It includes logging decorators for debugging,
-validation of class structures against expected protocols, and checks
-for function signature conformance.
+functions, and instances. It includes rich error context, validation caching,
+and improved error messages with actionable suggestions.
 
 Doxygen Dot Graph of Exception Hierarchy:
 ------------------------------------------
@@ -18,19 +17,32 @@ digraph ExceptionHierarchy {
 \enddot
 """
 
+from gc import callbacks
 import inspect
 import logging
 import os
+import time
+import weakref
 from abc import ABC
 from functools import partial, partialmethod, wraps
-
-from typing_compat import Any, Callable, ParamSpec, Type, TypeAlias, TypeVar, get_args
+from threading import RLock
+from typing_compat import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    ParamSpec,
+    Type,
+    TypeAlias,
+    TypeVar,
+    get_args,
+)
 
 # -----------------------------------------------------------------------------
 # Logging Configuration
 # -----------------------------------------------------------------------------
 
-# Configure logging with environment-based settings.
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=os.getenv("VALIDATOR_LOG_LEVEL", "INFO").upper(),
@@ -39,13 +51,114 @@ logging.basicConfig(
 )
 
 # -----------------------------------------------------------------------------
-# Decorators
+# Validation Cache
 # -----------------------------------------------------------------------------
 
 
-from functools import partial, partialmethod
-from types import FunctionType, MethodType
-from typing import Callable, Type, Union
+class ValidationCache:
+    """Thread-safe cache for validation results to improve performance."""
+
+    def __init__(self, max_size: int = 1000, ttl_seconds: float = 300.0):
+        self.max_size = max_size
+        self.ttl = ttl_seconds
+        self._cache: Dict[int, tuple] = {}  # hash -> (result, timestamp, suggestions)
+        self._lock = RLock()
+
+    def get(self, obj: Any, operation: str) -> Optional[tuple]:
+        """Get cached validation result and suggestions."""
+        cache_key = hash((id(obj), type(obj).__name__, operation))
+
+        with self._lock:
+            if cache_key in self._cache:
+                result, timestamp, suggestions = self._cache[cache_key]
+                if time.time() - timestamp < self.ttl:
+                    return result, suggestions
+                else:
+                    del self._cache[cache_key]
+
+        return None
+
+    def set(
+        self, obj: Any, operation: str, result: bool, suggestions: List[str]
+    ) -> None:
+        """Cache validation result with suggestions."""
+        cache_key = hash((id(obj), type(obj).__name__, operation))
+
+        with self._lock:
+            # Simple LRU eviction
+            if len(self._cache) >= self.max_size:
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+
+            self._cache[cache_key] = (result, time.time(), suggestions)
+
+
+# Global validation cache
+_validation_cache = ValidationCache()
+
+# -----------------------------------------------------------------------------
+# Enhanced Exception Classes
+# -----------------------------------------------------------------------------
+
+
+class ValidationError(Exception):
+    """Base exception for validation errors with rich context."""
+
+    def __init__(
+        self,
+        message: str,
+        suggestions: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ):
+        self.message = message
+        self.suggestions = suggestions or []
+        self.context = context or {}
+
+        # Build enhanced error message
+        enhanced_message = self._build_enhanced_message()
+        super().__init__(enhanced_message)
+
+    def _build_enhanced_message(self) -> str:
+        """Build enhanced error message with context and suggestions."""
+        lines = [self.message]
+
+        if self.context:
+            if "expected_type" in self.context and "actual_type" in self.context:
+                lines.append(f"  Expected: {self.context['expected_type']}")
+                lines.append(f"  Actual: {self.context['actual_type']}")
+
+            if "artifact_name" in self.context:
+                lines.append(f"  Artifact: {self.context['artifact_name']}")
+
+        if self.suggestions:
+            lines.append("  Suggestions:")
+            for suggestion in self.suggestions:
+                lines.append(f"    • {suggestion}")
+
+        return "\n".join(lines)
+
+
+class CoercionError(ValidationError, ValueError):
+    """Exception raised when coercion of a value fails."""
+
+    pass
+
+
+class ConformanceError(ValidationError, TypeError):
+    """Exception raised when a function or class does not conform to expected type signatures."""
+
+    pass
+
+
+class InheritanceError(ValidationError, TypeError):
+    """Exception raised when a class does not inherit from an expected abstract base class."""
+
+    pass
+
+
+# -----------------------------------------------------------------------------
+# Helper Functions
+# -----------------------------------------------------------------------------
 
 
 def get_func_name(func: Callable, qualname: bool = False) -> str:
@@ -67,16 +180,16 @@ def get_func_name(func: Callable, qualname: bool = False) -> str:
         func = func.func
 
     # Resolve wrapped functions (e.g., from decorators)
-    while hasattr(func, '__wrapped__'):
+    while hasattr(func, "__wrapped__"):
         func = getattr(func, "__wrapped__")
 
     # Handle bound or unbound methods
-    if isinstance(func, (FunctionType, MethodType)):
-        return func.__qualname__ if qualname else func.__name__
+    if hasattr(func, "__name__"):
+        return getattr(func, "__qualname__" if qualname else "__name__")
 
     # Callable object (e.g., class with __call__)
-    if hasattr(func, '__call__'):
-        func = getattr(func, '__call__')
+    if hasattr(func, "__call__"):
+        func = getattr(func, "__call__")
         return get_func_name(func, qualname)
 
     raise TypeError(f"Cannot resolve name from non-callable object: {func!r}")
@@ -96,13 +209,12 @@ def get_type_name(cls: Type, qualname: bool = False) -> str:
     Raises:
         TypeError: If the type cannot be resolved.
     """
-    if qualname:
-        if hasattr(cls, "__qualname__"):
-            return getattr(cls, "__qualname__")
+    if qualname and hasattr(cls, "__qualname__"):
+        return getattr(cls, "__qualname__")
     elif hasattr(cls, "__name__"):
         return getattr(cls, "__name__")
-
-    raise TypeError(f"Cannot resolve name from non-callable object: {cls!r}")
+    else:
+        return str(cls)
 
 
 def get_mem_addr(obj: Any, with_prefix: bool = True) -> str:
@@ -120,73 +232,140 @@ def get_mem_addr(obj: Any, with_prefix: bool = True) -> str:
     return f"{addr:#x}" if with_prefix else f"{addr:x}"
 
 
+def _generate_suggestions(
+    operation: str, expected_type: Optional[Type] = None, artifact: Any = None
+) -> List[str]:
+    """Generate helpful suggestions based on validation failure context."""
+    suggestions = []
+
+    if operation == "class_structure":
+        suggestions.append("Ensure all required methods are implemented")
+        suggestions.append("Check that method signatures match exactly")
+        if expected_type:
+            protocol_methods = [
+                m
+                for m in dir(expected_type)
+                if not m.startswith("_") and callable(getattr(expected_type, m))
+            ]
+            if protocol_methods:
+                suggestions.append(f"Required methods: {', '.join(protocol_methods)}")
+
+    elif operation == "class_hierarchy":
+        suggestions.append("Make sure your class inherits from the required base class")
+        if expected_type:
+            suggestions.append(
+                f"Add 'class YourClass({get_type_name(expected_type)}):' to your class definition"
+            )
+
+    elif operation == "function_signature":
+        suggestions.append("Check parameter types and return type annotations")
+        suggestions.append(
+            "Ensure parameter names and order match the expected signature"
+        )
+
+    elif operation == "function_parameters":
+        suggestions.append(
+            "Verify function signature matches the expected callable type"
+        )
+        suggestions.append("Check parameter count, types, and return type")
+
+    elif operation == "instance_structure":
+        suggestions.append("Ensure the instance implements all required methods")
+        suggestions.append("Check that method signatures are correct")
+
+    return suggestions
+
+
 def log_debug(func: Callable) -> Callable:
     """
-    Decorator to log function calls in debug mode.
-
-    If the environment variable 'VALIDATOR_QUIET' is set to 'TRUE',
-    logging is disabled for the decorated function.
-
-    Parameters:
-        func (Callable): The function to decorate.
-
-    Returns:
-        Callable: The decorated function.
+    Decorator to log function calls in debug mode with enhanced error context.
     """
     if os.getenv("REGISTRY_VALIDATOR_DEBUG", "FALSE").upper() != "TRUE":
         return func
 
     func_name = get_func_name(func)
-    logger = logging.getLogger(func_name)
+    func_logger = logging.getLogger(func_name)
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        # Log function call with arguments if debug level is enabled.
-        if logger.isEnabledFor(logging.DEBUG):
+        # Check cache first
+        if len(args) > 0:
+            cached_result = _validation_cache.get(args[0], func_name)
+            if cached_result is not None:
+                result, suggestions = cached_result
+                if not result:
+                    # Re-raise cached failure with suggestions
+                    context = {
+                        "operation": func_name,
+                        "artifact_name": (
+                            get_type_name(args[0])
+                            if hasattr(args[0], "__name__")
+                            else str(args[0])[:999]
+                        ),
+                    }
+                    raise ValidationError(
+                        f"Cached validation failure in {func_name}",
+                        suggestions,
+                        context,
+                    )
+                return args[0]  # Return validated object
+
+        # Log function call with arguments if debug level is enabled
+        if func_logger.isEnabledFor(logging.DEBUG):
             arg_str = ", ".join(repr(a) for a in args)
             kwarg_str = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
             all_args = ", ".join(filter(None, [arg_str, kwarg_str]))
-            logger.debug(f"{func_name}({all_args})")
-        return func(*args, **kwargs)
+            func_logger.debug(f"{func_name}({all_args})")
+
+        try:
+            result = func(*args, **kwargs)
+            # Cache successful validation
+            if len(args) > 0:
+                _validation_cache.set(args[0], func_name, True, [])
+            return result
+
+        except (ValidationError, ConformanceError, InheritanceError) as e:
+            # Cache failed validation with suggestions
+            if len(args) > 0:
+                suggestions = getattr(e, "suggestions", [])
+                _validation_cache.set(args[0], func_name, False, suggestions)
+            raise
+
+        except Exception as e:
+            # Convert generic exceptions to ValidationError with context
+            suggestions = _generate_suggestions(
+                func_name, kwargs.get("expected_type"), args[0] if args else None
+            )
+            context = {
+                "operation": func_name,
+                "artifact_name": (
+                    get_type_name(args[0])
+                    if args and hasattr(args[0], "__name__")
+                    else str(args[0])[:999] if args else "unknown"
+                ),
+            }
+
+            enhanced_error = ValidationError(str(e), suggestions, context)
+
+            # Cache the failure
+            if len(args) > 0:
+                _validation_cache.set(args[0], func_name, False, suggestions)
+
+            raise enhanced_error from e
 
     return wrapper
-
-
-# -----------------------------------------------------------------------------
-# Exception Classes
-# -----------------------------------------------------------------------------
-
-
-class ValidationError(Exception):
-    """Base exception for validation errors."""
-
-
-class CoercionError(ValueError, ValidationError):
-    """Exception raised when coercion of a value fails."""
-
-
-class ConformanceError(TypeError, ValidationError):
-    """Exception raised when a function or class does not conform to expected type signatures."""
-
-
-class InheritanceError(TypeError, ValidationError):
-    """Exception raised when a class does not inherit from an expected abstract base class."""
 
 
 # -----------------------------------------------------------------------------
 # Type Variables for Protocols and Functions
 # -----------------------------------------------------------------------------
 
-# 'Protocol' here is a type variable used to represent expected protocol types.
 Protocol = TypeVar("Protocol")
-
-# Type variables for function signature validation.
 R = TypeVar("R")
 P = ParamSpec("P")
 
-
 # -----------------------------------------------------------------------------
-# Class and Function Validation Functions
+# Enhanced Validation Functions
 # -----------------------------------------------------------------------------
 
 
@@ -205,7 +384,17 @@ def validate_class(subcls: Any) -> Type:
         ValidationError: If the argument is not a class.
     """
     if not inspect.isclass(subcls):
-        raise ValidationError(f"{subcls} is not a class")
+        suggestions = [
+            "Ensure you're passing a class, not an instance",
+            "Check that the object is defined with 'class' keyword",
+            f"Got {type(subcls).__name__}, expected a class",
+        ]
+        context = {
+            "expected_type": "class",
+            "actual_type": type(subcls).__name__,
+            "artifact_name": str(subcls)[:999],
+        }
+        raise ValidationError(f"{subcls} is not a class", suggestions, context)
     return subcls
 
 
@@ -232,25 +421,61 @@ def validate_class_structure(
         ConformanceError: If the class does not implement required methods or if
                           method signatures do not match.
     """
-    # Coercion is not supported in this implementation.
     assert not coerce_to_type, "Coercion is not supported"
 
-    # Iterate over attributes in the expected type.
+    missing_methods = []
+    signature_errors = []
+
+    # Iterate over attributes in the expected type
     for method_name in dir(expected_type):
-        # Skip private or special methods.
         if method_name.startswith("_"):
             continue
 
-        # Check if the method exists in the class.
+        # Check if the method exists in the class
         if not hasattr(subcls, method_name):
-            raise ConformanceError(
-                f"Class {subcls.__name__} does not implement method '{method_name}'"
-            )
+            missing_methods.append(method_name)
+            continue
 
-        # Validate that the method signatures match.
-        expected_type_method: Callable = getattr(expected_type, method_name)
-        subcls_method: Callable = getattr(subcls, method_name)
-        validate_function_signature(subcls_method, expected_type_method)
+        # Validate that the method signatures match
+        expected_method = getattr(expected_type, method_name)
+        subcls_method = getattr(subcls, method_name)
+
+        try:
+            validate_function_signature(subcls_method, expected_method)
+        except ConformanceError as e:
+            signature_errors.append(f"{method_name}: {e.message}")
+
+    # Build comprehensive error message
+    if missing_methods or signature_errors:
+        error_parts = []
+        suggestions = []
+
+        if missing_methods:
+            error_parts.append(f"Missing methods: {', '.join(missing_methods)}")
+            for method in missing_methods:
+                expected_method = getattr(expected_type, method)
+                try:
+                    sig = inspect.signature(expected_method)
+                    suggestions.append(f"Add method: def {method}{sig}: ...")
+                except:
+                    suggestions.append(f"Add method: def {method}(self, ...): ...")
+
+        if signature_errors:
+            error_parts.append("Signature mismatches:")
+            error_parts.extend(f"  {error}" for error in signature_errors)
+            suggestions.append("Check parameter types and return type annotations")
+
+        context = {
+            "expected_type": get_type_name(expected_type),
+            "actual_type": get_type_name(subcls),
+            "artifact_name": get_type_name(subcls),
+        }
+
+        message = (
+            f"Class {get_type_name(subcls)} does not conform to protocol {get_type_name(expected_type)}:\n"
+            + "\n".join(error_parts)
+        )
+        raise ConformanceError(message, suggestions, context)
 
     return subcls
 
@@ -271,7 +496,21 @@ def validate_class_hierarchy(subcls: Type, /, abc_class: Type[ABC]) -> Type:
         InheritanceError: If the class is not a subclass of the specified ABC.
     """
     if not issubclass(subcls, abc_class):
-        raise InheritanceError(f"{subcls} not subclass-of {abc_class}")
+        suggestions = [
+            f"Make your class inherit from {get_type_name(abc_class)}",
+            f"Change class definition to: class {get_type_name(subcls)}({get_type_name(abc_class)}):",
+            "Check that you're importing the correct base class",
+        ]
+        context = {
+            "expected_type": get_type_name(abc_class),
+            "actual_type": get_type_name(subcls),
+            "artifact_name": get_type_name(subcls),
+        }
+        raise InheritanceError(
+            f"{get_type_name(subcls)} is not a subclass of {get_type_name(abc_class)}",
+            suggestions,
+            context,
+        )
     return subcls
 
 
@@ -306,9 +545,21 @@ def validate_function(func: Callable) -> Callable:
     Raises:
         ValidationError: If the argument is not a function.
     """
-    if not (inspect.isfunction(func) or inspect.isbuiltin(func)):
-        raise ValidationError(f"{func} is not a function")
-    return func
+    if (inspect.isfunction(func) or inspect.isbuiltin(func)) and callable(func):
+        return func
+    suggestions = [
+        "Ensure you're passing a function, not a variable",
+        "Check that the object is defined with 'def' keyword or is callable",
+        f"Got {type(func).__name__}, expected a callable",
+    ]
+    context = {
+        "expected_type": "function",
+        "actual_type": type(func).__name__,
+        "artifact_name": (
+            get_func_name(func) if hasattr(func, "__name__") else str(func)[:999]
+        ),
+    }
+    raise ValidationError(f"{func} is not a function", suggestions, context)
 
 
 @log_debug
@@ -331,36 +582,82 @@ def validate_function_signature(
     Raises:
         ConformanceError: If the function's signature does not match the expected signature.
     """
-    func_signature: inspect.Signature = inspect.signature(func)
-    expected_signature: inspect.Signature = inspect.signature(expected_func)
+    try:
+        func_signature = inspect.signature(func)
+        expected_signature = inspect.signature(expected_func)
+    except (ValueError, TypeError) as e:
+        suggestions = ["Check that both functions have valid signatures"]
+        context = {
+            "artifact_name": get_func_name(func),
+            "operation": "signature_inspection",
+        }
+        raise ConformanceError(
+            f"Cannot inspect function signature: {e}", suggestions, context
+        )
 
-    # Check that the number of parameters match.
+    errors = []
+    suggestions = []
+
+    # Check that the number of parameters match
     protocol_params = list(expected_signature.parameters.values())
     cls_params = list(func_signature.parameters.values())
+
     if len(protocol_params) != len(cls_params):
-        raise ConformanceError(
-            f"Function '{get_func_name(func)}' does not match "
-            f"argument count of protocol.\n"
-            f"Expected: {len(protocol_params)} arguments, "
-            f"Found: {len(cls_params)}"
+        errors.append(
+            f"Parameter count mismatch: expected {len(protocol_params)}, got {len(cls_params)}"
+        )
+        suggestions.append(
+            f"Adjust function to have exactly {len(protocol_params)} parameters"
         )
 
-    # Validate each parameter's type annotation.
-    for protocol_param, cls_param in zip(protocol_params, cls_params):
-        if protocol_param.annotation != cls_param.annotation:
-            raise ConformanceError(
-                f"Parameter '{protocol_param.name}' in function '{get_func_name(func)}' "
-                f"does not match type annotation.\n"
-                f"Expected: {get_type_name(protocol_param.annotation)}, "
-                f"Found: {get_type_name(cls_param.annotation)}"
+    # Validate each parameter's type annotation
+    for i, (protocol_param, cls_param) in enumerate(zip(protocol_params, cls_params)):
+        if (
+            protocol_param.annotation != cls_param.annotation
+            and protocol_param.annotation != inspect.Parameter.empty
+        ):
+            if cls_param.annotation == inspect.Parameter.empty:
+                errors.append(f"Parameter '{cls_param.name}' missing type annotation")
+                suggestions.append(
+                    f"Add type annotation: {cls_param.name}: {get_type_name(protocol_param.annotation)}"
+                )
+            else:
+                errors.append(
+                    f"Parameter '{cls_param.name}' type mismatch: expected {get_type_name(protocol_param.annotation)}, got {get_type_name(cls_param.annotation)}"
+                )
+                suggestions.append(
+                    f"Change parameter type to: {cls_param.name}: {get_type_name(protocol_param.annotation)}"
+                )
+
+    # Validate the return type annotation
+    if (
+        expected_signature.return_annotation != func_signature.return_annotation
+        and expected_signature.return_annotation != inspect.Signature.empty
+    ):
+        if func_signature.return_annotation == inspect.Signature.empty:
+            errors.append("Missing return type annotation")
+            suggestions.append(
+                f"Add return annotation: -> {get_type_name(expected_signature.return_annotation)}"
+            )
+        else:
+            errors.append(
+                f"Return type mismatch: expected {get_type_name(expected_signature.return_annotation)}, got {get_type_name(func_signature.return_annotation)}"
+            )
+            suggestions.append(
+                f"Change return type to: -> {get_type_name(expected_signature.return_annotation)}"
             )
 
-    # Validate the return type annotation.
-    if expected_signature.return_annotation != func_signature.return_annotation:
-        raise ConformanceError(
-            f"Return type of method '{get_func_name(func)}' does not match.\n"
-            f"Expected: {get_type_name(expected_signature.return_annotation)}, Found: {get_type_name(func_signature.return_annotation)}"
+    if errors:
+        context = {
+            "artifact_name": get_func_name(func),
+            "expected_type": str(expected_signature),
+            "actual_type": str(func_signature),
+        }
+        message = (
+            f"Function '{get_func_name(func)}' signature validation failed:\n"
+            + "\n".join(f"  • {error}" for error in errors)
         )
+        raise ConformanceError(message, suggestions, context)
 
     return func
 
@@ -369,7 +666,7 @@ def validate_function_signature(
 def validate_function_parameters(
     func: Callable[P, R],
     /,
-    expected_type: TypeAlias,  # Type[Callable[P, R]],
+    expected_type: TypeAlias,
     coerce_to_type: bool = False,
 ) -> Callable[P, R]:
     """
@@ -389,40 +686,80 @@ def validate_function_parameters(
     Raises:
         ConformanceError: If the function parameters or return type do not match.
     """
-    # Coercion is not supported.
     assert not coerce_to_type, "Coercion is not supported"
 
-    func_signature = inspect.signature(func)
-    # Extract expected argument types and return type from the expected callable.
-    expected_args, expected_return = get_args(expected_type)
-
-    # Check that the number of parameters is correct.
-    if len(func_signature.parameters) != len(expected_args):
-        raise ConformanceError(
-            f"Function {func.__name__} "
-            f"has {len(func_signature.parameters)} parameters, "
-            f"expected {len(expected_args)}."
+    try:
+        func_signature = inspect.signature(func)
+        expected_args, expected_return = get_args(expected_type)
+    except Exception as e:
+        suggestions = ["Check that the expected type is a valid Callable type"]
+        context = {"artifact_name": get_func_name(func)}
+        raise ValidationError(
+            f"Cannot analyze function type: {e}", suggestions, context
         )
 
-    # Validate each parameter's type.
-    for param, expected_arg_type in zip(
-        func_signature.parameters.values(), expected_args
+    errors = []
+    suggestions = []
+
+    # Check that the number of parameters is correct
+    if len(func_signature.parameters) != len(expected_args):
+        errors.append(
+            f"Parameter count mismatch: expected {len(expected_args)}, got {len(func_signature.parameters)}"
+        )
+        suggestions.append(
+            f"Function should have exactly {len(expected_args)} parameters"
+        )
+
+    # Validate each parameter's type
+    for i, (param, expected_arg_type) in enumerate(
+        zip(func_signature.parameters.values(), expected_args)
     ):
-        if param.annotation != expected_arg_type:
-            raise ConformanceError(
-                f"Parameter {param.name} "
-                f"of function {func.__name__} "
-                f"has type {get_type_name(param.annotation)}, "
-                f"expected {get_type_name(expected_arg_type)}."
+        if (
+            param.annotation != expected_arg_type
+            and param.annotation != inspect.Parameter.empty
+        ):
+            if param.annotation == inspect.Parameter.empty:
+                errors.append(f"Parameter {param.name} missing type annotation")
+                suggestions.append(
+                    f"Add type annotation: {param.name}: {get_type_name(expected_arg_type)}"
+                )
+            else:
+                errors.append(
+                    f"Parameter {param.name} type mismatch: expected {get_type_name(expected_arg_type)}, got {get_type_name(param.annotation)}"
+                )
+                suggestions.append(
+                    f"Change parameter type: {param.name}: {get_type_name(expected_arg_type)}"
+                )
+
+    # Validate the return type
+    if (
+        func_signature.return_annotation != expected_return
+        and func_signature.return_annotation != inspect.Signature.empty
+    ):
+        if func_signature.return_annotation == inspect.Signature.empty:
+            errors.append("Missing return type annotation")
+            suggestions.append(
+                f"Add return annotation: -> {get_type_name(expected_return)}"
+            )
+        else:
+            errors.append(
+                f"Return type mismatch: expected {get_type_name(expected_return)}, got {get_type_name(func_signature.return_annotation)}"
+            )
+            suggestions.append(
+                f"Change return type: -> {get_type_name(expected_return)}"
             )
 
-    # Validate the return type.
-    if func_signature.return_annotation != expected_return:
-        raise ConformanceError(
-            f"Function {func.__name__} "
-            f"has return type {get_type_name(func_signature.return_annotation)}, "
-            f"expected {get_type_name(expected_return)}."
+    if errors:
+        context = {
+            "artifact_name": get_func_name(func),
+            "expected_type": str(expected_type),
+            "actual_type": str(func_signature),
+        }
+        message = (
+            f"Function '{get_func_name(func)}' parameter validation failed:\n"
+            + "\n".join(f"  • {error}" for error in errors)
         )
+        raise ConformanceError(message, suggestions, context)
 
     return func
 
@@ -450,11 +787,33 @@ def validate_instance_hierarchy(instance: Obj, /, expected_type: Type) -> Obj:
         ValidationError: If the instance is not an instance of the expected type.
     """
     if not inspect.isclass(instance.__class__):
-        raise ValidationError(f"{instance} is not a class instance")
-    if not isinstance(instance, expected_type):
-        raise InheritanceError(
-            f"{instance} not instance-of {get_type_name(expected_type)}"
+        suggestions = ["Ensure the object is a proper class instance"]
+        context = {
+            "expected_type": "class instance",
+            "actual_type": type(instance).__name__,
+            "artifact_name": str(instance)[:999],
+        }
+        raise ValidationError(
+            f"{instance} is not a class instance", suggestions, context
         )
+
+    if not isinstance(instance, expected_type):
+        suggestions = [
+            f"Ensure the instance is of type {get_type_name(expected_type)}",
+            f"Check that the class inherits from {get_type_name(expected_type)}",
+            f"Got instance of {get_type_name(instance.__class__)}, expected {get_type_name(expected_type)}",
+        ]
+        context = {
+            "expected_type": get_type_name(expected_type),
+            "actual_type": get_type_name(instance.__class__),
+            "artifact_name": str(instance)[:999],
+        }
+        raise InheritanceError(
+            f"{instance} is not an instance of {get_type_name(expected_type)}",
+            suggestions,
+            context,
+        )
+
     return instance
 
 
@@ -485,43 +844,124 @@ def validate_instance_structure(
     if coerce_to_type:
         raise ValueError("Coercion is not supported")
 
-    # Ensure that obj is indeed an instance of a class.
+    # Ensure that obj is indeed an instance of a class
     if not hasattr(obj, "__class__") or not inspect.isclass(obj.__class__):
-        raise ValidationError(f"{obj} is not a valid instance")
+        suggestions = ["Ensure you're passing a class instance, not a primitive type"]
+        context = {
+            "expected_type": "class instance",
+            "actual_type": type(obj).__name__,
+            "artifact_name": str(obj)[:999],
+        }
+        raise ValidationError(f"{obj} is not a valid instance", suggestions, context)
 
-    # Iterate over attributes in the expected type.
+    missing_attributes = []
+    signature_errors = []
+
+    # Iterate over attributes in the expected type
     for attr_name in dir(expected_type):
         if attr_name.startswith("_"):
             continue
 
-        # Check that the attribute is present on the instance.
+        # Check that the attribute is present on the instance
         if not hasattr(obj, attr_name):
-            raise ConformanceError(
-                f"Instance of {get_type_name(obj.__class__)} does not implement attribute '{attr_name}'"
-            )
+            missing_attributes.append(attr_name)
+            continue
 
         expected_attr = getattr(expected_type, attr_name)
         obj_attr = getattr(obj, attr_name)
 
-        # If both expected and object attributes are callable, validate their signatures.
-        if callable(expected_attr) and not callable(obj_attr):
-            raise ConformanceError(
-                f"Attribute '{attr_name}' in {get_type_name(obj.__class__)} is not callable"
-            )
-        elif not callable(expected_attr) and callable(obj_attr):
-            raise ConformanceError(
-                f"Attribute '{attr_name}' in {get_type_name(obj.__class__)} is not a method"
-            )
-        else:
-            # if obj_attr is a method, unwrap it to get the underlying function.
-            if inspect.ismethod(obj_attr):
-                obj_attr = obj_attr.__func__
+        # If both expected and object attributes are callable, validate their signatures
+        if callable(expected_attr):
+            if not callable(obj_attr):
+                signature_errors.append(f"Attribute '{attr_name}' should be callable")
+                continue
 
-            # if expected_attr is a method, unwrap it to get the underlying function.
-            if inspect.ismethod(expected_attr):
-                expected_attr = expected_attr.__func__
+            try:
+                # if obj_attr is a method, unwrap it to get the underlying function
+                if inspect.ismethod(obj_attr):
+                    obj_attr = obj_attr.__func__
 
-            # Validate that the function signatures match.
-            validate_function_signature(obj_attr, expected_attr)
+                # if expected_attr is a method, unwrap it to get the underlying function
+                if inspect.ismethod(expected_attr):
+                    expected_attr = expected_attr.__func__
+
+                # Validate that the function signatures match
+                validate_function_signature(obj_attr, expected_attr)
+            except ConformanceError as e:
+                signature_errors.append(f"Method '{attr_name}': {e.message}")
+
+    # Build comprehensive error message
+    if missing_attributes or signature_errors:
+        error_parts = []
+        suggestions = []
+
+        if missing_attributes:
+            error_parts.append(f"Missing attributes: {', '.join(missing_attributes)}")
+            suggestions.extend(
+                [f"Add attribute/method: {attr}" for attr in missing_attributes]
+            )
+
+        if signature_errors:
+            error_parts.append("Signature mismatches:")
+            error_parts.extend(f"  {error}" for error in signature_errors)
+            suggestions.append("Check method signatures match the expected protocol")
+
+        context = {
+            "expected_type": get_type_name(expected_type),
+            "actual_type": get_type_name(obj.__class__),
+            "artifact_name": str(obj)[:999],
+        }
+
+        message = (
+            f"Instance of {get_type_name(obj.__class__)} does not conform to protocol {get_type_name(expected_type)}:\n"
+            + "\n".join(error_parts)
+        )
+        raise ConformanceError(message, suggestions, context)
 
     return obj
+
+
+# -----------------------------------------------------------------------------
+# Cache Management Functions
+# -----------------------------------------------------------------------------
+
+
+def clear_validation_cache() -> int:
+    """Clear the validation cache and return number of entries cleared."""
+    with _validation_cache._lock:
+        count = len(_validation_cache._cache)
+        _validation_cache._cache.clear()
+        return count
+
+
+def get_cache_stats() -> Dict[str, Any]:
+    """Get validation cache statistics."""
+    with _validation_cache._lock:
+        total_entries = len(_validation_cache._cache)
+        expired_entries = 0
+        current_time = time.time()
+
+        for _, (_, timestamp, _) in _validation_cache._cache.items():
+            if current_time - timestamp >= _validation_cache.ttl:
+                expired_entries += 1
+
+        return {
+            "total_entries": total_entries,
+            "expired_entries": expired_entries,
+            "active_entries": total_entries - expired_entries,
+            "max_size": _validation_cache.max_size,
+            "ttl_seconds": _validation_cache.ttl,
+        }
+
+
+def configure_validation_cache(
+    max_size: Optional[int] = None, ttl_seconds: Optional[float] = None
+) -> None:
+    """Configure validation cache settings."""
+    global _validation_cache
+
+    if max_size is not None:
+        _validation_cache.max_size = max_size
+
+    if ttl_seconds is not None:
+        _validation_cache.ttl = ttl_seconds

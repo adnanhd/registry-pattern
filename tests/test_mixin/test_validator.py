@@ -120,12 +120,28 @@ def test_validate_class_structure():
     # Non-compliant class should fail due to missing method
     with pytest.raises(ConformanceError) as excinfo:
         validate_class_structure(NonCompliantClass, TestProtocol)
-    assert "does not implement method" in str(excinfo.value)
+    expected_error_string = """Class NonCompliantClass does not conform to protocol TestProtocol:
+Missing methods: method2
+  Expected: TestProtocol
+  Actual: NonCompliantClass
+  Artifact: NonCompliantClass
+  Suggestions:
+    • Add method: def method2(self, y: float, z: bool) -> list: ..."""
+    assert expected_error_string == str(excinfo.value)
 
     # Class with wrong signature should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_class_structure(WrongSignatureClass, TestProtocol)
-    assert "does not match type annotation" in str(excinfo.value)
+    expected_error_string = """Class WrongSignatureClass does not conform to protocol TestProtocol:
+Signature mismatches:
+  method1: Function 'method1' signature validation failed:
+  • Parameter 'x' type mismatch: expected int, got float
+  Expected: TestProtocol
+  Actual: WrongSignatureClass
+  Artifact: WrongSignatureClass
+  Suggestions:
+    • Check parameter types and return type annotations"""
+    assert expected_error_string == str(excinfo.value)
 
 
 def test_validate_class_hierarchy():
@@ -136,7 +152,15 @@ def test_validate_class_hierarchy():
     # Non-derived class should fail
     with pytest.raises(InheritanceError) as excinfo:
         validate_class_hierarchy(NonDerivedClass, AbstractBaseClass)
-    assert "not subclass-of" in str(excinfo.value)
+    expected_error_string = """NonDerivedClass is not a subclass of AbstractBaseClass
+  Expected: AbstractBaseClass
+  Actual: NonDerivedClass
+  Artifact: NonDerivedClass
+  Suggestions:
+    • Make your class inherit from AbstractBaseClass
+    • Change class definition to: class NonDerivedClass(AbstractBaseClass):
+    • Check that you're importing the correct base class"""
+    assert expected_error_string == str(excinfo.value)
 
 
 def test_validate_init():
@@ -195,22 +219,50 @@ def test_validate_function_signature():
     # Function with missing parameter should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_signature(missing_param_func, expected_func)
-    assert "does not match argument count" in str(excinfo.value)
+    expected_error_string = """Function 'missing_param_func' signature validation failed:
+  • Parameter count mismatch: expected 2, got 1
+  Expected: (a: int, b: str) -> bool
+  Actual: (a: int) -> bool
+  Artifact: missing_param_func
+  Suggestions:
+    • Adjust function to have exactly 2 parameters"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with extra parameter should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_signature(extra_param_func, expected_func)
-    assert "does not match argument count" in str(excinfo.value)
+    expected_error_string = """Function 'extra_param_func' signature validation failed:
+  • Parameter count mismatch: expected 2, got 3
+  Expected: (a: int, b: str) -> bool
+  Actual: (a: int, b: str, c: float) -> bool
+  Artifact: extra_param_func
+  Suggestions:
+    • Adjust function to have exactly 2 parameters"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with wrong parameter type should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_signature(wrong_param_type_func, expected_func)
-    assert "does not match type annotation" in str(excinfo.value)
+    expected_error_string = """Function 'wrong_param_type_func' signature validation failed:
+  • Parameter 'a' type mismatch: expected int, got float
+  Expected: (a: int, b: str) -> bool
+  Actual: (a: float, b: str) -> bool
+  Artifact: wrong_param_type_func
+  Suggestions:
+    • Change parameter type to: a: int"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with wrong return type should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_signature(wrong_return_type_func, expected_func)
-    assert "Return type" in str(excinfo.value)
+    expected_error_string = """Function 'wrong_return_type_func' signature validation failed:
+  • Return type mismatch: expected bool, got str
+  Expected: (a: int, b: str) -> bool
+  Actual: (a: int, b: str) -> str
+  Artifact: wrong_return_type_func
+  Suggestions:
+    • Change return type to: -> bool"""
+    assert expected_error_string == str(excinfo.value)
 
 
 def test_validate_function_parameters():
@@ -226,24 +278,50 @@ def test_validate_function_parameters():
     # Function with missing parameter should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_parameters(missing_param_func, ExpectedType)
-    assert "has 1 parameters, expected 2" in str(excinfo.value)
+    expected_error_string = """Function 'missing_param_func' parameter validation failed:
+  • Parameter count mismatch: expected 2, got 1
+  Expected: typing.Callable[[int, str], bool]
+  Actual: (a: int) -> bool
+  Artifact: missing_param_func
+  Suggestions:
+    • Function should have exactly 2 parameters"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with extra parameter should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_parameters(extra_param_func, ExpectedType)
-    assert "has 3 parameters, expected 2" in str(excinfo.value)
+    expected_error_string = """Function 'extra_param_func' parameter validation failed:
+  • Parameter count mismatch: expected 2, got 3
+  Expected: typing.Callable[[int, str], bool]
+  Actual: (a: int, b: str, c: float) -> bool
+  Artifact: extra_param_func
+  Suggestions:
+    • Function should have exactly 2 parameters"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with wrong parameter type should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_parameters(wrong_param_type_func, ExpectedType)
-    assert "has type float, expected int" in str(excinfo.value)
+    expected_error_string = """Function 'wrong_param_type_func' parameter validation failed:
+  • Parameter a type mismatch: expected int, got float
+  Expected: typing.Callable[[int, str], bool]
+  Actual: (a: float, b: str) -> bool
+  Artifact: wrong_param_type_func
+  Suggestions:
+    • Change parameter type: a: int"""
+    assert expected_error_string == str(excinfo.value)
 
     # Function with wrong return type should fail
     with pytest.raises(ConformanceError) as excinfo:
         validate_function_parameters(wrong_return_type_func, ExpectedType)
-    assert "has return type str, expected bool" in str(
-        excinfo.value
-    )
+    expected_error_string = """Function 'wrong_return_type_func' parameter validation failed:
+  • Return type mismatch: expected bool, got str
+  Expected: typing.Callable[[int, str], bool]
+  Actual: (a: int, b: str) -> str
+  Artifact: wrong_return_type_func
+  Suggestions:
+    • Change return type: -> bool"""
+    assert expected_error_string == str(excinfo.value)
 
 
 # -------------------------------------------------------------------
@@ -264,7 +342,15 @@ def test_validate_instance_hierarchy():
     non_derived_instance = NonDerivedClass()
     with pytest.raises(ValidationError) as excinfo:
         validate_instance_hierarchy(non_derived_instance, AbstractBaseClass)
-    assert "not instance-of" in str(excinfo.value)
+    expected_error_string = f"""{non_derived_instance} is not an instance of AbstractBaseClass
+  Expected: AbstractBaseClass
+  Actual: NonDerivedClass
+  Artifact: {non_derived_instance}
+  Suggestions:
+    • Ensure the instance is of type AbstractBaseClass
+    • Check that the class inherits from AbstractBaseClass
+    • Got instance of NonDerivedClass, expected AbstractBaseClass"""
+    assert expected_error_string == str(excinfo.value)
 
     # Non-instance should fail
     with pytest.raises(ValidationError):
@@ -284,13 +370,29 @@ def test_validate_instance_structure():
     non_compliant_instance = NonCompliantClass()
     with pytest.raises(ConformanceError) as excinfo:
         validate_instance_structure(non_compliant_instance, TestProtocol)
-    assert "does not implement attribute" in str(excinfo.value)
+    expected_error_string = f"""Instance of NonCompliantClass does not conform to protocol TestProtocol:
+Missing attributes: method2
+  Expected: TestProtocol
+  Actual: NonCompliantClass
+  Artifact: {non_compliant_instance}
+  Suggestions:
+    • Add attribute/method: method2"""
+    assert expected_error_string == str(excinfo.value)
 
     # Instance with wrong signature should fail
     wrong_signature_instance = WrongSignatureClass()
     with pytest.raises(ConformanceError) as excinfo:
         validate_instance_structure(wrong_signature_instance, TestProtocol)
-    assert "does not match type annotation" in str(excinfo.value)
+    expected_error_string = f"""Instance of WrongSignatureClass does not conform to protocol TestProtocol:
+Signature mismatches:
+  Method 'method1': Function 'method1' signature validation failed:
+  • Parameter 'x' type mismatch: expected int, got float
+  Expected: TestProtocol
+  Actual: WrongSignatureClass
+  Artifact: {wrong_signature_instance}
+  Suggestions:
+    • Check method signatures match the expected protocol"""
+    assert expected_error_string == str(excinfo.value)
 
     # Non-instance should fail
     with pytest.raises(ValidationError):

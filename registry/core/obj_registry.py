@@ -1,10 +1,9 @@
-r"""Baseclass for registering objects.
+r"""Enhanced ObjectRegistry with improved validation system.
 
 This module defines the ObjectRegistry class, a base class for registering
-object instances. It uses a standard dictionary as the internal repository
-and handles weak references in the seal and probe methods. The registry supports
-runtime validations of instance inheritance and structure via configurable
-validators.
+object instances with comprehensive validation, rich error context, and
+performance optimizations. It uses weak references and handles validation
+failures with detailed suggestions.
 
 Doxygen Dot Graph of Inheritance:
 -----------------------------------
@@ -26,12 +25,12 @@ from typing_compat import Any, Dict, Generic, Hashable, Type, TypeVar
 from registry.mixin.accessor import RegistryError
 
 from ..mixin import MutableRegistryValidatorMixin
-from ._dev_utils import get_protocol  # _dev_utils
-from ._validator import InheritanceError  # _validator
+from ._dev_utils import get_protocol
 from ._validator import (
-    get_mem_addr,
+    InheritanceError,
     ConformanceError,
     ValidationError,
+    get_mem_addr,
     validate_instance_hierarchy,
     validate_instance_structure,
 )
@@ -43,16 +42,18 @@ logger = logging.getLogger(__name__)
 
 class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic[ObjT]):
     """
-    Base class for registering instances.
+    Enhanced registry for registering instances with comprehensive validation.
 
-    This registry stores instances in a standard dictionary with weak references
-    to prevent memory leaks. It supports runtime validations to ensure that
-    registered instances conform to the expected inheritance and structural requirements.
+    This registry stores instances with weak references to prevent memory leaks
+    and provides rich validation feedback. It supports runtime validations to
+    ensure that registered instances conform to the expected inheritance and
+    structural requirements.
 
     Attributes:
         _repository (Dict[Hashable, Any]): Dictionary for storing registered instances with weak references.
         _strict (bool): Whether to enforce instance structure validation.
         _abstract (bool): Whether to enforce instance hierarchy validation.
+        _strict_weakref (bool): Whether to enforce weak reference validation.
     """
 
     _repository: Dict[Hashable, Any]
@@ -71,14 +72,14 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         cls, strict: bool = False, abstract: bool = False, strict_weakref: bool = False
     ) -> None:
         """
-        Initialize a subclass of ObjectRegistry.
+        Initialize a subclass of ObjectRegistry with enhanced validation configuration.
 
         This method initializes the registry repository and sets the validation
         flags based on the provided parameters.
 
         Parameters:
-            strict (bool): If True, enforce structure validation.
-            abstract (bool): If True, enforce inheritance validation.
+            strict (bool): If True, enforce structure validation with detailed feedback.
+            abstract (bool): If True, enforce inheritance validation with helpful suggestions.
             strict_weakref (bool): If True, enforce weak reference validation.
         """
         super().__init_subclass__()
@@ -92,7 +93,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
     @classmethod
     def _intern_artifact(cls, value: Any) -> ObjT:
         """
-        Validate an instance before registration.
+        Validate an instance before registration with enhanced error reporting.
 
         This method applies both inheritance and structure (conformance) checks to
         the given instance based on the class's validation flags. It then wraps
@@ -102,37 +103,117 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
             value (Any): The instance to validate.
 
         Returns:
-            ObjT: The validated instance.
+            ObjT: The validated instance (wrapped in weakref for storage).
 
         Raises:
             InheritanceError: If the instance does not meet the inheritance requirements.
             ConformanceError: If the instance does not conform to the expected structure.
+            ValidationError: If weak reference creation fails in strict mode.
         """
         # Apply inheritance checking if abstract mode is enabled
         if cls._abstract:
-            value = validate_instance_hierarchy(value, expected_type=cls)
+            try:
+                value = validate_instance_hierarchy(value, expected_type=cls)
+            except InheritanceError as e:
+                # Add registry-specific context
+                if hasattr(e, "context"):
+                    e.context.update(
+                        {
+                            "registry_name": cls.__name__,
+                            "registry_mode": "abstract",
+                            "registry_type": "ObjectRegistry",
+                            "base_class": cls.__name__,
+                        }
+                    )
+                if hasattr(e, "suggestions"):
+                    e.suggestions.extend(
+                        [
+                            f"Register instances that inherit from or are compatible with {cls.__name__}",
+                            f"Check that the instance's class has proper inheritance",
+                            "Verify that you're registering the correct type of object",
+                        ]
+                    )
+                raise
 
         # Apply conformance checking if strict mode is enabled
         if cls._strict:
-            value = validate_instance_structure(value, expected_type=get_protocol(cls))
+            protocol = get_protocol(cls)
+            try:
+                value = validate_instance_structure(value, expected_type=protocol)
+            except ConformanceError as e:
+                # Add registry-specific context
+                if hasattr(e, "context"):
+                    e.context.update(
+                        {
+                            "registry_name": cls.__name__,
+                            "registry_mode": "strict",
+                            "registry_type": "ObjectRegistry",
+                            "required_protocol": (
+                                str(protocol) if protocol else "unknown"
+                            ),
+                        }
+                    )
+                if hasattr(e, "suggestions"):
+                    e.suggestions.extend(
+                        [
+                            f"Use cls.validate_artifact(your_instance) to check conformance before registration",
+                            f"Registry {cls.__name__} requires strict protocol conformance",
+                            "Ensure the instance implements all required methods",
+                        ]
+                    )
+                raise
+            except Exception as e:
+                # Convert unexpected errors to ValidationError
+                suggestions = [
+                    "Check that the instance implements the required protocol",
+                    "Verify that all required methods are present and have correct signatures",
+                    f"Registry {cls.__name__} in strict mode requires protocol conformance",
+                ]
+                context = {
+                    "registry_name": cls.__name__,
+                    "registry_mode": "strict",
+                    "operation": "structure_validation",
+                    "artifact_name": str(value)[:999],
+                }
+                enhanced_error = ValidationError(
+                    f"Instance structure validation failed: {e}", suggestions, context
+                )
+                raise enhanced_error from e
 
-        # Return the actual instance (not wrapped in weakref)
-        # The wrapping happens explicitly when storing in the repository
+        # Try to create weak reference
         try:
-            value = weakref.ref(value)
-        except TypeError:
+            weak_value = weakref.ref(value)
+        except TypeError as e:
             if cls._strict_weakref:
-                raise RegistryError("ObjectRegistry only supports weak references")
-        return value
+                suggestions = [
+                    "Registry only supports objects that can be weakly referenced",
+                    "Avoid registering primitive types (int, str, etc.) in strict weak reference mode",
+                    "Consider using strong reference mode by setting strict_weakref=False",
+                ]
+                context = {
+                    "registry_name": cls.__name__,
+                    "operation": "weak_reference_creation",
+                    "artifact_name": str(value)[:999],
+                    "artifact_type": type(value).__name__,
+                }
+                enhanced_error = ValidationError(
+                    f"Cannot create weak reference: {e}", suggestions, context
+                )
+                raise enhanced_error from e
+            else:
+                # In non-strict mode, return the value directly
+                return value
+
+        return weak_value
 
     @classmethod
     def _extern_artifact(cls, value: Any) -> ObjT:
         """
-        Validate an instance when retrieving from the registry.
+        Validate an instance when retrieving from the registry with enhanced error handling.
 
         This method resolves the weak reference to get the actual object.
         If the reference is dead (object has been garbage collected),
-        it raises a KeyError.
+        it raises a RegistryError for consistency with access operations.
 
         Parameters:
             value (Any): The weak reference to resolve.
@@ -141,7 +222,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
             ObjT: The actual object.
 
         Raises:
-            KeyError: If the weak reference is dead (object has been collected).
+            RegistryError: If the weak reference is dead or resolution fails (with rich context).
         """
         # Check if the value is a weak reference
         if isinstance(value, weakref.ref):
@@ -149,8 +230,22 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
             actual_value = value()
             if actual_value is None:
                 # The referenced object has been garbage collected
+                suggestions = [
+                    "The referenced object has been garbage collected",
+                    "Keep a strong reference to prevent garbage collection",
+                    "Use cleanup() method to remove dead references",
+                    "Consider using strong reference mode if objects are short-lived",
+                ]
+                context = {
+                    "operation": "weak_reference_resolution",
+                    "registry_name": cls.__name__,
+                    "registry_type": "ObjectRegistry",
+                    "weakref_address": str(value),
+                }
                 raise RegistryError(
-                    "Weak reference is dead (object has been collected)"
+                    "Weak reference is dead (object has been collected)",
+                    suggestions,
+                    context,
                 )
             return actual_value
         return value
@@ -189,6 +284,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
 
     @classmethod
     def _identifier_of(cls, item: Type[ObjT]) -> Hashable:
+        """Generate identifier from memory address."""
         return get_mem_addr(item)
 
     @classmethod
@@ -198,7 +294,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
 
         This function dynamically creates a new metaclass that wraps the __call__
         method of the provided class. Each time an instance is created, it is
-        automatically registered in the registry.
+        automatically registered in the registry with enhanced error handling.
 
         Parameters:
             supercls (Type[ObjT]): The class to track.
@@ -209,30 +305,69 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
         """
         meta: Type[Any] = type(supercls)
 
-        class newmcs(meta):
+        class EnhancedRegistrationMeta(meta):
             def __call__(self, *args: Any, **kwds: Any) -> ObjT:
                 # Create a new instance using the original __call__.
                 obj = super().__call__(*args, **kwds)
                 try:
                     # Register the new instance with itself as the key
                     obj = cls.register_artifact(obj, obj)
+                except (ValidationError, ConformanceError, InheritanceError) as e:
+                    # Add automatic registration context
+                    if hasattr(e, "context"):
+                        e.context.update(
+                            {
+                                "operation": "automatic_instance_registration",
+                                "tracked_class": supercls.__name__,
+                                "instance_args": str(args)[:100] if args else "none",
+                                "instance_kwargs": str(kwds)[:100] if kwds else "none",
+                            }
+                        )
+                    logger.debug(
+                        f"Automatic registration failed for {supercls.__name__} instance: {e}"
+                    )
                 except Exception as e:
-                    logger.debug(f"Registration error: {e}")
+                    enhanced_error = ValidationError(
+                        f"Automatic registration error for {supercls.__name__} instance: {e}",
+                        suggestions=[
+                            "Check that the instance meets registry requirements",
+                            "Verify registry validation settings",
+                            "Consider disabling automatic registration if instances don't conform",
+                        ],
+                        context={
+                            "operation": "automatic_instance_registration",
+                            "tracked_class": supercls.__name__,
+                            "registry_name": cls.__name__,
+                        },
+                    )
+                    logger.debug(str(enhanced_error))
                 return obj
 
-        # Copy meta attributes from the original metaclass.
-        newmcs.__name__ = meta.__name__
-        newmcs.__qualname__ = meta.__qualname__
-        newmcs.__module__ = meta.__module__
-        newmcs.__doc__ = meta.__doc__
+        # Copy meta attributes from the original metaclass
+        EnhancedRegistrationMeta.__name__ = meta.__name__
+        EnhancedRegistrationMeta.__qualname__ = meta.__qualname__
+        EnhancedRegistrationMeta.__module__ = meta.__module__
+        EnhancedRegistrationMeta.__doc__ = meta.__doc__
 
-        # Create and return the new tracked class.
-        return newmcs(supercls.__name__, (supercls,), {})
+        # Create and return the new tracked class
+        return EnhancedRegistrationMeta(supercls.__name__, (supercls,), {})
 
     @classmethod
     def cleanup(cls) -> int:
         """
-        Clean up dead references in the repository.
+        Clean up dead references in the repository with enhanced reporting.
+
+        This method removes all entries that contain dead weak references
+        (references to objects that have been garbage collected).
+
+        Returns:
+            int: The number of dead references removed.
+        """
+
+    @classmethod
+    def cleanup(cls) -> int:
+        """
+        Clean up dead references in the repository with enhanced reporting.
 
         This method removes all entries that contain dead weak references
         (references to objects that have been garbage collected).
@@ -241,11 +376,265 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
             int: The number of dead references removed.
         """
         dead_refs = []
-        for key, value in cls._repository.items():
-            if isinstance(value, weakref.ref) and value() is None:
-                dead_refs.append(key)
+        cleanup_errors = []
 
+        for key, value in cls._repository.items():
+            try:
+                if isinstance(value, weakref.ref) and value() is None:
+                    dead_refs.append(key)
+            except Exception as e:
+                cleanup_errors.append({"key": str(key), "error": str(e)})
+
+        # Remove dead references
         for key in dead_refs:
-            del cls._repository[key]
+            try:
+                del cls._repository[key]
+            except Exception as e:
+                cleanup_errors.append(
+                    {"key": str(key), "error": f"Failed to remove dead reference: {e}"}
+                )
+
+        # Log cleanup results
+        if dead_refs:
+            logger.debug(
+                f"Cleaned up {len(dead_refs)} dead references from {cls.__name__}"
+            )
+
+        if cleanup_errors:
+            logger.warning(
+                f"Encountered {len(cleanup_errors)} errors during cleanup in {cls.__name__}"
+            )
 
         return len(dead_refs)
+
+    @classmethod
+    def diagnose_instance_failure(cls, failed_instance: Any) -> dict:
+        """
+        Diagnose why an instance failed to register and provide detailed suggestions.
+
+        Parameters:
+            failed_instance: The instance that failed to register.
+
+        Returns:
+            Dictionary containing diagnostic information and suggestions.
+        """
+        diagnosis = {
+            "instance_type": type(failed_instance).__name__,
+            "instance_str": str(failed_instance)[:100],
+            "is_weakref_compatible": True,
+            "validation_errors": [],
+            "suggestions": [],
+            "registry_config": {
+                "strict_mode": cls._strict,
+                "abstract_mode": cls._abstract,
+                "strict_weakref": cls._strict_weakref,
+                "registry_name": cls.__name__,
+            },
+        }
+
+        # Test weak reference compatibility
+        try:
+            weakref.ref(failed_instance)
+        except TypeError as e:
+            diagnosis["is_weakref_compatible"] = False
+            diagnosis["validation_errors"].append(
+                {
+                    "type": "weakref_compatibility",
+                    "error": str(e),
+                    "suggestions": [
+                        "Object cannot be weakly referenced",
+                        "Consider using strong reference mode (strict_weakref=False)",
+                        "Avoid registering primitive types in weak reference mode",
+                    ],
+                }
+            )
+
+        # Test inheritance if in abstract mode
+        if cls._abstract:
+            try:
+                validate_instance_hierarchy(failed_instance, expected_type=cls)
+            except (InheritanceError, ValidationError) as e:
+                diagnosis["validation_errors"].append(
+                    {
+                        "type": "inheritance_validation",
+                        "error": str(e),
+                        "suggestions": getattr(e, "suggestions", []),
+                    }
+                )
+                diagnosis["suggestions"].extend(getattr(e, "suggestions", []))
+
+        # Test protocol conformance if in strict mode
+        if cls._strict:
+            protocol = get_protocol(cls)
+            try:
+                validate_instance_structure(failed_instance, expected_type=protocol)
+            except (ConformanceError, ValidationError) as e:
+                diagnosis["validation_errors"].append(
+                    {
+                        "type": "protocol_validation",
+                        "error": str(e),
+                        "suggestions": getattr(e, "suggestions", []),
+                    }
+                )
+                diagnosis["suggestions"].extend(getattr(e, "suggestions", []))
+
+        # Add general suggestions based on registry configuration
+        if cls._strict and cls._abstract:
+            diagnosis["suggestions"].append(
+                "This registry requires both inheritance and protocol conformance"
+            )
+        elif cls._strict:
+            diagnosis["suggestions"].append(
+                "This registry requires protocol conformance - check method implementations"
+            )
+        elif cls._abstract:
+            diagnosis["suggestions"].append(
+                "This registry requires inheritance - ensure proper class hierarchy"
+            )
+
+        if cls._strict_weakref and not diagnosis["is_weakref_compatible"]:
+            diagnosis["suggestions"].append(
+                "This registry requires weak reference compatibility"
+            )
+
+        diagnosis["suggestions"].append(
+            f"Use {cls.__name__}.validate_artifact(your_instance) to test before registration"
+        )
+
+        return diagnosis
+
+    @classmethod
+    def get_instance_stats(cls) -> dict:
+        """
+        Get statistics about registered instances.
+
+        Returns:
+            Dictionary containing instance statistics and health information.
+        """
+        stats = {
+            "total_instances": len(cls._repository),
+            "alive_instances": 0,
+            "dead_references": 0,
+            "strong_references": 0,
+            "weak_references": 0,
+            "instance_types": {},
+            "health_status": "unknown",
+        }
+
+        type_counts = {}
+
+        for key, value in cls._repository.items():
+            if isinstance(value, weakref.ref):
+                stats["weak_references"] += 1
+                actual_value = value()
+                if actual_value is None:
+                    stats["dead_references"] += 1
+                else:
+                    stats["alive_instances"] += 1
+                    instance_type = type(actual_value).__name__
+                    type_counts[instance_type] = type_counts.get(instance_type, 0) + 1
+            else:
+                stats["strong_references"] += 1
+                stats["alive_instances"] += 1
+                instance_type = type(value).__name__
+                type_counts[instance_type] = type_counts.get(instance_type, 0) + 1
+
+        stats["instance_types"] = type_counts
+
+        # Determine health status
+        if stats["total_instances"] == 0:
+            stats["health_status"] = "empty"
+        elif stats["dead_references"] == 0:
+            stats["health_status"] = "healthy"
+        elif stats["dead_references"] < stats["alive_instances"]:
+            stats["health_status"] = "needs_cleanup"
+        else:
+            stats["health_status"] = "mostly_dead"
+
+        return stats
+
+    @classmethod
+    def validate_instance_batch(cls, instances: dict) -> dict:
+        """
+        Validate multiple instances without registering them.
+
+        Parameters:
+            instances: Dictionary mapping keys to instances.
+
+        Returns:
+            Dictionary containing validation results for each instance.
+        """
+        results = {"valid": [], "invalid": [], "results": {}}
+
+        for key, instance in instances.items():
+            try:
+                cls._intern_artifact(instance)
+                results["valid"].append(key)
+                results["results"][key] = {
+                    "status": "valid",
+                    "instance_type": type(instance).__name__,
+                    "weakref_compatible": True,
+                }
+
+                # Test weak reference compatibility
+                try:
+                    weakref.ref(instance)
+                except TypeError:
+                    results["results"][key]["weakref_compatible"] = False
+
+            except (ValidationError, ConformanceError, InheritanceError) as e:
+                results["invalid"].append(key)
+                results["results"][key] = {
+                    "status": "invalid",
+                    "error": str(e),
+                    "suggestions": getattr(e, "suggestions", []),
+                    "instance_type": type(instance).__name__,
+                }
+            except Exception as e:
+                results["invalid"].append(key)
+                results["results"][key] = {
+                    "status": "error",
+                    "error": f"Unexpected error: {e}",
+                    "suggestions": [
+                        "Check that the object meets registry requirements"
+                    ],
+                    "instance_type": type(instance).__name__,
+                }
+
+        return results
+
+    @classmethod
+    def get_memory_usage_info(cls) -> dict:
+        """
+        Get information about memory usage and weak reference health.
+
+        Returns:
+            Dictionary containing memory usage information.
+        """
+        import sys
+
+        info = {
+            "repository_size": len(cls._repository),
+            "estimated_memory_bytes": sys.getsizeof(cls._repository),
+            "weak_references": 0,
+            "strong_references": 0,
+            "dead_references": 0,
+            "cleanup_recommended": False,
+        }
+
+        for value in cls._repository.values():
+            if isinstance(value, weakref.ref):
+                info["weak_references"] += 1
+                if value() is None:
+                    info["dead_references"] += 1
+                info["estimated_memory_bytes"] += sys.getsizeof(value)
+            else:
+                info["strong_references"] += 1
+                info["estimated_memory_bytes"] += sys.getsizeof(value)
+
+        # Recommend cleanup if more than 10% of references are dead
+        if info["weak_references"] > 0:
+            dead_percentage = info["dead_references"] / info["weak_references"]
+            info["cleanup_recommended"] = dead_percentage > 0.10
+
+        return info

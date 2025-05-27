@@ -5,6 +5,7 @@ import weakref
 import gc
 
 from registry import RegistryError, ConfigRegistry, ConformanceError
+from registry.core._validator import ValidationError
 
 
 # -------------------------------------------------------------------
@@ -79,7 +80,7 @@ class BaseConfigRegistryTest:
         assert validated == config
 
         # Non-dictionary should raise TypeError
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             registry_class.validate_artifact("not a dictionary")
 
 
@@ -220,7 +221,7 @@ class TestCustomConfigRegistry:
         obj = CustomObject("invalid")
         invalid_config = {"missing_name": "value"}
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             registry_class.register_artifact(obj, invalid_config)
 
         # Object should not be registered

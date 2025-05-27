@@ -1,6 +1,7 @@
 import pytest
 from typing import Dict, Any
 
+from registry.core._validator import ValidationError
 from registry.mixin import (
     RegistryError,
     RegistryAccessorMixin,
@@ -208,7 +209,7 @@ class TestImmutableRegistryValidatorMixin:
         assert self.DummyImmutableValidator._extern_identifier(key) == key
 
         # List is not hashable, should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.DummyImmutableValidator._extern_identifier([1, 2, 3])
 
     def test_extern_artifact(self):
@@ -263,7 +264,7 @@ class TestMutableRegistryValidatorMixin:
         assert self.DummyMutableValidator._intern_identifier(key) == key
 
         # List is not hashable, should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.DummyMutableValidator._intern_identifier([1, 2, 3])
 
     def test_intern_artifact(self):
@@ -284,7 +285,7 @@ class TestMutableRegistryValidatorMixin:
         }
 
         # Non-hashable key should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.DummyMutableValidator.register_artifact([1, 2, 3], 400)
 
         # Duplicate key should be rejected
@@ -304,7 +305,7 @@ class TestMutableRegistryValidatorMixin:
             self.DummyMutableValidator.unregister_artifact("z")
 
         # Non-hashable key should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.DummyMutableValidator.unregister_artifact([1, 2, 3])
 
     def test_clear_artifacts(self):
@@ -390,13 +391,13 @@ class TestCustomValidators:
         assert self.CustomValidator._get_mapping() == {"valid": 42}
 
         # Invalid key should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.CustomValidator.register_artifact(42, 42)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             self.CustomValidator.register_artifact("", 42)
 
         # Invalid value should be rejected
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             self.CustomValidator.register_artifact("another", "not an int")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             self.CustomValidator.register_artifact("another", 0)

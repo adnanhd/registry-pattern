@@ -1,14 +1,12 @@
-r"""Registry Pattern Module
-=======================
+r"""Enhanced Registry Accessor Module with Rich Error Context
+========================================================
 
 This module provides base classes for implementing a registry pattern,
-allowing the registration, lookup, and management of classes or functions.
+allowing the registration, lookup, and management of classes or functions
+with enhanced error reporting and rich context information.
 
 The main classes are:
- - BaseRegistry: A read-only registry for managing registered items.
- - BaseMutableRegistry: An extension that allows adding and removing items.
- - Registry: Provides dictionary-like read-only access.
- - MutableRegistry: A mutable registry supporting set and delete operations.
+ - RegistryAccessorMixin: A read-only registry for managing registered items with enhanced errors.
 
 Doxygen Dot Graph of Inheritance:
 -----------------------------------
@@ -16,10 +14,7 @@ Doxygen Dot Graph of Inheritance:
 digraph RegistryPattern {
     rankdir=LR;
     node [shape=rectangle];
-    "BaseRegistry" -> "Registry";
-    "BaseRegistry" -> "BaseMutableRegistry";
-    "BaseMutableRegistry" -> "MutableRegistry";
-    "Registry" -> "MutableRegistry";
+    "RegistryAccessorMixin" -> "Enhanced Operations";
 }
 \enddot
 """
@@ -34,7 +29,13 @@ from typing_compat import (
     MutableMapping,
     TypeVar,
     Union,
+    Optional,
+    List,
+    Any,
 )
+
+# Global imports - never import in except blocks
+from registry.core._validator import ValidationError, get_type_name
 
 __all__ = [
     "RegistryError",
@@ -42,12 +43,39 @@ __all__ = [
 ]
 
 # -----------------------------------------------------------------------------
-# Exception Definitions
+# Enhanced Exception Definition
 # -----------------------------------------------------------------------------
 
+if ValidationError:
 
-class RegistryError(KeyError):
-    """Exception raised for errors during mapping operations."""
+    class RegistryError(ValidationError, KeyError):
+        """Enhanced exception raised for errors during mapping operations with rich context."""
+
+        def __init__(
+            self,
+            message: str,
+            suggestions: Optional[List[str]] = None,
+            context: Optional[Dict[str, Any]] = None,
+        ):
+            # Initialize ValidationError with rich context (this handles enhanced message formatting)
+            ValidationError.__init__(self, message, suggestions, context)
+            # Initialize KeyError with the basic message for backward compatibility
+            KeyError.__init__(self, message)
+
+else:
+    # Fallback to simple RegistryError if ValidationError not available
+    class RegistryError(KeyError):
+        """Simple registry error for backward compatibility."""
+
+        def __init__(
+            self,
+            message: str,
+            suggestions: Optional[List[str]] = None,
+            context: Optional[Dict[str, Any]] = None,
+        ):
+            super().__init__(message)
+            self.suggestions = suggestions or []
+            self.context = context or {}
 
 
 # -----------------------------------------------------------------------------
@@ -57,11 +85,11 @@ class RegistryError(KeyError):
 # K is a type variable for keys that must be hashable.
 K = TypeVar("K", bound=Hashable)
 # T is a type variable for the registered item.
-T = TypeVar("T")  # You may later bind this to Stringable or any other type if needed.
+T = TypeVar("T")
 
 
 # -----------------------------------------------------------------------------
-# Base Mixin for Accessing Registry Items
+# Enhanced Base Mixin for Accessing Registry Items
 # -----------------------------------------------------------------------------
 
 
@@ -102,22 +130,22 @@ class RegistryAccessorMixin(Generic[K, T]):
         return iter(cls._get_mapping())
 
     # -----------------------------------------------------------------------------
-    # Getter Functions for Registry Contents
+    # Getter Functions for Registry Contents with Enhanced Error Handling
     # -----------------------------------------------------------------------------
 
     @classmethod
     def _get_artifact(cls, key: K) -> T:
         """
-        Get an artifact from the registry.
+        Get an artifact from the registry with enhanced error context.
 
         Parameters:
-            artifact (K): The key of the artifact to retrieve.
+            key (K): The key of the artifact to retrieve.
 
         Returns:
             T: The artifact associated with the key.
 
         Raises:
-            RegistryError: If the key is not found in the registry.
+            RegistryError: If the key is not found in the registry (with rich context).
         """
         return cls._assert_presence(key)[key]
 
@@ -140,7 +168,7 @@ class RegistryAccessorMixin(Generic[K, T]):
         Check if an artifact exists in the registry.
 
         Parameters:
-            item (K): The key of the item to check.
+            item (T): The artifact to check.
 
         Returns:
             bool: True if the item exists, False otherwise.
@@ -148,22 +176,43 @@ class RegistryAccessorMixin(Generic[K, T]):
         return item in cls._get_mapping().values()
 
     # -----------------------------------------------------------------------------
-    # Helper Functions for Error Handling
+    # Helper Functions for Error Handling with Rich Context
     # -----------------------------------------------------------------------------
 
     @classmethod
     def _assert_presence(cls, key: K) -> Union[Dict[K, T], MutableMapping[K, T]]:
         """
-        Raise an error indicating that a given key is not found in the mapping.
+        Raise an enhanced error if a given key is not found in the mapping.
 
         Parameters:
             key (K): The key that was not found.
         Returns:
-            Union[Dict[K, T], MutableRegistry[K, T]]: The mapping.
+            Union[Dict[K, T], MutableMapping[K, T]]: The mapping.
         Raises:
-            RegistryError: If the key is not found in the mapping.
+            RegistryError: If the key is not found in the mapping (with rich context).
         """
         mapping = cls._get_mapping()
         if key not in mapping:
-            raise RegistryError(f"Key '{key}' is not found in the mapping")
+            suggestions = [
+                f"Key '{key}' not found in {getattr(cls, '__name__', 'registry')}",
+                "Check that the key was registered correctly",
+                "Use _has_identifier() to verify key existence",
+                f"Registry contains {len(mapping)} items",
+            ]
+            context = {
+                "operation": "assert_presence",
+                "registry_name": getattr(cls, "__name__", "Unknown"),
+                "registry_type": get_type_name(cls),
+                "key": str(key)[:999],
+                "key_type": type(key).__name__,
+                "registry_size": len(mapping),
+                "available_keys": (
+                    list(mapping.keys())
+                    if len(mapping) <= 10
+                    else f"{list(mapping.keys())[:10]}... ({len(mapping)} total)"
+                ),
+            }
+            raise RegistryError(
+                f"Key '{key}' is not found in the mapping", suggestions, context
+            )
         return mapping
