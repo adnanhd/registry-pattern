@@ -300,7 +300,7 @@ def log_debug(func: Callable) -> Callable:
                         "artifact_name": (
                             get_type_name(args[0])
                             if hasattr(args[0], "__name__")
-                            else str(args[0])[:999]
+                            else str(args[0])
                         ),
                     }
                     raise ValidationError(
@@ -341,7 +341,7 @@ def log_debug(func: Callable) -> Callable:
                 "artifact_name": (
                     get_type_name(args[0])
                     if args and hasattr(args[0], "__name__")
-                    else str(args[0])[:999] if args else "unknown"
+                    else str(args[0]) if args else "unknown"
                 ),
             }
 
@@ -392,7 +392,7 @@ def validate_class(subcls: Any) -> Type:
         context = {
             "expected_type": "class",
             "actual_type": type(subcls).__name__,
-            "artifact_name": str(subcls)[:999],
+            "artifact_name": str(subcls),
         }
         raise ValidationError(f"{subcls} is not a class", suggestions, context)
     return subcls
@@ -556,7 +556,7 @@ def validate_function(func: Callable) -> Callable:
         "expected_type": "function",
         "actual_type": type(func).__name__,
         "artifact_name": (
-            get_func_name(func) if hasattr(func, "__name__") else str(func)[:999]
+            get_func_name(func) if hasattr(func, "__name__") else str(func)
         ),
     }
     raise ValidationError(f"{func} is not a function", suggestions, context)
@@ -791,7 +791,7 @@ def validate_instance_hierarchy(instance: Obj, /, expected_type: Type) -> Obj:
         context = {
             "expected_type": "class instance",
             "actual_type": type(instance).__name__,
-            "artifact_name": str(instance)[:999],
+            "artifact_name": str(instance),
         }
         raise ValidationError(
             f"{instance} is not a class instance", suggestions, context
@@ -806,7 +806,7 @@ def validate_instance_hierarchy(instance: Obj, /, expected_type: Type) -> Obj:
         context = {
             "expected_type": get_type_name(expected_type),
             "actual_type": get_type_name(instance.__class__),
-            "artifact_name": str(instance)[:999],
+            "artifact_name": str(instance),
         }
         raise InheritanceError(
             f"{instance} is not an instance of {get_type_name(expected_type)}",
@@ -850,7 +850,7 @@ def validate_instance_structure(
         context = {
             "expected_type": "class instance",
             "actual_type": type(obj).__name__,
-            "artifact_name": str(obj)[:999],
+            "artifact_name": str(obj),
         }
         raise ValidationError(f"{obj} is not a valid instance", suggestions, context)
 
@@ -909,7 +909,7 @@ def validate_instance_structure(
         context = {
             "expected_type": get_type_name(expected_type),
             "actual_type": get_type_name(obj.__class__),
-            "artifact_name": str(obj)[:999],
+            "artifact_name": str(obj),
         }
 
         message = (

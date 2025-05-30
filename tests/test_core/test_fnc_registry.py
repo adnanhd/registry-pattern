@@ -48,7 +48,20 @@ class BaseFunctionalRegistryTest:
             return x * y
 
         assert registry_class.has_artifact(temp)
-        registry_class.unregister_artifact("temp")
+        registry_class.unregister_artifact(temp)
+        assert not registry_class.has_artifact(temp)
+        with pytest.raises(RegistryError):
+            registry_class.get_artifact("temp")
+
+    def test_unregister_identifier(self, registry_class):
+        """Test that a function can be unregistered."""
+
+        @registry_class.register_artifact
+        def temp(x: int, y: int) -> int:
+            return x * y
+
+        assert registry_class.has_artifact(temp)
+        registry_class.unregister_identifier("temp")
         assert not registry_class.has_artifact(temp)
         with pytest.raises(RegistryError):
             registry_class.get_artifact("temp")

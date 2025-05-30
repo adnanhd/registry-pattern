@@ -49,21 +49,21 @@ class BaseTypeRegistryTest:
         with pytest.raises(ValidationError):
             registry_class.register_artifact(DuplicateCommand)
 
-    # def test_unregister_artifact(self, registry_class):
-    #     """Test that a class can be unregistered."""
+    def test_unregister_artifact(self, registry_class):
+        """Test that a class can be unregistered."""
 
-    #     @registry_class.register_artifact
-    #     class TempCommand:
-    #         def execute(self, x: int, y: int) -> int:
-    #             return x * y
+        @registry_class.register_artifact
+        class TempCommand:
+            def execute(self, x: int, y: int) -> int:
+                return x * y
 
-    #     assert registry_class.has_artifact(TempCommand)
-    #     registry_class.unregister_artifact(TempCommand)
-    #     assert not registry_class.has_artifact(TempCommand)
-    #     with pytest.raises(RegistryError):
-    #         registry_class.get_artifact("TempCommand")
+        assert registry_class.has_artifact(TempCommand)
+        registry_class.unregister_artifact(TempCommand)
+        assert not registry_class.has_artifact(TempCommand)
+        with pytest.raises(RegistryError):
+            registry_class.get_artifact("TempCommand")
 
-    def test_unregister_artifact_by_name(self, registry_class):
+    def test_unregister_identifier(self, registry_class):
         """Test that a class can be unregistered by name."""
 
         @registry_class.register_artifact
@@ -72,7 +72,7 @@ class BaseTypeRegistryTest:
                 return x * y
 
         assert registry_class.has_artifact(TempCommand)
-        registry_class.unregister_artifact("TempCommand")
+        registry_class.unregister_identifier("TempCommand")
         assert not registry_class.has_artifact(TempCommand)
         with pytest.raises(RegistryError):
             registry_class.get_artifact("TempCommand")

@@ -46,36 +46,9 @@ __all__ = [
 # Enhanced Exception Definition
 # -----------------------------------------------------------------------------
 
-if ValidationError:
 
-    class RegistryError(ValidationError, KeyError):
-        """Enhanced exception raised for errors during mapping operations with rich context."""
-
-        def __init__(
-            self,
-            message: str,
-            suggestions: Optional[List[str]] = None,
-            context: Optional[Dict[str, Any]] = None,
-        ):
-            # Initialize ValidationError with rich context (this handles enhanced message formatting)
-            ValidationError.__init__(self, message, suggestions, context)
-            # Initialize KeyError with the basic message for backward compatibility
-            KeyError.__init__(self, message)
-
-else:
-    # Fallback to simple RegistryError if ValidationError not available
-    class RegistryError(KeyError):
-        """Simple registry error for backward compatibility."""
-
-        def __init__(
-            self,
-            message: str,
-            suggestions: Optional[List[str]] = None,
-            context: Optional[Dict[str, Any]] = None,
-        ):
-            super().__init__(message)
-            self.suggestions = suggestions or []
-            self.context = context or {}
+class RegistryError(ValidationError, KeyError):
+    """Enhanced exception raised for errors during mapping operations with rich context."""
 
 
 # -----------------------------------------------------------------------------
@@ -203,7 +176,7 @@ class RegistryAccessorMixin(Generic[K, T]):
                 "operation": "assert_presence",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
                 "registry_type": get_type_name(cls),
-                "key": str(key)[:999],
+                "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": len(mapping),
                 "available_keys": (

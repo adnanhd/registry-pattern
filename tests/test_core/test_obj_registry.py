@@ -61,7 +61,24 @@ class BaseObjectRegistryTest:
         registry_class.register_artifact(obj_id, obj)
         assert registry_class.has_artifact(obj)
 
-        registry_class.unregister_artifact(obj_id)
+        registry_class.unregister_artifact(obj)
+        assert not registry_class.has_artifact(obj)
+        with pytest.raises(RegistryError):
+            registry_class.get_artifact(obj_id)
+
+    def test_unregister_identifier(self, registry_class):
+        """Test that an instance can be unregistered."""
+
+        class DummyObject:
+            pass
+
+        obj = DummyObject()
+        obj_id = hex(id(obj))
+
+        registry_class.register_artifact(obj_id, obj)
+        assert registry_class.has_artifact(obj)
+
+        registry_class.unregister_identifier(obj_id)
         assert not registry_class.has_artifact(obj)
         with pytest.raises(RegistryError):
             registry_class.get_artifact(obj_id)

@@ -76,7 +76,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             context = {
                 "expected_type": "Hashable",
                 "actual_type": type(value).__name__,
-                "artifact_name": str(value)[:999],
+                "artifact_name": str(value),
             }
             raise ValidationError(
                 f"Key must be hashable, got {type(value).__name__}",
@@ -121,7 +121,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             context = {
                 "expected_type": "Hashable",
                 "actual_type": type(value).__name__,
-                "artifact_name": str(value)[:999],
+                "artifact_name": str(value),
             }
             raise ValidationError(
                 f"Key must be hashable, got {type(value).__name__}",
@@ -159,7 +159,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             ValidationError: If the key or artifact validation fails.
         """
         try:
-            validated_key = cls._extern_identifier(key)
+            validated_key = cls._intern_identifier(key)
             item = cls._get_artifact(validated_key)
             return cls._extern_artifact(item)
         except RegistryError:
@@ -180,7 +180,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
                 "operation": "get_artifact",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
                 "registry_type": cls.__class__.__name__,
-                "key": str(key)[:999],
+                "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": cls._len_mapping(),
             }
@@ -202,7 +202,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             True if the artifact exists, False otherwise.
         """
         try:
-            validated_key = cls._extern_identifier(key)
+            validated_key = cls._intern_identifier(key)
             return cls._has_identifier(validated_key)
         except ValidationError:
             return False
@@ -263,7 +263,7 @@ class ImmutableRegistryValidatorMixin(RegistryAccessorMixin[K, T], Generic[K, T]
             ]
             context = {
                 "operation": "validate_artifact",
-                "artifact_name": getattr(item, "__name__", str(item)[:999]),
+                "artifact_name": getattr(item, "__name__", str(item)),
             }
             raise ValidationError(
                 f"Artifact validation failed: {e}", suggestions, context
@@ -347,7 +347,7 @@ class MutableRegistryValidatorMixin(
             # Convert other exceptions to ValidationError with context
 
             artifact_name = getattr(
-                artifact if "artifact" in locals() else key, "__name__", str(key)[:999]
+                artifact if "artifact" in locals() else key, "__name__", str(key)
             )
             suggestions = [
                 "Check that the artifact meets the registry requirements",
@@ -359,20 +359,21 @@ class MutableRegistryValidatorMixin(
                 f"Registration failed: {e}", suggestions, context
             ) from e
 
+
     @classmethod
-    def unregister_artifact(cls, key: K) -> None:
+    def unregister_identifier(cls, key: K) -> None:
         """
-        Unregister an artifact from the registry with validation.
+        Unregister an artifact from the registry using its identifier/key.
 
         Parameters:
-            key: The key of the artifact to unregister.
+            key: The key/identifier of the artifact to unregister.
 
         Raises:
             ValidationError: If key validation fails.
             RegistryError: If the key does not exist in the registry (with rich context).
         """
         try:
-            validated_key = cls._extern_identifier(key)
+            validated_key = cls._intern_identifier(key)
             cls._del_artifact(validated_key)
         except RegistryError:
             # Re-raise RegistryError as-is - it already has rich context from mutator
@@ -389,15 +390,62 @@ class MutableRegistryValidatorMixin(
                 "Use iter_identifiers() to see all available keys",
             ]
             context = {
-                "operation": "unregister_artifact",
+                "operation": "unregister_identifier",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
                 "registry_type": cls.__class__.__name__,
-                "key": str(key)[:999],
+                "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": cls._len_mapping(),
             }
             raise RegistryError(
                 f"Unregistration failed for key '{key}': {e}", suggestions, context
+            ) from e
+
+    @classmethod
+    def unregister_artifact(cls, item: T) -> None:
+        """
+        Unregister an artifact from the registry using the artifact itself.
+
+        This method extracts the identifier from the artifact using _identifier_of()
+        and then removes the corresponding entry from the registry.
+
+        Parameters:
+            item: The artifact to unregister.
+
+        Raises:
+            ValidationError: If artifact validation fails or identifier extraction fails.
+            RegistryError: If the artifact is not found in the registry (with rich context).
+        """
+        try:
+            # Extract the identifier from the artifact
+            identifier = cls._identifier_of(item)
+            # Use unregister_identifier to do the actual removal
+            cls.unregister_identifier(identifier)
+        except RegistryError:
+            # Re-raise RegistryError as-is but update context to reflect artifact-based operation
+            raise
+        except ValidationError:
+            # Re-raise validation errors as-is
+            raise
+        except Exception as e:
+            # Convert other exceptions to ValidationError with context
+            artifact_name = getattr(item, "__name__", str(item))
+            suggestions = [
+                f"Check that artifact '{artifact_name}' exists in the registry",
+                "Ensure the artifact can be identified using _identifier_of()",
+                "Use has_artifact() to check existence first",
+                f"Registry {getattr(cls, '__name__', 'Unknown')} contains {cls._len_mapping()} items",
+            ]
+            context = {
+                "operation": "unregister_artifact",
+                "registry_name": getattr(cls, "__name__", "Unknown"),
+                "registry_type": cls.__class__.__name__,
+                "artifact_name": artifact_name,
+                "artifact_type": type(item).__name__,
+                "registry_size": cls._len_mapping(),
+            }
+            raise ValidationError(
+                f"Unregistration failed for artifact '{artifact_name}': {e}", suggestions, context
             ) from e
 
     @classmethod
@@ -507,7 +555,7 @@ class MutableRegistryValidatorMixin(
                 suggestions = ["Check that the item meets registry requirements"]
                 context = {
                     "operation": "batch_validate",
-                    "artifact_name": getattr(item, "__name__", str(item)[:999]),
+                    "artifact_name": getattr(item, "__name__", str(item)),
                 }
                 results[key] = ValidationError(
                     f"Validation failed: {e}", suggestions, context

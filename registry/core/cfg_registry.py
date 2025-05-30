@@ -114,7 +114,7 @@ class ConfigRegistry(
                 "operation": "key_validation",
                 "expected_type": "Hashable",
                 "actual_type": type(value).__name__,
-                "artifact_name": str(value)[:999],
+                "artifact_name": str(value),
             }
             raise ValidationError(
                 f"Key must be hashable, got {type(value).__name__}",
@@ -187,7 +187,7 @@ class ConfigRegistry(
                     "registry_name": cls.__name__,
                     "registry_mode": "strict",
                     "operation": "structure_validation",
-                    "artifact_name": str(value)[:999],
+                    "artifact_name": str(value),
                 }
                 enhanced_error = ValidationError(
                     f"Object structure validation failed: {e}", suggestions, context
@@ -207,7 +207,7 @@ class ConfigRegistry(
             context = {
                 "registry_name": cls.__name__,
                 "operation": "weak_reference_creation",
-                "artifact_name": str(value)[:999],
+                "artifact_name": str(value),
                 "artifact_type": type(value).__name__,
             }
             enhanced_error = ValidationError(
@@ -279,7 +279,7 @@ class ConfigRegistry(
                 "registry_type": "ConfigRegistry",
                 "expected_type": "Hashable",
                 "actual_type": type(value).__name__,
-                "key": str(value)[:999],
+                "key": str(value),
             }
             raise ValidationError(
                 f"Key must be hashable, got {type(value).__name__}",
@@ -433,7 +433,7 @@ class ConfigRegistry(
                     "operation": "get_artifact",
                     "registry_name": cls.__name__,
                     "registry_type": "ConfigRegistry",
-                    "key": str(key)[:999],
+                    "key": str(key),
                     "key_type": type(key).__name__,
                     "registry_size": len(cls._repository),
                     "is_weakref_compatible": cls._is_weakref_compatible(key),
@@ -461,7 +461,7 @@ class ConfigRegistry(
                 "operation": "get_artifact",
                 "registry_name": cls.__name__,
                 "registry_type": "ConfigRegistry",
-                "key": str(key)[:999],
+                "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": len(cls._repository),
             }
@@ -762,7 +762,7 @@ class ConfigRegistry(
         results = {"valid": [], "invalid": [], "results": {}}
 
         for obj, config in configs.items():
-            obj_key = str(obj)[:999]  # Use string representation as key for results
+            obj_key = str(obj)  # Use string representation as key for results
 
             try:
                 # Validate object as key

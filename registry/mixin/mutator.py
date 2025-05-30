@@ -161,10 +161,10 @@ class RegistryMutatorMixin(RegistryAccessorMixin[K, T]):
                 "operation": "assert_absence",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
                 "registry_type": cls.__class__.__name__,
-                "key": str(key)[:999],
+                "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": len(mapping),
-                "conflicting_key": str(key)[:999],
+                "conflicting_key": str(key),
             }
             raise RegistryError(
                 f"Key '{key}' is already found in the mapping", suggestions, context

@@ -20,7 +20,8 @@ import logging
 import weakref
 from abc import ABC
 
-from typing_compat import Any, Dict, Generic, Hashable, Type, TypeVar
+from typing_compat import Any, Dict, Generic, Hashable, Type
+from typing import TypeVar
 
 from registry.mixin.accessor import RegistryError
 
@@ -129,7 +130,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                     e.suggestions.extend(
                         [
                             f"Register instances that inherit from or are compatible with {cls.__name__}",
-                            f"Check that the instance's class has proper inheritance",
+                            "Check that the instance's class has proper inheritance",
                             "Verify that you're registering the correct type of object",
                         ]
                     )
@@ -156,7 +157,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                 if hasattr(e, "suggestions"):
                     e.suggestions.extend(
                         [
-                            f"Use cls.validate_artifact(your_instance) to check conformance before registration",
+                            "Use cls.validate_artifact(your_instance) to check conformance before registration",
                             f"Registry {cls.__name__} requires strict protocol conformance",
                             "Ensure the instance implements all required methods",
                         ]
@@ -173,7 +174,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                     "registry_name": cls.__name__,
                     "registry_mode": "strict",
                     "operation": "structure_validation",
-                    "artifact_name": str(value)[:999],
+                    "artifact_name": str(value),
                 }
                 enhanced_error = ValidationError(
                     f"Instance structure validation failed: {e}", suggestions, context
@@ -193,7 +194,7 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
                 context = {
                     "registry_name": cls.__name__,
                     "operation": "weak_reference_creation",
-                    "artifact_name": str(value)[:999],
+                    "artifact_name": str(value),
                     "artifact_type": type(value).__name__,
                 }
                 enhanced_error = ValidationError(
@@ -351,18 +352,6 @@ class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic
 
         # Create and return the new tracked class
         return EnhancedRegistrationMeta(supercls.__name__, (supercls,), {})
-
-    @classmethod
-    def cleanup(cls) -> int:
-        """
-        Clean up dead references in the repository with enhanced reporting.
-
-        This method removes all entries that contain dead weak references
-        (references to objects that have been garbage collected).
-
-        Returns:
-            int: The number of dead references removed.
-        """
 
     @classmethod
     def cleanup(cls) -> int:

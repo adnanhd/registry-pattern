@@ -1,3 +1,4 @@
 typing_extensions
 typing_compat @ git+https://github.com/adnanhd/typing-compat
+psutil
 typeguard

@@ -305,7 +305,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
 
         # Try to register each member as a function
         for obj in members:
-            obj_name = getattr(obj, "__name__", str(obj)[:999])
+            obj_name = getattr(obj, "__name__", str(obj))
 
             try:
                 # Pre-filter for functions to avoid unnecessary validation

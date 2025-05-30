@@ -46,13 +46,13 @@ class BaseConfigRegistryTest:
         assert registry_class.has_identifier(obj)
         assert registry_class.get_artifact(obj) == config
 
-    def test_unregister_artifact(self, registry_class):
+    def test_unregister_identifier(self, registry_class):
         """Test unregistering a configuration."""
-        obj = TestObject("test")
+        obj = TestObject("test") # Obj(identifier) -> Config(artifact)
         config = {"param1": 42, "param2": "value"}
 
         registry_class.register_artifact(obj, config)
-        registry_class.unregister_artifact(obj)
+        registry_class.unregister_identifier(obj)
 
         # After unregistration, the object should not be in the registry
         assert not registry_class.has_identifier(obj)
