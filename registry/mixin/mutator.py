@@ -1,15 +1,14 @@
-r"""Enhanced Registry Mutator Module with Rich Error Context
-========================================================
+r"""Mutable registry mixin with rich error context.
 
-This module provides base classes for implementing a registry pattern,
-allowing the registration, lookup, and management of classes or functions
-with enhanced error reporting and rich context information.
+This module adds write operations on top of the read-only accessor mixin.
 
-The main classes are:
- - RegistryMutatorMixin: A mutable registry for managing registered items with enhanced errors.
+Behavior:
+  - `_set_mapping` replaces the entire mapping after asserting the current one is clear.
+  - `_update_mapping` inserts multiple items, asserting absence for each key.
+  - Single-item ops (`_set_artifact`, `_update_artifact`, `_del_artifact`) delegate
+    to presence/absence guards that raise `RegistryKeyError` with context.
 
-Doxygen Dot Graph of Inheritance:
------------------------------------
+Simple inheritance diagram (Doxygen dot):
 \dot
 digraph RegistryPattern {
     rankdir=LR;
@@ -21,9 +20,10 @@ digraph RegistryPattern {
 
 from __future__ import annotations
 
-from typing_compat import Dict, Hashable, Mapping, MutableMapping, TypeVar, Union
+from typing import Dict, Hashable, Mapping, MutableMapping, TypeVar, Union
 
-from .accessor import RegistryAccessorMixin, RegistryError
+from ..utils import RegistryKeyError
+from .accessor import RegistryAccessorMixin
 
 __all__ = [
     "RegistryMutatorMixin",
@@ -34,45 +34,40 @@ __all__ = [
 # Type Variables
 # -----------------------------------------------------------------------------
 
-# K is a type variable for keys that must be hashable.
-K = TypeVar("K", bound=Hashable)
-# T is a type variable for the registered item.
-T = TypeVar("T")
+KeyType = TypeVar("KeyType", bound=Hashable)
+ValType = TypeVar("ValType")
 
 
 # -----------------------------------------------------------------------------
-# Enhanced Base Mixin for Mutating Registry Items
+# Base Mixin for Mutating Registry Items
 # -----------------------------------------------------------------------------
 
 
-class RegistryMutatorMixin(RegistryAccessorMixin[K, T]):
+class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
+    """Write-side extensions for a registry.
+
+    Error semantics:
+        Presence/absence checks raise `RegistryKeyError` with rich context.
+    """
 
     # -----------------------------------------------------------------------------
     # Setter Functions for Registry Object
     # -----------------------------------------------------------------------------
     @classmethod
-    def _set_mapping(cls, mapping: Mapping[K, T]) -> None:
-        """
-        Set the underlying mapping of the registry.
-
-        Parameters:
-            mapping (Registry[K, T]): The new mapping.
-        """
+    def _set_mapping(cls, mapping: Mapping[KeyType, ValType]) -> None:
+        """Replace the underlying mapping with `mapping` after clearing."""
         cls._clear_mapping()
         cls._update_mapping(mapping)
 
     @classmethod
-    def _update_mapping(cls, mapping: Mapping[K, T]) -> None:
-        """
-        Update the underlying mapping of the registry.
+    def _update_mapping(cls, mapping: Mapping[KeyType, ValType]) -> None:
+        """Insert all items from `mapping`, asserting current absence for each key.
 
-        Parameters:
-            mapping (Registry[K, T]): The new mapping.
         Raises:
-            RegistryError: If any key is already found in the mapping.
+            RegistryKeyError: if any key already exists.
         """
         if cls._len_mapping() > 0:
-            for key, value in mapping.items():
+            for key in mapping.keys():
                 cls._assert_absence(key)
         cls._get_mapping().update(mapping)
 
@@ -82,54 +77,41 @@ class RegistryMutatorMixin(RegistryAccessorMixin[K, T]):
 
     @classmethod
     def _clear_mapping(cls) -> None:
-        """
-        Clear the underlying mapping of the registry.
-        """
+        """Clear all entries from the underlying mapping."""
         cls._get_mapping().clear()
 
     # -----------------------------------------------------------------------------
-    # Setter Functions for Registry Items with Enhanced Error Handling
+    # Setter Functions for Registry Items
     # -----------------------------------------------------------------------------
 
     @classmethod
-    def _set_artifact(cls, key: K, item: T) -> None:
-        """
-        Set an artifact in the registry with enhanced error handling.
+    def _set_artifact(cls, key: KeyType, item: ValType) -> None:
+        """Insert `item` under `key`.
 
-        Parameters:
-            key (K): The key of the artifact to set.
-            item (T): The item to associate with the key.
         Raises:
-            RegistryError: If the key is already found in the mapping (with rich context).
+            RegistryKeyError: if `key` is already present.
         """
         cls._assert_absence(key)[key] = item
 
     @classmethod
-    def _update_artifact(cls, key: K, item: T) -> None:
-        """
-        Update an existing artifact in the registry.
+    def _update_artifact(cls, key: KeyType, item: ValType) -> None:
+        """Replace `item` under `key`.
 
-        Parameters:
-            key (K): The key of the artifact to set.
-            item (T): The item to associate with the key.
         Raises:
-            RegistryError: If the key is not found in the mapping.
+            RegistryKeyError: if `key` is not present.
         """
         cls._assert_presence(key)[key] = item
 
     # -----------------------------------------------------------------------------
-    # Deleter Functions for Registry Items with Enhanced Error Handling
+    # Deleter Functions for Registry Items
     # -----------------------------------------------------------------------------
 
     @classmethod
-    def _del_artifact(cls, key: K) -> None:
-        """
-        Delete an artifact from the registry with enhanced error handling.
+    def _del_artifact(cls, key: KeyType) -> None:
+        """Delete the entry under `key`.
 
-        Parameters:
-            key (K): The key of the artifact to delete.
         Raises:
-            RegistryError: If the key is not found in the mapping (with rich context).
+            RegistryKeyError: if `key` is not present.
         """
         del cls._assert_presence(key)[key]
 
@@ -138,17 +120,10 @@ class RegistryMutatorMixin(RegistryAccessorMixin[K, T]):
     # -----------------------------------------------------------------------------
 
     @classmethod
-    def _assert_absence(cls, key: K) -> Union[Dict[K, T], MutableMapping[K, T]]:
-        """
-        Raise an enhanced error if a given key is already found in the mapping.
-
-        Parameters:
-            key (K): The key that should be absent.
-        Returns:
-            Union[Dict[K, T], MutableMapping[K, T]]: The mapping.
-        Raises:
-            RegistryError: If the key is already found in the mapping (with rich context).
-        """
+    def _assert_absence(
+        cls, key: KeyType
+    ) -> Union[Dict[KeyType, ValType], MutableMapping[KeyType, ValType]]:
+        """Return mapping if `key` is absent; otherwise raise `RegistryKeyError`."""
         mapping = cls._get_mapping()
         if key in mapping:
             suggestions = [
@@ -166,7 +141,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[K, T]):
                 "registry_size": len(mapping),
                 "conflicting_key": str(key),
             }
-            raise RegistryError(
+            raise RegistryKeyError(
                 f"Key '{key}' is already found in the mapping", suggestions, context
             )
         return mapping

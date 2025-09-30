@@ -1,24 +1,27 @@
-# from . import utils, core, extra
-
-from .core import (
-    ValidationError,
+from .cfg_registry import ConfigRegistry
+from .fnc_registry import FunctionalRegistry
+from .obj_registry import ObjectRegistry
+from .sch_registry import SchemeRegistry
+from .typ_registry import TypeRegistry
+from .utils import (
     CoercionError,
     ConformanceError,
     InheritanceError,
+    RegistryKeyError,
+    RegistryValueError,
+    ValidationError,
 )
-from .mixin import RegistryError
-
-# Alias TypeRegistry to ClassRegistry and ObjectRegistry to InstanceRegistry
-from .core import TypeRegistry, FunctionalRegistry, ObjectRegistry, ConfigRegistry
-
-from .extra import ClassTracker, Wrapped
 
 __all__ = [
-    "RegistryError",
     "TypeRegistry",
     "ObjectRegistry",
     "FunctionalRegistry",
+    "ObjectRegistry",
+    "SchemeRegistry",
     "ConfigRegistry",
+    "ValidationError",
+    "RegistryKeyError",
+    "RegistryValueError",
     "CoercionError",
     "ConformanceError",
     "InheritanceError",
