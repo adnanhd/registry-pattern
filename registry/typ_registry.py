@@ -5,28 +5,23 @@ from __future__ import annotations
 import inspect
 import logging
 from abc import ABC
-from typing import Any, Dict, Generic, Hashable, Type, TypeVar, Optional
-from typing_extensions import MutableMapping
-
-from registry.mixin.accessor import ValType
+from typing import Any, Generic, Hashable, MutableMapping, Optional, Type, TypeVar
 
 from .mixin import MutableRegistryValidatorMixin
-from .storage import KeyType, ThreadSafeLocalStorage, RemoteStorageProxy
+from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
     InheritanceError,
     ValidationError,
+    get_func_name,
     get_module_members,
     get_protocol,
+    get_type_name,
 )
 
 logger = logging.getLogger(__name__)
 
 Cls = TypeVar("Cls")
-
-
-def _type_name(tp: type, qualname: bool = False) -> str:
-    return getattr(tp, "__qualname__" if qualname else "__name__", str(tp))
 
 
 def _validate_class(obj: Any) -> type:
@@ -48,31 +43,29 @@ def _validate_class(obj: Any) -> type:
 def _validate_class_hierarchy(subcls: type, /, abc_class: type) -> type:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "Checking %s subclass of %s", _type_name(subcls), _type_name(abc_class)
+            "Checking %s subclass of %s",
+            get_type_name(subcls),
+            get_type_name(abc_class),
         )
     if not issubclass(subcls, abc_class):
         raise InheritanceError(
-            f"{_type_name(subcls)} is not a subclass of {_type_name(abc_class)}",
-            [f"Inherit from {_type_name(abc_class)}"],
+            f"{get_type_name(subcls)} is not a subclass of {get_type_name(abc_class)}",
+            [f"Inherit from {get_type_name(abc_class)}"],
             {
-                "expected_type": _type_name(abc_class),
-                "actual_type": _type_name(subcls),
-                "artifact_name": _type_name(subcls),
+                "expected_type": get_type_name(abc_class),
+                "actual_type": get_type_name(subcls),
+                "artifact_name": get_type_name(subcls),
             },
         )
     return subcls
-
-
-def _func_name(f: Any) -> str:
-    return getattr(f, "__name__", str(f))
 
 
 def _validate_function_signature(func: Any, expected_func: Any) -> None:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Validating method signature %s against %s",
-            _func_name(func),
-            _func_name(expected_func),
+            get_func_name(func),
+            get_func_name(expected_func),
         )
     try:
         fs = inspect.signature(func)
@@ -81,7 +74,7 @@ def _validate_function_signature(func: Any, expected_func: Any) -> None:
         raise ConformanceError(
             f"Cannot inspect function signature: {e}",
             ["Ensure both are valid callables"],
-            {"artifact_name": _func_name(func), "operation": "signature_inspection"},
+            {"artifact_name": get_func_name(func), "operation": "signature_inspection"},
         )
     errs, hints = [], []
     fparams, eparams = list(fs.parameters.values()), list(es.parameters.values())
@@ -124,7 +117,7 @@ def _validate_function_signature(func: Any, expected_func: Any) -> None:
             + "\n".join(f"  • {e}" for e in errs),
             hints,
             {
-                "artifact_name": _func_name(func),
+                "artifact_name": get_func_name(func),
                 "expected_type": str(es),
                 "actual_type": str(fs),
             },
@@ -135,8 +128,8 @@ def _validate_class_structure(subcls: type, /, expected_type: type) -> type:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Validating structure of %s against protocol %s",
-            _type_name(subcls),
-            _type_name(expected_type),
+            get_type_name(subcls),
+            get_type_name(expected_type),
         )
     missing, sig_errs = [], []
     for name in dir(expected_type):
@@ -164,13 +157,13 @@ def _validate_class_structure(subcls: type, /, expected_type: type) -> type:
             parts.extend(f"  {e}" for e in sig_errs)
             hints.append("Match parameter and return annotations")
         raise ConformanceError(
-            f"Class {_type_name(subcls)} does not conform to protocol {_type_name(expected_type)}:\n"
+            f"Class {get_type_name(subcls)} does not conform to protocol {get_type_name(expected_type)}:\n"
             + "\n".join(parts),
             hints,
             {
-                "expected_type": _type_name(expected_type),
-                "actual_type": _type_name(subcls),
-                "artifact_name": _type_name(subcls),
+                "expected_type": get_type_name(expected_type),
+                "actual_type": get_type_name(subcls),
+                "artifact_name": get_type_name(subcls),
             },
         )
     return subcls
@@ -204,7 +197,9 @@ class TypeRegistry(
         if proxy_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         else:
-            cls._repository = RemoteStorageProxy(namespace=proxy_namespace)
+            cls._repository = RemoteStorageProxy[Hashable, Type[Cls]](
+                namespace=proxy_namespace
+            )
         cls._strict = strict
         cls._abstract = abstract
         if logger.isEnabledFor(logging.DEBUG):
@@ -227,7 +222,7 @@ class TypeRegistry(
 
     @classmethod
     def _identifier_of(cls, item: Type[Cls]) -> Hashable:
-        return _type_name(_validate_class(item))
+        return get_type_name(_validate_class(item))
 
     @classmethod
     def _externalize_artifact(cls, value: Type[Cls]) -> Type[Cls]:

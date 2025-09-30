@@ -3,20 +3,20 @@ r"""Remote storage proxy and thread-safe local storage for registries."""
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import logging
+import math
+import os
 import pickle
+import re
 import weakref
+from collections.abc import ItemsView, KeysView, ValuesView
 from threading import RLock
 from typing import Any, Dict, Generic, Hashable, Iterator, MutableMapping, TypeVar
 from urllib.parse import quote
-from collections.abc import KeysView, ValuesView, ItemsView
 
-import os
-import re
-import math
 import requests
-import ipaddress
 
 from .utils import RegistryKeyError, ValidationError
 
@@ -298,9 +298,9 @@ class RemoteStorageProxy(MutableMapping[KeyType, ValType], Generic[KeyType, ValT
     def __init__(
         self,
         namespace: str,
-        host: str = os.getenv("REGISTRY_STORAGE_HOST", "localhost"),
-        port: int = int(os.getenv("REGISTRY_STORAGE_PORT", 5555)),
-        timeout: float = float(os.getenv("REGISTRY_STORAGE_TIMEOUT", 5.0)),
+        host: str = os.getenv("REGISTRY_SERVER_HOST", "localhost"),
+        port: int = int(os.getenv("REGISTRY_SERVER_PORT", "8001")),
+        timeout: float = float(os.getenv("REGISTRY_SERVER_TIMEOUT", "5.0")),
     ):
         """Initialize remote storage proxy.
 

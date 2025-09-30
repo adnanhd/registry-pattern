@@ -6,12 +6,28 @@ import inspect
 import logging
 import sys
 from abc import ABC
-from typing import Any, Callable, ClassVar, Hashable, Tuple, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Hashable,
+    MutableMapping,
+    Optional,
+    Tuple,
+    TypeVar,
+)
 
 from typing_extensions import ParamSpec, get_args
 
 from .mixin import MutableRegistryValidatorMixin
-from .utils import ConformanceError, ValidationError, get_module_members
+from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
+from .utils import (
+    ConformanceError,
+    ValidationError,
+    get_func_name,
+    get_module_members,
+    get_type_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +35,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def _func_name(func: Callable, qualname: bool = False) -> str:
-    f = func
-    while hasattr(f, "__wrapped__"):
-        f = getattr(f, "__wrapped__")
-    return getattr(f, "__qualname__" if qualname else "__name__", str(f))
-
-
-def _type_name(tp: Type, qualname: bool = False) -> str:
-    return getattr(tp, "__qualname__" if qualname else "__name__", str(tp))
-
-
-def _validate_function(func: Callable) -> Callable:
+def _validate_function(func: Callable[..., Any]) -> Callable[..., Any]:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("Validating function object: %r", func)
     if (inspect.isfunction(func) or inspect.isbuiltin(func)) and callable(func):
@@ -45,7 +50,7 @@ def _validate_function(func: Callable) -> Callable:
             "expected_type": "function",
             "actual_type": type(func).__name__,
             "artifact_name": (
-                _func_name(func) if hasattr(func, "__name__") else str(func)
+                get_func_name(func) if hasattr(func, "__name__") else str(func)
             ),
         },
     )
@@ -56,7 +61,9 @@ def _validate_function_parameters(
 ) -> Callable[P, R]:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "Validating signature of %s against %s", _func_name(func), expected_callable
+            "Validating signature of %s against %s",
+            get_func_name(func),
+            expected_callable,
         )
 
     try:
@@ -66,7 +73,7 @@ def _validate_function_parameters(
         raise ValidationError(
             f"Cannot analyze function type: {e}",
             ["Ensure expected type is a valid typing.Callable"],
-            {"artifact_name": _func_name(func)},
+            {"artifact_name": get_func_name(func)},
         )
 
     errors: list[str] = []
@@ -82,22 +89,22 @@ def _validate_function_parameters(
         ann = param.annotation
         if ann is inspect.Parameter.empty:
             errors.append(f"Parameter {param.name} missing type annotation")
-            hints.append(f"Annotate: {param.name}: {_type_name(exp)}")
+            hints.append(f"Annotate: {param.name}: {get_type_name(exp)}")
         elif ann != exp:
             errors.append(
-                f"Parameter {param.name} type mismatch: expected {_type_name(exp)}, got {_type_name(ann)}"
+                f"Parameter {param.name} type mismatch: expected {get_type_name(exp)}, got {get_type_name(ann)}"
             )
-            hints.append(f"Change to: {param.name}: {_type_name(exp)}")
+            hints.append(f"Change to: {param.name}: {get_type_name(exp)}")
 
     ret_ann = sig.return_annotation
     if ret_ann is inspect.Signature.empty:
         errors.append("Missing return type annotation")
-        hints.append(f"Annotate return: -> {_type_name(exp_ret)}")
+        hints.append(f"Annotate return: -> {get_type_name(exp_ret)}")
     elif ret_ann != exp_ret:
         errors.append(
-            f"Return type mismatch: expected {_type_name(exp_ret)}, got {_type_name(ret_ann)}"
+            f"Return type mismatch: expected {get_type_name(exp_ret)}, got {get_type_name(ret_ann)}"
         )
-        hints.append(f"Change return to: -> {_type_name(exp_ret)}")
+        hints.append(f"Change return to: -> {get_type_name(exp_ret)}")
 
     if errors:
         raise ConformanceError(
@@ -105,7 +112,7 @@ def _validate_function_parameters(
             + "\n".join(f"  • {e}" for e in errors),
             hints,
             {
-                "artifact_name": _func_name(func),
+                "artifact_name": get_func_name(func),
                 "expected_type": str(expected_callable),
                 "actual_type": str(sig),
             },
@@ -120,9 +127,9 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
     declared by the generic parameterization of the subclass.
     """
 
-    _repository: dict
+    _repository: MutableMapping[Hashable, Callable[P, R]]
     _strict: bool = False
-    __orig_bases__: ClassVar[Tuple[Type, ...]]  # used to extract Callable[P, R]
+    __orig_bases__: ClassVar[Tuple[type, ...]]  # used to extract Callable[P, R]
     __slots__ = ()
 
     @classmethod
@@ -138,9 +145,19 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
         return super().__class_getitem__(params)  # type: ignore
 
     @classmethod
-    def __init_subclass__(cls, strict: bool = False, **kwargs: Any) -> None:
+    def __init_subclass__(
+        cls,
+        strict: bool = False,
+        proxy_namespace: Optional[str] = None,
+        **kwargs,
+    ) -> None:
         super().__init_subclass__(**kwargs)
-        cls._repository = {}
+        if proxy_namespace is None:
+            cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
+        else:
+            cls._repository = RemoteStorageProxy[Hashable, Callable[P, R]](
+                namespace=proxy_namespace
+            )
         cls._strict = strict
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -166,7 +183,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
 
     @classmethod
     def _identifier_of(cls, item: Callable[P, R]) -> Hashable:
-        return _func_name(_validate_function(item))
+        return get_func_name(_validate_function(item))
 
     @classmethod
     def register_module_functions(cls, module: Any, raise_error: bool = True) -> Any:
