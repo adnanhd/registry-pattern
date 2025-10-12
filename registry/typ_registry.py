@@ -18,18 +18,18 @@ from typing import (
     TypeVar,
 )
 
-from .mixin import MutableValidatorMixin
+from .mixin import RegistryFactorizorMixin
 from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
     InheritanceError,
     ValidationError,
+    _validate_function_signature,
     get_module_members,
     get_module_name,
     get_object_name,
     get_protocol,
     get_type_name,
-    _validate_function_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,7 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
 
 
 class TypeRegistry(
-    MutableValidatorMixin[Hashable, Type[Cls]],
+    RegistryFactorizorMixin[Hashable, Type[Cls]],
     ABC,
     Generic[Cls],
 ):
@@ -142,24 +142,27 @@ class TypeRegistry(
         cls,
         strict: bool = False,
         abstract: bool = False,
-        proxy_namespace: Optional[str] = None,
+        logic_namespace: Optional[str] = None,
+        scheme_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
-        super().__init_subclass__(**kwargs)
-        if proxy_namespace is None:
+        super().__init_subclass__(scheme_namespace=scheme_namespace, **kwargs)
+        if logic_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         else:
             cls._repository = RemoteStorageProxy[Hashable, Type[Cls]](
-                namespace=proxy_namespace
+                namespace=logic_namespace
             )
         cls._strict = strict
         cls._abstract = abstract
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s)",
+                "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s, logic_namespace=%s, schema_namespace=%s)",
                 get_type_name(cls),
                 strict,
                 abstract,
+                logic_namespace,
+                scheme_namespace,
             )
 
     @classmethod
@@ -170,15 +173,11 @@ class TypeRegistry(
         if cls._strict:
             protocol = get_protocol(cls)
             v = _validate_class_structure(v, exp_type=protocol)
-        return v
+        return super()._internalize_artifact(v)
 
     @classmethod
     def _identifier_of(cls, item: Type[Cls]) -> Hashable:
         return get_type_name(_validate_class(item))
-
-    @classmethod
-    def _externalize_artifact(cls, value: Type[Cls]) -> Type[Cls]:
-        return value
 
     @classmethod
     def register_module_subclasses(cls, module: Any, raise_error: bool = True) -> Any:

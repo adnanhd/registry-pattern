@@ -19,15 +19,15 @@ from typing import (
 
 from typing_extensions import ParamSpec, get_args
 
-from .mixin import MutableValidatorMixin
+from .mixin import RegistryFactorizorMixin
 from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
     ValidationError,
+    _validate_function_signature,
     get_func_name,
     get_module_members,
     get_type_name,
-    _validate_function_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def _validate_function(func: Any) -> Callable[..., Any]:
     )
 
 
-class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
+class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC):
     """Registry for functions, with optional strict signature validation.
 
     Strict mode: when enabled on subclass, enforce `Callable[Params, Return]`
@@ -83,22 +83,25 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     def __init_subclass__(
         cls,
         strict: bool = False,
-        proxy_namespace: Optional[str] = None,
+        scheme_namespace: Optional[str] = None,
+        logic_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
-        super().__init_subclass__(**kwargs)
-        if proxy_namespace is None:
+        super().__init_subclass__(scheme_namespace=scheme_namespace, **kwargs)
+        if logic_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
         else:
             cls._repository = RemoteStorageProxy[Hashable, Callable[P, R]](
-                namespace=proxy_namespace
+                namespace=logic_namespace
             )
         cls._strict = strict
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                "Initialized FunctionalRegistry subclass %s (strict=%s)",
+                "Initialized FunctionalRegistry subclass %s (strict=%s, logic_namespace=%s, schema_namespace=%s)",
                 cls.__name__,
                 strict,
+                logic_namespace,
+                scheme_namespace,
             )
 
     @classmethod
@@ -110,11 +113,7 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
                 param = list(get_args(param))
             expected = Callable[param, ret]  # type: ignore
             fn = _validate_function_signature(fn, expected_callable_alias=expected)
-        return fn
-
-    @classmethod
-    def _externalize_artifact(cls, value: Callable[P, R]) -> Callable[P, R]:
-        return value
+        return super()._internalize_artifact(fn)
 
     @classmethod
     def _identifier_of(cls, item: Callable[P, R]) -> Hashable:

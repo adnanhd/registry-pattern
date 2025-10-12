@@ -28,9 +28,9 @@ from typing_extensions import ParamSpec, get_args, runtime_checkable
 # Python version compatibility
 if sys.version_info >= (3, 9):
     from types import GenericAlias
-    from typing import get_origin, get_args
+    from typing import get_args, get_origin
 elif sys.version_info >= (3, 8):
-    from typing import get_origin, get_args
+    from typing import get_args, get_origin
 
     try:
         from typing import _GenericAlias as GenericAlias

@@ -8,12 +8,14 @@ Exports:
 """
 
 from .accessor import RegistryAccessorMixin
+from .factorizor import RegistryFactorizorMixin
 from .mutator import RegistryMutatorMixin
 from .validator import ImmutableValidatorMixin, MutableValidatorMixin
 
 __all__ = [
     "RegistryAccessorMixin",
     "RegistryMutatorMixin",
+    "RegistryFactorizorMixin",
     "ImmutableValidatorMixin",
     "MutableValidatorMixin",
 ]

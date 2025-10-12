@@ -21,7 +21,6 @@ digraph RegistryPattern {
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import Dict, Generic, Hashable, Iterator, MutableMapping, TypeVar, Union
 
 from ..utils import RegistryError, get_type_name

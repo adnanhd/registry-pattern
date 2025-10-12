@@ -1,5 +1,7 @@
 # from .extra.cfg_registry import ConfigRegistry
 # from .extra.obj_registry import ObjectRegistry
+from ._version import __version__
+from .engines import ConfigFileEngine, SocketEngine
 from .fnc_registry import FunctionalRegistry
 from .sch_registry import SchemeRegistry
 from .typ_registry import TypeRegistry
@@ -10,7 +12,6 @@ from .utils import (
     RegistryError,
     ValidationError,
 )
-from ._version import __version__
 
 __all__ = [
     "TypeRegistry",
@@ -24,5 +25,7 @@ __all__ = [
     "ConformanceError",
     "InheritanceError",
     "ValidationError",
+    "ConfigFileEngine",
+    "SocketEngine",
     "__version__",
 ]
