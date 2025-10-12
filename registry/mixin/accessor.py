@@ -6,7 +6,7 @@ error reporting and context when lookups fail.
 
 Key points:
   - Subclasses must implement `_get_mapping()` to return the backing mapping.
-  - Presence checks and retrieval raise `RegistryKeyError` with suggestions.
+  - Presence checks and retrieval raise `RegistryError` with suggestions.
   - No mutation APIs are exposed here; see `RegistryMutatorMixin` for writes.
 
 Simple inheritance diagram (Doxygen dot):
@@ -21,9 +21,10 @@ digraph RegistryPattern {
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import Dict, Generic, Hashable, Iterator, MutableMapping, TypeVar, Union
 
-from ..utils import RegistryKeyError, get_type_name
+from ..utils import RegistryError, get_type_name
 
 __all__ = [
     "RegistryAccessorMixin",
@@ -49,7 +50,7 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
     Subclasses must provide a concrete storage via `_get_mapping()`.
 
     Error semantics:
-        Missing keys are reported via `RegistryKeyError` with
+        Missing keys are reported via `RegistryError` with
         a suggestions list and context payload suitable for logs.
     """
 
@@ -59,9 +60,11 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
     @classmethod
     def _get_mapping(
         cls,
-    ) -> Union[Dict[KeyType, ValType], MutableMapping[KeyType, ValType]]:
+    ) -> MutableMapping[KeyType, ValType]:
         """Return the underlying mapping for this registry."""
-        raise NotImplementedError("Subclasses must implement this method.")
+        raise NotImplementedError(
+            f"Subclasses must implement `{cls.__name__}._get_mapping` method."
+        )
 
     @classmethod
     def _len_mapping(cls) -> int:
@@ -82,7 +85,7 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
         """Return the artifact registered under `key`, or raise.
 
         Raises:
-            RegistryKeyError: if `key` is not present.
+            RegistryError: if `key` is not present.
         """
         return cls._assert_presence(key)[key]
 
@@ -104,7 +107,7 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
     def _assert_presence(
         cls, key: KeyType
     ) -> Union[Dict[KeyType, ValType], MutableMapping[KeyType, ValType]]:
-        """Return mapping if `key` is present; otherwise raise `RegistryKeyError`."""
+        """Return mapping if `key` is present; otherwise raise `RegistryError`."""
         mapping = cls._get_mapping()
         if key not in mapping:
             suggestions = [
@@ -126,7 +129,7 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
                     else f"{list(mapping.keys())[:10]}. ({len(mapping)} total)"
                 ),
             }
-            raise RegistryKeyError(
+            raise RegistryError(
                 f"Key '{key}' is not found in the mapping", suggestions, context
             )
         return mapping

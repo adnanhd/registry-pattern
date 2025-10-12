@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "registry-pattern"
+version = "0.2.1"
+description = "A flexible registry pattern implementation with validation, type safety, and remote synchronization"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "typing-extensions>=4.0",
+    "requests>=2.25.0",
+]
+
+[project.optional-dependencies]
+server = [
+    "flask>=2.0",
+]
+examples = [
+    "pyyaml>=5.4",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "registry-pattern[server,examples,docs,dev]",
+]
+
+[project.scripts]
+registry-server = "registry.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/registry"
+Repository = "https://github.com/yourusername/registry"
+
+[tool.setuptools]
+packages = ["registry", "registry.mixin"]
+
+[tool.setuptools.package-data]
+registry = ["py.typed"]

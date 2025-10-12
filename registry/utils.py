@@ -8,20 +8,46 @@ Exceptions:
     CoercionError: Raised when coercion of values fails.
     ConformanceError: Raised when callables/classes violate required signatures.
     InheritanceError: Raised when classes fail required inheritance.
-    RegistryKeyError: Key-related mapping errors with rich context.
-    RegistryValueError: Value-related mapping errors with rich context.
+    RegistryError: Raised when mapping errors occur.
 
 Helpers:
     get_type_name(cls, qualname=False): Return a human-readable type name.
 """
 
+import collections.abc
+import inspect
 import logging
+import sys
 from functools import partial, reduce, wraps
 from inspect import getmembers, isbuiltin, isclass, isfunction, ismethod, ismodule
 from types import ModuleType
 from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 
 from typing_extensions import ParamSpec, get_args, runtime_checkable
+
+# Python version compatibility
+if sys.version_info >= (3, 9):
+    from types import GenericAlias
+    from typing import get_origin, get_args
+elif sys.version_info >= (3, 8):
+    from typing import get_origin, get_args
+
+    try:
+        from typing import _GenericAlias as GenericAlias
+    except ImportError:
+        GenericAlias = type(Callable[[int], int])
+else:
+    # Python 3.7
+    def get_origin(tp):
+        return getattr(tp, "__origin__", None)
+
+    def get_args(tp):
+        return getattr(tp, "__args__", ())
+
+    try:
+        from typing import _GenericAlias as GenericAlias
+    except ImportError:
+        GenericAlias = type(Callable[[int], int])
 
 T = TypeVar("T")
 
@@ -80,12 +106,8 @@ class InheritanceError(ValidationError):
     """Raised when a class does not inherit from a required base."""
 
 
-class RegistryKeyError(ValidationError, KeyError):
+class RegistryError(ValidationError):
     """Raised for key-related mapping errors with rich context attached."""
-
-
-class RegistryValueError(ValidationError, ValueError):
-    """Raised for value-related mapping errors with rich context attached."""
 
 
 def get_type_name(cls: type, qualname: bool = False) -> str:
@@ -163,6 +185,18 @@ def get_subclasses(cls: type) -> List[type]:
     raise ValidationError(f"{cls} is not a class")
 
 
+def get_module_name(module: ModuleType) -> str:
+    """Get name of a module."""
+    assert ismodule(module), f"{module} is not a module"
+    return module.__name__
+
+
+def get_object_name(obj: Any) -> str:
+    """Get name of an object."""
+    assert hasattr(obj, "__name__"), f"{obj} is not an object"
+    return obj.__name__
+
+
 def get_module_members(
     module: ModuleType, ignore_all_keyword: bool = False
 ) -> List[Any]:
@@ -210,3 +244,136 @@ def compose(*functions: Callable[..., Any], wrap: bool = True) -> Callable[..., 
         partial(compose_two_funcs, wrap=False), reversed(functions)
     )
     return wraps(functions[0])(composed_functions) if wrap else composed_functions
+
+
+def _validate_function_signature(
+    func: Callable[..., Any], expected_callable_alias: GenericAlias
+) -> None:
+    """Validate that func's signature matches the expected Callable type annotation."""
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Validating method signature %s against %s",
+            get_func_name(func),
+            expected_callable_alias,
+        )
+
+    # First check if expected_callable_alias is a generic alias (has __origin__)
+    if not hasattr(expected_callable_alias, "__origin__"):
+        raise ConformanceError(
+            f"expected_callable_alias must be a Callable type annotation, got {type(expected_callable_alias)}",
+            ["Pass a Callable type like Callable[[int, str], bool]"],
+            {"artifact_name": get_func_name(func), "operation": "signature_inspection"},
+        )
+
+    # Verify expected_callable_alias is a Callable type
+    origin = get_origin(expected_callable_alias)
+    # In Python 3.7+, origin could be typing.Callable or collections.abc.Callable
+    is_callable = origin is collections.abc.Callable
+
+    if not is_callable:
+        raise ConformanceError(
+            f"expected_callable_alias must be a Callable type annotation, got origin {origin}",
+            ["Pass a Callable type like Callable[[int, str], bool]"],
+            {"artifact_name": get_func_name(func), "operation": "signature_inspection"},
+        )
+
+    try:
+        actual_sig = inspect.signature(func)
+    except (ValueError, TypeError) as e:
+        raise ConformanceError(
+            f"Cannot inspect function signature: {e}",
+            ["Ensure function is a valid callable"],
+            {"artifact_name": get_func_name(func), "operation": "signature_inspection"},
+        )
+
+    # Extract parameter types and return type from Callable annotation
+    # e.g., Callable[[int, str], bool] -> ([int, str], bool)
+    type_args = get_args(expected_callable_alias)
+    if len(type_args) != 2:
+        raise ConformanceError(
+            f"Invalid Callable type annotation: {expected_callable_alias}",
+            ["Use format: Callable[[param_types...], return_type]"],
+            {"artifact_name": get_func_name(func), "operation": "signature_inspection"},
+        )
+
+    expected_param_types, expected_return_type = type_args
+
+    # Handle Callable[..., ReturnType] case (ellipsis means any params)
+    if expected_param_types is Ellipsis:
+        # Only validate return type
+        if (
+            expected_return_type != inspect.Signature.empty
+            and actual_sig.return_annotation != expected_return_type
+        ):
+            if actual_sig.return_annotation == inspect.Signature.empty:
+                raise ConformanceError(
+                    "Missing return type annotation",
+                    [f"Annotate return: -> {get_type_name(expected_return_type)}"],
+                    {
+                        "artifact_name": get_func_name(func),
+                        "expected_type": str(expected_callable_alias),
+                    },
+                )
+            else:
+                raise ConformanceError(
+                    f"Return type mismatch: expected {get_type_name(expected_return_type)}, "
+                    + f"got {get_type_name(actual_sig.return_annotation)}",
+                    ["Align return annotation"],
+                    {
+                        "artifact_name": get_func_name(func),
+                        "expected_type": str(expected_callable_alias),
+                    },
+                )
+        return
+
+    errs: List[str] = []
+    hints: List[str] = []
+
+    actual_params = list(actual_sig.parameters.values())
+
+    # Validate parameter count
+    if len(actual_params) != len(expected_param_types):
+        errs.append(
+            f"Parameter count mismatch: expected {len(expected_param_types)}, got {len(actual_params)}"
+        )
+        hints.append(f"Use exactly {len(expected_param_types)} parameters")
+
+    # Validate each parameter type
+    for i, (actual_param, expected_type) in enumerate(
+        zip(actual_params, expected_param_types)
+    ):
+        if actual_param.annotation == inspect.Parameter.empty:
+            errs.append(f"Parameter '{actual_param.name}' missing type annotation")
+            hints.append(
+                f"Annotate: {actual_param.name}: {get_type_name(expected_type)}"
+            )
+        elif actual_param.annotation != expected_type:
+            errs.append(
+                f"Parameter '{actual_param.name}' type mismatch: expected {get_type_name(expected_type)}, "
+                + f"got {get_type_name(actual_param.annotation)}"
+            )
+            hints.append("Align parameter type annotation")
+
+    # Validate return type
+    if expected_return_type != inspect.Signature.empty:
+        if actual_sig.return_annotation == inspect.Signature.empty:
+            errs.append("Missing return type annotation")
+            hints.append(f"Annotate return: -> {get_type_name(expected_return_type)}")
+        elif actual_sig.return_annotation != expected_return_type:
+            errs.append(
+                f"Return type mismatch: expected {get_type_name(expected_return_type)}, "
+                + f"got {get_type_name(actual_sig.return_annotation)}"
+            )
+            hints.append("Align return annotation")
+
+    if errs:
+        raise ConformanceError(
+            "Method signature validation failed:\n"
+            + "\n".join(f"  • {e}" for e in errs),
+            hints,
+            {
+                "artifact_name": get_func_name(func),
+                "expected_type": str(expected_callable_alias),
+                "actual_type": str(actual_sig),
+            },
+        )

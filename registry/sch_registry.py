@@ -56,7 +56,7 @@ from typing import Any, Callable, Dict, Hashable, Literal, Mapping, Tuple, Type,
 # Pydantic import strategy: support both v1 and v2
 from pydantic import BaseModel, create_model
 
-from .mixin import MutableRegistryValidatorMixin
+from .mixin import MutableValidatorMixin
 from .utils import ValidationError, get_func_name  # vends readable names
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ __all__ = ["InvocationScheme", "SchemeRegistry"]
 
 
 def _callable_signature(
-    artifact: Union[Callable[..., Any], Type[Any]]
+    artifact: Union[Callable[..., Any], Type[Any]],
 ) -> Tuple[str, Signature, Literal["function", "class"]]:
     """Return a display name, the signature to modelize, and kind."""
     if isclass(artifact):
@@ -180,7 +180,7 @@ class InvocationScheme:
         return f"InvocationScheme(name={self.name!r}, kind={self.kind}, model={self.model.__name__})"
 
 
-class SchemeRegistry(MutableRegistryValidatorMixin[Hashable, InvocationScheme], ABC):
+class SchemeRegistry(MutableValidatorMixin[Hashable, InvocationScheme], ABC):
     """Registry of invocation schemes compiled from callables/classes.
 
     Key:   human-readable name (function __name__ / class __name__)

@@ -5,10 +5,16 @@ from __future__ import annotations
 import logging
 import weakref
 from abc import ABC
-from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, Optional, Tuple, TypeVar, List, _ProtocolMeta
 
-from .mixin import MutableRegistryValidatorMixin
-from .utils import ConformanceError, ValidationError, get_protocol
+from .mixin import MutableValidatorMixin
+from .utils import (
+    ConformanceError,
+    ValidationError,
+    get_object_name,
+    get_protocol,
+    get_type_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +27,8 @@ class RegistryError(ValidationError):
 
 
 def _is_hashable(x: Any) -> bool:
+    if hasattr(x, "__hash__"):
+        return True
     try:
         hash(x)
         return True
@@ -28,22 +36,22 @@ def _is_hashable(x: Any) -> bool:
         return False
 
 
-def _validate_instance_hierarchy(instance: Any, /, expected_type: Type) -> Any:
+def _validate_instance_hierarchy(instance: Any, /, expected_type: _ProtocolMeta) -> Any:
     if not isinstance(instance, expected_type):
         raise ValidationError(
             f"{instance} is not an instance of {getattr(expected_type, '__name__', str(expected_type))}",
             ["Ensure the key object matches the expected base type"],
             {
-                "expected_type": getattr(expected_type, "__name__", str(expected_type)),
-                "actual_type": type(instance).__name__,
-                "artifact_name": str(instance),
+                "expected_type": get_type_name(expected_type),
+                "actual_type": get_type_name(type(instance)),
+                "artifact_name": get_object_name(instance),
             },
         )
     return instance
 
 
-def _validate_instance_structure(obj: Any, /, expected_type: Type) -> Any:
-    missing = []
+def _validate_instance_structure(obj: Any, /, expected_type: _ProtocolMeta) -> Any:
+    missing: List[str] = []
     for name in dir(expected_type):
         if name.startswith("_"):
             continue
@@ -54,23 +62,21 @@ def _validate_instance_structure(obj: Any, /, expected_type: Type) -> Any:
             f"Key object missing attributes: {', '.join(missing)}",
             [f"Add attribute/method: {a}" for a in missing],
             {
-                "expected_type": getattr(expected_type, "__name__", str(expected_type)),
-                "actual_type": type(obj).__name__,
-                "artifact_name": str(obj),
+                "expected_type": get_type_name(expected_type),
+                "actual_type": get_type_name(type(obj)),
+                "artifact_name": get_object_name(obj),
             },
         )
     return obj
 
 
-class ConfigRegistry(
-    MutableRegistryValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT]
-):
+class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT]):
     """Registry of configurations keyed by a weak reference to objects."""
 
     _repository: Dict[Any, CfgT]
     _strict: bool = False
     _abstract: bool = False
-    __slots__ = ()
+    __slots__: Tuple[str, ...] = ()
 
     @classmethod
     def _get_mapping(cls):
@@ -96,14 +102,14 @@ class ConfigRegistry(
             logger.debug("Validating config key object: %r", value)
         if not _is_hashable(value):
             raise ValidationError(
-                f"Key must be hashable, got {type(value).__name__}",
+                f"Key must be hashable, got {get_type_name(type(value))}",
                 [
                     "Avoid mutable types as keys",
                     "Wrap primitives in a small class if necessary",
                 ],
                 {
                     "expected_type": "Hashable",
-                    "actual_type": type(value).__name__,
+                    "actual_type": get_type_name(type(value)),
                     "artifact_name": str(value),
                 },
             )
@@ -158,7 +164,7 @@ class ConfigRegistry(
         return value  # type: ignore
 
     @classmethod
-    def _internalize_artifact(cls, value: CfgT) -> CfgT:
+    def _internalize_artifact(cls, value: Any) -> CfgT:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Validating configuration payload: %s", type(value).__name__)
         if not isinstance(value, dict):

@@ -19,7 +19,7 @@ from typing import (
 
 from typing_extensions import ParamSpec, get_args
 
-from .mixin import MutableRegistryValidatorMixin
+from .mixin import MutableValidatorMixin
 from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
@@ -27,6 +27,7 @@ from .utils import (
     get_func_name,
     get_module_members,
     get_type_name,
+    _validate_function_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def _validate_function(func: Callable[..., Any]) -> Callable[..., Any]:
+def _validate_function(func: Any) -> Callable[..., Any]:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("Validating function object: %r", func)
     if (inspect.isfunction(func) or inspect.isbuiltin(func)) and callable(func):
@@ -49,78 +50,12 @@ def _validate_function(func: Callable[..., Any]) -> Callable[..., Any]:
         {
             "expected_type": "function",
             "actual_type": type(func).__name__,
-            "artifact_name": (
-                get_func_name(func) if hasattr(func, "__name__") else str(func)
-            ),
+            "artifact_name": get_func_name(func),
         },
     )
 
 
-def _validate_function_parameters(
-    func: Callable[P, R], expected_callable: Any
-) -> Callable[P, R]:
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "Validating signature of %s against %s",
-            get_func_name(func),
-            expected_callable,
-        )
-
-    try:
-        sig = inspect.signature(func)
-        exp_args, exp_ret = get_args(expected_callable)
-    except Exception as e:
-        raise ValidationError(
-            f"Cannot analyze function type: {e}",
-            ["Ensure expected type is a valid typing.Callable"],
-            {"artifact_name": get_func_name(func)},
-        )
-
-    errors: list[str] = []
-    hints: list[str] = []
-
-    if len(sig.parameters) != len(exp_args):
-        errors.append(
-            f"Parameter count mismatch: expected {len(exp_args)}, got {len(sig.parameters)}"
-        )
-        hints.append(f"Use exactly {len(exp_args)} parameters")
-
-    for param, exp in zip(sig.parameters.values(), exp_args):
-        ann = param.annotation
-        if ann is inspect.Parameter.empty:
-            errors.append(f"Parameter {param.name} missing type annotation")
-            hints.append(f"Annotate: {param.name}: {get_type_name(exp)}")
-        elif ann != exp:
-            errors.append(
-                f"Parameter {param.name} type mismatch: expected {get_type_name(exp)}, got {get_type_name(ann)}"
-            )
-            hints.append(f"Change to: {param.name}: {get_type_name(exp)}")
-
-    ret_ann = sig.return_annotation
-    if ret_ann is inspect.Signature.empty:
-        errors.append("Missing return type annotation")
-        hints.append(f"Annotate return: -> {get_type_name(exp_ret)}")
-    elif ret_ann != exp_ret:
-        errors.append(
-            f"Return type mismatch: expected {get_type_name(exp_ret)}, got {get_type_name(ret_ann)}"
-        )
-        hints.append(f"Change return to: -> {get_type_name(exp_ret)}")
-
-    if errors:
-        raise ConformanceError(
-            "Function signature validation failed:\n"
-            + "\n".join(f"  • {e}" for e in errors),
-            hints,
-            {
-                "artifact_name": get_func_name(func),
-                "expected_type": str(expected_callable),
-                "actual_type": str(sig),
-            },
-        )
-    return func
-
-
-class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]], ABC):
+class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     """Registry for functions, with optional strict signature validation.
 
     Strict mode: when enabled on subclass, enforce `Callable[Params, Return]`
@@ -128,9 +63,9 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
     """
 
     _repository: MutableMapping[Hashable, Callable[P, R]]
-    _strict: bool = False
+    _strict: ClassVar[bool] = False
     __orig_bases__: ClassVar[Tuple[type, ...]]  # used to extract Callable[P, R]
-    __slots__ = ()
+    __slots__: ClassVar[Tuple[str, ...]] = ()
 
     @classmethod
     def _get_mapping(cls):
@@ -174,7 +109,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
             if sys.version_info < (3, 10):
                 param = list(get_args(param))
             expected = Callable[param, ret]  # type: ignore
-            fn = _validate_function_parameters(fn, expected_callable=expected)
+            fn = _validate_function_signature(fn, expected_callable_alias=expected)
         return fn
 
     @classmethod
@@ -208,5 +143,7 @@ class FunctionalRegistry(MutableRegistryValidatorMixin[Hashable, Callable[P, R]]
                             }
                         )
                     raise
-        logger.info("%s: registered %d function(s), %d failed", cls.__name__, ok, fail)
+        logger.info(
+            "%s: registered %d function(s), %d failed", get_type_name(cls), ok, fail
+        )
         return module

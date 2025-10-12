@@ -5,16 +5,15 @@ from __future__ import annotations
 import inspect
 import logging
 import weakref
-from abc import ABC
-from typing import Any, Dict, Generic, Hashable, Type, TypeVar
+from typing import Any, Dict, Generic, Hashable, TypeVar, List, Tuple, ClassVar
 
-from .mixin import MutableRegistryValidatorMixin
+from .mixin import MutableValidatorMixin
 from .utils import (
     ConformanceError,
     ValidationError,
-    get_func_name,
     get_protocol,
     get_type_name,
+    _validate_function_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,11 +30,11 @@ def get_mem_addr(obj: Any, with_prefix: bool = True) -> str:
     return f"{addr:#x}" if with_prefix else f"{addr:x}"
 
 
-def _validate_instance_hierarchy(instance: ObjT, /, expected_type: Type) -> ObjT:
+def _validate_instance_hierarchy(instance: ObjT, /, expected_type: type) -> ObjT:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Checking instance %s isa %s",
-            type(instance).__name__,
+            get_type_name(type(instance)),
             get_type_name(expected_type),
         )
     if not isinstance(instance, expected_type):
@@ -44,58 +43,22 @@ def _validate_instance_hierarchy(instance: ObjT, /, expected_type: Type) -> ObjT
             [f"Instantiate or cast to {get_type_name(expected_type)}"],
             {
                 "expected_type": get_type_name(expected_type),
-                "actual_type": type(instance).__name__,
+                "actual_type": get_type_name(type(instance)),
                 "artifact_name": str(instance),
             },
         )
     return instance
 
 
-def _validate_function_signature(func: Any, expected_func: Any) -> None:
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "Validating method signature %s against %s",
-            get_func_name(func),
-            get_func_name(expected_func),
-        )
-    fs, es = inspect.signature(func), inspect.signature(expected_func)
-    errs, hints = [], []
-    fparams, eparams = list(fs.parameters.values()), list(es.parameters.values())
-    if len(fparams) != len(eparams):
-        errs.append(
-            f"Parameter count mismatch: expected {len(eparams)}, got {len(fparams)}"
-        )
-        hints.append(f"Use exactly {len(eparams)} parameters")
-    for p, ep in zip(fparams, eparams):
-        if ep.annotation != inspect.Parameter.empty and p.annotation != ep.annotation:
-            errs.append(
-                f"Parameter '{p.name}' type mismatch: expected {getattr(ep.annotation, '__name__', str(ep.annotation))}, "
-                f"got {getattr(p.annotation, '__name__', str(p.annotation))}"
-            )
-            hints.append("Align parameter annotations")
-    if (
-        es.return_annotation != inspect.Signature.empty
-        and fs.return_annotation != es.return_annotation
-    ):
-        errs.append("Return type mismatch")
-        hints.append("Align return annotation")
-    if errs:
-        raise ConformanceError(
-            "Method signature validation failed:\n"
-            + "\n".join(f"  • {e}" for e in errs),
-            hints,
-            {},
-        )
-
-
-def _validate_instance_structure(obj: Any, /, expected_type: Type) -> Any:
+def _validate_instance_structure(obj: Any, /, expected_type: type):
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Validating structure of instance %s against protocol %s",
-            type(obj).__name__,
+            get_type_name(type(obj)),
             get_type_name(expected_type),
         )
-    missing, sig_errs = [], []
+    missing: List[str] = []
+    sig_errs: List[str] = []
     for name in dir(expected_type):
         if name.startswith("_"):
             continue
@@ -114,7 +77,8 @@ def _validate_instance_structure(obj: Any, /, expected_type: Type) -> Any:
             except ConformanceError as e:
                 sig_errs.append(f"{name}: {e.message}")
     if missing or sig_errs:
-        parts, hints = [], []
+        parts: List[str] = []
+        hints: List[str] = []
         if missing:
             parts.append(f"Missing attributes: {', '.join(missing)}")
             hints.extend([f"Add attribute/method: {a}" for a in missing])
@@ -123,26 +87,26 @@ def _validate_instance_structure(obj: Any, /, expected_type: Type) -> Any:
             parts.extend(f"  {e}" for e in sig_errs)
             hints.append("Match method signatures to protocol")
         raise ConformanceError(
-            f"Instance of {type(obj).__name__} does not conform to protocol {get_type_name(expected_type)}:\n"
+            f"Instance of {get_type_name(type(obj))} does not conform to protocol {get_type_name(expected_type)}:\n"
             + "\n".join(parts),
             hints,
             {
                 "expected_type": get_type_name(expected_type),
-                "actual_type": type(obj).__name__,
+                "actual_type": get_type_name(type(obj)),
                 "artifact_name": str(obj),
             },
         )
     return obj
 
 
-class ObjectRegistry(MutableRegistryValidatorMixin[Hashable, ObjT], ABC, Generic[ObjT]):
+class ObjectRegistry(MutableValidatorMixin[Hashable, ObjT], Generic[ObjT]):
     """Registry for instances; stores weakrefs by default."""
 
     _repository: Dict[Hashable, Any]
-    _strict: bool = False
-    _abstract: bool = False
-    _strict_weakref: bool = False
-    __slots__ = ()
+    _strict: ClassVar[bool] = False
+    _abstract: ClassVar[bool] = False
+    _strict_weakref: ClassVar[bool] = False
+    __slots__: ClassVar[Tuple[str, ...]] = ()
 
     @classmethod
     def _get_mapping(cls):

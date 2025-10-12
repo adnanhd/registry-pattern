@@ -9,7 +9,7 @@ This module provides:
   - Global cache helpers (`clear_validation_cache`, `get_cache_stats`, `configure_validation_cache`)
     operating on a single module-level cache instance.
 
-  - `ImmutableRegistryValidatorMixin` and `MutableRegistryValidatorMixin`:
+  - `ImmutableValidatorMixin` and `MutableValidatorMixin`:
     front-ends that wrap accessor/mutator calls with identifier/artifact validation and
     convert failures to `ValidationError` or key/value errors from `_utils`.
 
@@ -36,13 +36,7 @@ from typing import (
     overload,
 )
 
-from ..utils import (
-    ConformanceError,
-    InheritanceError,
-    RegistryKeyError,
-    RegistryValueError,
-    ValidationError,
-)
+from ..utils import ConformanceError, InheritanceError, RegistryError, ValidationError
 from .accessor import RegistryAccessorMixin
 from .mutator import RegistryMutatorMixin
 
@@ -164,7 +158,7 @@ KeyType = TypeVar("KeyType", bound=Hashable)
 ValType = TypeVar("ValType")
 
 
-class ImmutableRegistryValidatorMixin(
+class ImmutableValidatorMixin(
     RegistryAccessorMixin[KeyType, ValType], Generic[KeyType, ValType]
 ):
     """Read-side validation wrapper for registries.
@@ -172,7 +166,7 @@ class ImmutableRegistryValidatorMixin(
     Responsibilities:
         - Validate identifiers and artifacts on read paths.
         - Convert bad inputs into `ValidationError` with context.
-        - Delegate presence errors to accessor (`RegistryKeyError`).
+        - Delegate presence errors to accessor (`RegistryError`).
 
     Override points:
         `_internalize_identifier`, `_externalize_identifier`, `_internalize_artifact`, `_externalize_artifact`.
@@ -238,14 +232,14 @@ class ImmutableRegistryValidatorMixin(
         """Retrieve an artifact with validation and rich failures.
 
         Raises:
-            RegistryKeyError: if key is missing.
+            RegistryError: if key is missing.
             ValidationError: if the key or artifact validation fails.
         """
         try:
             validated_key = cls._internalize_identifier(key)
             item = cls._get_artifact(validated_key)
             return cls._externalize_artifact(item)
-        except RegistryKeyError:
+        except RegistryError:
             raise
         except ValidationError:
             raise
@@ -291,7 +285,7 @@ class ImmutableRegistryValidatorMixin(
     @classmethod
     def iter_identifiers(cls) -> Iterator[KeyType]:
         """Iterate over all artifact identifiers."""
-        return cls._iter_mapping()
+        return map(cls._externalize_identifier, cls._iter_mapping())
 
     @classmethod
     def validate_artifact(cls, item: Any) -> ValType:
@@ -315,8 +309,8 @@ class ImmutableRegistryValidatorMixin(
             ) from e
 
 
-class MutableRegistryValidatorMixin(
-    ImmutableRegistryValidatorMixin[KeyType, ValType],
+class MutableValidatorMixin(
+    ImmutableValidatorMixin[KeyType, ValType],
     RegistryMutatorMixin[KeyType, ValType],
     Generic[KeyType, ValType],
 ):
@@ -389,12 +383,12 @@ class MutableRegistryValidatorMixin(
 
         Raises:
             ValidationError: if key validation fails.
-            RegistryKeyError/RegistryValueError: if the key does not exist.
+            RegistryError: if the key does not exist.
         """
         try:
             validated_key = cls._internalize_identifier(key)
             cls._del_artifact(validated_key)
-        except (RegistryKeyError, RegistryValueError):
+        except RegistryError:
             raise
         except (ConformanceError, InheritanceError, ValidationError):
             raise
@@ -427,7 +421,7 @@ class MutableRegistryValidatorMixin(
         try:
             identifier = cls._identifier_of(item)
             cls.unregister_identifier(identifier)
-        except (ValidationError, RegistryKeyError, RegistryValueError):
+        except (ValidationError, RegistryError):
             raise
         except Exception as e:
             artifact_name = getattr(item, "__name__", str(item))
@@ -463,18 +457,17 @@ class MutableRegistryValidatorMixin(
     @classmethod
     def validate_registry_state(cls) -> Dict[str, Any]:
         """Validate every artifact and return a summary report."""
-        report = {
-            "total_artifacts": cls._len_mapping(),
-            "validation_errors": [],
-            "warnings": [],
-            "cache_stats": get_cache_stats(),
-        }
+        total_artifacts = cls._len_mapping()
+        validation_errors = []
+        warnings = []
+        cache_stats = get_cache_stats()
+
         for key in cls._iter_mapping():
             try:
                 artifact = cls._get_artifact(key)
                 cls.validate_artifact(artifact)
             except ValidationError as e:
-                report["validation_errors"].append(
+                validation_errors.append(
                     {
                         "key": str(key),
                         "error": str(e),
@@ -482,13 +475,18 @@ class MutableRegistryValidatorMixin(
                     }
                 )
             except Exception as e:
-                report["warnings"].append(
+                warnings.append(
                     {
                         "key": str(key),
                         "warning": f"Unexpected error during validation: {e}",
                     }
                 )
-        return report
+        return {
+            "total_artifacts": total_artifacts,
+            "validation_errors": validation_errors,
+            "warnings": warnings,
+            "cache_stats": cache_stats,
+        }
 
     @classmethod
     def clear_validation_cache(cls) -> int:
@@ -519,9 +517,13 @@ class MutableRegistryValidatorMixin(
         results = {}
         for key, item in items.items():
             try:
-                cls._internalize_identifier(key)
-                cls._internalize_artifact(item)
-                results[key] = True
+                valid_key = cls._internalize_identifier(key)
+                recon_key = cls._externalize_identifier(valid_key)
+
+                valid_item = cls._internalize_artifact(item)
+                recon_item = cls._externalize_artifact(valid_item)
+
+                results[key] = bool(recon_item == item and recon_key == key)
             except ValidationError as e:
                 results[key] = e
             except Exception as e:
@@ -544,11 +546,13 @@ class MutableRegistryValidatorMixin(
         Returns:
             Dict with keys: successful, failed, total, errors.
         """
-        results = {"successful": [], "failed": [], "total": len(items), "errors": []}
+        successful: List[KeyType] = []
+        failed: List[KeyType] = []
+        errors: List[Dict[str, Any]] = []
         for key, item in items.items():
             try:
                 cls.register_artifact(key, item)
-                results["successful"].append(key)
+                successful.append(key)
             except (ValidationError, ConformanceError, InheritanceError) as e:
                 error_info = {
                     "key": key,
@@ -556,16 +560,16 @@ class MutableRegistryValidatorMixin(
                     "suggestions": getattr(e, "suggestions", []),
                     "context": getattr(e, "context", {}),
                 }
-                results["failed"].append(key)
-                results["errors"].append(error_info)
+                failed.append(key)
+                errors.append(error_info)
                 if not skip_invalid:
                     raise
             except Exception as e:
                 enhanced_error = ValidationError(
                     f"Registration failed for key '{key}': {e}"
                 )
-                results["failed"].append(key)
-                results["errors"].append(
+                failed.append(key)
+                errors.append(
                     {
                         "key": key,
                         "error": str(enhanced_error),
@@ -575,4 +579,9 @@ class MutableRegistryValidatorMixin(
                 )
                 if not skip_invalid:
                     raise enhanced_error from e
-        return results
+        return {
+            "successful": successful,
+            "failed": failed,
+            "total": len(items),
+            "errors": errors,
+        }

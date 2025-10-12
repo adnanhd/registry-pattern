@@ -1,3 +1,0 @@
-# Backup repository configuration for /home/adhd/dev-space/personal/registry-pattern/registry
-SOURCE_DIR="./"
-BACKUP_DIR="/home/adhd/.rsync_backups/!home!adhd!dev-space!personal!registry-pattern!registry"

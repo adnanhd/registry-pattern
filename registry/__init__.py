@@ -1,29 +1,28 @@
-from .cfg_registry import ConfigRegistry
+# from .extra.cfg_registry import ConfigRegistry
+# from .extra.obj_registry import ObjectRegistry
 from .fnc_registry import FunctionalRegistry
-from .obj_registry import ObjectRegistry
 from .sch_registry import SchemeRegistry
 from .typ_registry import TypeRegistry
 from .utils import (
     CoercionError,
     ConformanceError,
     InheritanceError,
-    RegistryKeyError,
-    RegistryValueError,
+    RegistryError,
     ValidationError,
 )
+from ._version import __version__
 
 __all__ = [
     "TypeRegistry",
-    "ObjectRegistry",
     "FunctionalRegistry",
-    "ObjectRegistry",
     "SchemeRegistry",
-    "ConfigRegistry",
+    # "ObjectRegistry",
+    # "ConfigRegistry",
+    "RegistryError",
     "ValidationError",
-    "RegistryKeyError",
-    "RegistryValueError",
     "CoercionError",
     "ConformanceError",
     "InheritanceError",
     "ValidationError",
+    "__version__",
 ]

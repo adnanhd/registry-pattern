@@ -6,7 +6,7 @@ Behavior:
   - `_set_mapping` replaces the entire mapping after asserting the current one is clear.
   - `_update_mapping` inserts multiple items, asserting absence for each key.
   - Single-item ops (`_set_artifact`, `_update_artifact`, `_del_artifact`) delegate
-    to presence/absence guards that raise `RegistryKeyError` with context.
+    to presence/absence guards that raise `RegistryError` with context.
 
 Simple inheritance diagram (Doxygen dot):
 \dot
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Dict, Hashable, Mapping, MutableMapping, TypeVar, Union
 
-from ..utils import RegistryKeyError
+from ..utils import RegistryError, get_type_name
 from .accessor import RegistryAccessorMixin
 
 __all__ = [
@@ -47,7 +47,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     """Write-side extensions for a registry.
 
     Error semantics:
-        Presence/absence checks raise `RegistryKeyError` with rich context.
+        Presence/absence checks raise `RegistryError` with rich context.
     """
 
     # -----------------------------------------------------------------------------
@@ -64,7 +64,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         """Insert all items from `mapping`, asserting current absence for each key.
 
         Raises:
-            RegistryKeyError: if any key already exists.
+            RegistryError: if any key already exists.
         """
         if cls._len_mapping() > 0:
             for key in mapping.keys():
@@ -89,7 +89,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         """Insert `item` under `key`.
 
         Raises:
-            RegistryKeyError: if `key` is already present.
+            RegistryError: if `key` is already present.
         """
         cls._assert_absence(key)[key] = item
 
@@ -98,7 +98,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         """Replace `item` under `key`.
 
         Raises:
-            RegistryKeyError: if `key` is not present.
+            RegistryError: if `key` is not present.
         """
         cls._assert_presence(key)[key] = item
 
@@ -111,7 +111,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         """Delete the entry under `key`.
 
         Raises:
-            RegistryKeyError: if `key` is not present.
+            RegistryError: if `key` is not present.
         """
         del cls._assert_presence(key)[key]
 
@@ -123,7 +123,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     def _assert_absence(
         cls, key: KeyType
     ) -> Union[Dict[KeyType, ValType], MutableMapping[KeyType, ValType]]:
-        """Return mapping if `key` is absent; otherwise raise `RegistryKeyError`."""
+        """Return mapping if `key` is absent; otherwise raise `RegistryError`."""
         mapping = cls._get_mapping()
         if key in mapping:
             suggestions = [
@@ -135,13 +135,13 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
             context = {
                 "operation": "assert_absence",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
-                "registry_type": cls.__class__.__name__,
+                "registry_type": get_type_name(cls),
                 "key": str(key),
-                "key_type": type(key).__name__,
+                "key_type": get_type_name(type(key)),
                 "registry_size": len(mapping),
                 "conflicting_key": str(key),
             }
-            raise RegistryKeyError(
+            raise RegistryError(
                 f"Key '{key}' is already found in the mapping", suggestions, context
             )
         return mapping

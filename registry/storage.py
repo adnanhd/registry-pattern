@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 import requests
 
-from .utils import RegistryKeyError, ValidationError
+from .utils import RegistryError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -354,7 +354,7 @@ class RemoteStorageProxy(MutableMapping[KeyType, ValType], Generic[KeyType, ValT
             ) from e
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
-                raise RegistryKeyError(
+                raise RegistryError(
                     "Key not found in remote registry",
                     ["Verify key exists"],
                     {"namespace": self.namespace},
@@ -374,7 +374,7 @@ class RemoteStorageProxy(MutableMapping[KeyType, ValType], Generic[KeyType, ValT
         response = self._request("GET", endpoint)
 
         if response is None:
-            raise RegistryKeyError(
+            raise RegistryError(
                 f"Key not found: {key}",
                 ["Check key exists"],
                 {"namespace": self.namespace, "key": str(key)},

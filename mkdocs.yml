@@ -1,0 +1,17 @@
+site_name: RegistryPattern
+repo_url: https://adnanhd.git/registry-pattern
+theme:
+  name: mkdocs
+nav:
+  - Home: index.md
+  - API:
+      - registry: api/registry-pattern.md
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+
