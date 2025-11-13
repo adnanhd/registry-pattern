@@ -30,13 +30,22 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
+    get_args,
+    get_origin,
     overload,
 )
 
-from ..utils import ConformanceError, InheritanceError, RegistryError, ValidationError
+from ..utils import (
+    ConformanceError,
+    InheritanceError,
+    RegistryError,
+    ValidationError,
+    get_type_name,
+)
 from .accessor import RegistryAccessorMixin
 from .mutator import RegistryMutatorMixin
 
@@ -49,7 +58,7 @@ class ValidationCache:
         sequences are copied to avoid cross-thread mutation.
 
     Keys:
-        Tuple `(id(obj), type(obj).__name__, operation)`. Identity reuse after GC
+        Tuple ``(id(obj), get_type_name(type(obj)), operation)``. Identity reuse after GC
         can collide within TTL. If you need stronger semantics, supply a stable,
         content-derived key in your own wrapper.
 
@@ -58,7 +67,7 @@ class ValidationCache:
         LRU. When capacity is reached, the oldest timestamped entry is evicted.
 
     Returns:
-        `(result: bool, suggestions: List[str])` when a live entry is found, else `None`.
+        ``(result: bool, suggestions: List[str])`` when a live entry is found, else `None`.
     """
 
     def __init__(self, max_size: int = 1000, ttl_seconds: float = 300.0):
@@ -73,7 +82,7 @@ class ValidationCache:
 
     def get(self, obj: Any, operation: str) -> Optional[Tuple[bool, List[str]]]:
         """Return cached `(result, suggestions)` for `obj`/`operation`, or `None`."""
-        key = (id(obj), type(obj).__name__, operation)
+        key = (id(obj), get_type_name(type(obj)), operation)
         with self._lock:
             entry = self._cache.get(key)
             if not entry:
@@ -90,7 +99,7 @@ class ValidationCache:
         self, obj: Any, operation: str, result: bool, suggestions: List[str]
     ) -> None:
         """Insert or replace cache entry for `obj`/`operation` with a TTL."""
-        key = (id(obj), type(obj).__name__, operation)
+        key = (id(obj), get_type_name(type(obj)), operation)
         now = self._now()
         with self._lock:
             if len(self._cache) >= self.max_size:
@@ -158,6 +167,29 @@ KeyType = TypeVar("KeyType", bound=Hashable)
 ValType = TypeVar("ValType")
 
 
+def _is_hashable(value: Any) -> bool:
+    return isinstance(value, Hashable)
+
+
+def _resolve_typevars(cls: type) -> Tuple[Any, Any]:
+    if not hasattr(cls, "__orig_bases__"):
+        raise TypeError(f"Expected a parametrized Generic subclass, got {cls!r}")
+
+    key = Any
+    val = Any
+    for base in getattr(cls, "__orig_bases__", ()):
+        if get_origin(base) is RegistryAccessorMixin:
+            key, val = get_args(base)
+
+    # Substitute unresolved TypeVars with your desired defaults
+    if isinstance(key, TypeVar) and key.__name__ == "KeyType":
+        key = Hashable
+    if isinstance(val, TypeVar) and val.__name__ == "ValType":
+        val = Any
+
+    return key, val
+
+
 class ImmutableValidatorMixin(
     RegistryAccessorMixin[KeyType, ValType], Generic[KeyType, ValType]
 ):
@@ -179,48 +211,67 @@ class ImmutableValidatorMixin(
         Raises:
             ValidationError: if `value` is not hashable or otherwise invalid.
         """
-        if not isinstance(value, Hashable):
+        key_t, _ = _resolve_typevars(cls)
+
+        if not _is_hashable(value):
             suggestions = [
                 "Ensure the key is hashable (str, int, tuple, etc.)",
-                f"Got {type(value).__name__}, which is not hashable",
+                f"Got {get_type_name(type(value))}, which is not hashable",
                 "Try converting to string: str(your_key)",
             ]
             context = {
                 "expected_type": "Hashable",
-                "actual_type": type(value).__name__,
+                "actual_type": get_type_name(type(value)),
                 "artifact_name": str(value),
             }
             raise ValidationError(
-                f"Key must be hashable, got {type(value).__name__}",
+                f"Key must be hashable, got {get_type_name(type(value))}",
                 suggestions,
                 context,
             )
-        return value  # type: ignore
+        if key_t != Any and not isinstance(value, key_t):
+            suggestions = [
+                f"Ensure the key is of type {key_t.__name__}",
+                f"Got {get_type_name(type(value))}, which is not of type {key_t.__name__}",
+                "Try converting to the expected type: your_key = key_t(your_key)",
+            ]
+            context = {
+                "expected_type": key_t.__name__,
+                "actual_type": get_type_name(type(value)),
+                "artifact_name": str(value),
+            }
+            raise ValidationError(
+                f"Key must be of type {key_t.__name__}, got {get_type_name(type(value))}",
+                suggestions,
+                context,
+            )
+        return value
 
     @classmethod
     def _internalize_artifact(cls, value: ValType) -> ValType:
         """Validate/coerce an artifact for storage. Default passthrough."""
-        return value
-
-    @classmethod
-    def _externalize_identifier(cls, value: Any) -> KeyType:
-        """Validate an identifier on retrieval. Default: hashable check."""
-        if not isinstance(value, Hashable):
+        _, val_t = _resolve_typevars(cls)
+        if val_t != Any and not isinstance(value, val_t):
             suggestions = [
-                "Ensure the key is hashable (str, int, tuple, etc.)",
-                f"Got {type(value).__name__}, which is not hashable",
+                f"Ensure the artifact is of type {val_t.__name__}",
+                f"Got {get_type_name(type(value))}, which is not of type {val_t.__name__}",
             ]
             context = {
-                "expected_type": "Hashable",
-                "actual_type": type(value).__name__,
+                "expected_type": val_t.__name__,
+                "actual_type": get_type_name(type(value)),
                 "artifact_name": str(value),
             }
             raise ValidationError(
-                f"Key must be hashable, got {type(value).__name__}",
+                f"Artifact must be of type {val_t.__name__}, got {get_type_name(type(value))}",
                 suggestions,
                 context,
             )
-        return value  # type: ignore
+        return value
+
+    @classmethod
+    def _externalize_identifier(cls, value: KeyType) -> KeyType:
+        """Validate an identifier on retrieval. Default: hashable check."""
+        return value
 
     @classmethod
     def _externalize_artifact(cls, value: ValType) -> ValType:
@@ -247,15 +298,15 @@ class ImmutableValidatorMixin(
             suggestions = [
                 f"Check that key '{key}' exists in the registry",
                 "Use has_identifier() to check existence first",
-                f"Registry {getattr(cls, '__name__', 'Unknown')} contains {cls._len_mapping()} items",
+                f"Registry {get_type_name(cls)} contains {cls._len_mapping()} items",
                 "Use iter_identifiers() to see all available keys",
             ]
             context = {
                 "operation": "get_artifact",
-                "registry_name": getattr(cls, "__name__", "Unknown"),
-                "registry_type": cls.__class__.__name__,
+                "registry_name": get_type_name(cls),
+                "registry_type": get_type_name(type(cls)),
                 "key": str(key),
-                "key_type": type(key).__name__,
+                "key_type": get_type_name(type(key)),
                 "registry_size": cls._len_mapping(),
             }
             raise ValidationError(
@@ -396,15 +447,15 @@ class MutableValidatorMixin(
             suggestions = [
                 f"Check that key '{key}' exists in the registry",
                 "Use has_identifier() to check existence first",
-                f"Registry {getattr(cls, '__name__', 'Unknown')} contains {cls._len_mapping()} items",
+                f"Registry {get_type_name(cls)} contains {cls._len_mapping()} items",
                 "Use iter_identifiers() to see all available keys",
             ]
             context = {
                 "operation": "unregister_identifier",
-                "registry_name": getattr(cls, "__name__", "Unknown"),
-                "registry_type": cls.__class__.__name__,
+                "registry_name": get_type_name(cls),
+                "registry_type": get_type_name(type(cls)),
                 "key": str(key),
-                "key_type": type(key).__name__,
+                "key_type": get_type_name(type(key)),
                 "registry_size": cls._len_mapping(),
             }
             raise ValidationError(
@@ -429,14 +480,14 @@ class MutableValidatorMixin(
                 f"Check that artifact '{artifact_name}' exists in the registry",
                 "Ensure the artifact can be identified using _identifier_of()",
                 "Use has_artifact() to check existence first",
-                f"Registry {getattr(cls, '__name__', 'Unknown')} contains {cls._len_mapping()} items",
+                f"Registry {get_type_name(cls)} contains {cls._len_mapping()} items",
             ]
             context = {
                 "operation": "unregister_artifact",
-                "registry_name": getattr(cls, "__name__", "Unknown"),
-                "registry_type": cls.__class__.__name__,
+                "registry_name": get_type_name(cls),
+                "registry_type": get_type_name(type(cls)),
                 "artifact_name": artifact_name,
-                "artifact_type": type(item).__name__,
+                "artifact_type": get_type_name(type(item)),
                 "registry_size": cls._len_mapping(),
             }
             raise ValidationError(

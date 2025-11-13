@@ -5,12 +5,13 @@ registration it synthesizes a Pydantic `BaseModel` from the callable
 signature (for classes, from `__init__` excluding `self`). The resulting
 "scheme" lets you:
 
-  - build a validated config object (verifiable, serializable),
-  - execute the function with validated kwargs,
-  - or instantiate the class with validated kwargs.
+- build a validated config object (verifiable, serializable),
+- execute the function with validated kwargs,
+- or instantiate the class with validated kwargs.
 
 Design highlights
 -----------------
+
 - Integrates with the existing validator/mutator mixins for consistent
   error semantics and batch ops.
 - Logs helpful DEBUG traces without adding overhead when DEBUG is off.
@@ -21,14 +22,15 @@ Design highlights
 
 Public surface
 --------------
+
 - `SchemeRegistry.register_artifact(func_or_cls)` -> `InvocationScheme`
 - `SchemeRegistry.get_model(key)` -> Type[BaseModel]
 - `SchemeRegistry.build_config(key, **kwargs)` -> BaseModel
 - `SchemeRegistry.execute(key, data)` -> Any
 - `SchemeRegistry.register_module_callables(module, ...)` convenience
 
-Usage
------
+Usage::
+
     from registry.scheme_registry import SchemeRegistry
 
     def f(a: int, b: float = 1.0): return a + b
@@ -107,7 +109,7 @@ def _to_pydantic_fields(sig: Signature) -> Dict[str, Tuple[type, Any]]:
     """Translate a Python signature into Pydantic `create_model` field specs.
 
     Notes:
-        - Parameters of kind VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs)
+        - Parameters of kind VAR_POSITIONAL (\\*args) and VAR_KEYWORD (\\*\\*kwargs)
           are skipped, with a DEBUG log.
         - Missing annotations default to `Any`.
         - Missing defaults become required fields (Ellipsis).

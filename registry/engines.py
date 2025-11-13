@@ -1,16 +1,20 @@
 r"""Engine registries for extensible artifact factorization.
 
 Provides two registries:
-  - ConfigFileEngine: maps file extensions to loader functions
-  - SocketEngine: maps protocols to RPC/network handlers
+
+- ConfigFileEngine: maps file extensions to loader functions
+- SocketEngine: maps protocols to RPC/network handlers
 
 Usage:
+
+.. code-block:: python
+
     @ConfigFileEngine.register_artifact
     def json(filepath: Path) -> dict:
         import json
         return json.load(filepath.open())
-    
-    @SocketEngine.register_artifact  
+
+    @SocketEngine.register_artifact
     def rpc(type: str, config: dict) -> dict:
         # RPC implementation
         return response_dict

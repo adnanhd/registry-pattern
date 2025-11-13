@@ -1,4 +1,4 @@
-r"""Function registry with optional signature checks."""
+r"""Registry for functions, with optional signature checks."""
 
 from __future__ import annotations
 
@@ -6,11 +6,13 @@ import inspect
 import logging
 import sys
 from abc import ABC
+from types import ModuleType
 from typing import (
     Any,
     Callable,
     ClassVar,
     Hashable,
+    List,
     MutableMapping,
     Optional,
     Tuple,
@@ -27,6 +29,7 @@ from .utils import (
     _validate_function_signature,
     get_func_name,
     get_module_members,
+    get_module_name,
     get_type_name,
 )
 
@@ -69,6 +72,7 @@ class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC)
 
     @classmethod
     def _get_mapping(cls):
+        """Return the mapping of the registry."""
         return cls._repository
 
     @classmethod
@@ -87,6 +91,16 @@ class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC)
         logic_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
+        """Initialize a FunctionalRegistry subclass.
+
+        Args:
+            strict: Whether to enforce strict type checking.
+            scheme_namespace: The namespace for the scheme registry.
+            logic_namespace: The namespace for the logic registry.
+
+        Returns:
+            None.
+        """
         super().__init_subclass__(scheme_namespace=scheme_namespace, **kwargs)
         if logic_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
@@ -106,6 +120,14 @@ class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC)
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> Callable[P, R]:
+        """Internalize an artifact.
+
+        Args:
+            value: The artifact to internalize.
+
+        Returns:
+            The internalized artifact.
+        """
         fn = _validate_function(value)
         if cls._strict:
             param, ret = get_args(cls.__orig_bases__[0])
@@ -117,11 +139,33 @@ class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC)
 
     @classmethod
     def _identifier_of(cls, item: Callable[P, R]) -> Hashable:
+        """Return the identifier of a function.
+
+        Args:
+            item: The function to get the identifier of.
+
+        Returns:
+            The identifier of the function.
+        """
         return get_func_name(_validate_function(item))
 
     @classmethod
-    def register_module_functions(cls, module: Any, raise_error: bool = True) -> Any:
-        members = get_module_members(module)
+    def register_module_functions(
+        cls, module: ModuleType, raise_error: bool = True
+    ) -> Any:
+        """Register all functions in a module as artifacts.
+
+        Args:
+            module: The module to register functions from.
+            raise_error: Whether to raise an error if a function is invalid.
+
+        Returns:
+            The number of functions registered.
+        """
+        assert isinstance(
+            module, ModuleType
+        ), f"Expected ModuleType, got {type(module)}"
+        members: List[Any] = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:
             name = getattr(obj, "__name__", str(obj))
@@ -137,7 +181,7 @@ class FunctionalRegistry(RegistryFactorizorMixin[Hashable, Callable[P, R]], ABC)
                     if hasattr(e, "context"):
                         e.context.update(
                             {
-                                "module_name": getattr(module, "__name__", str(module)),
+                                "module_name": get_module_name(module),
                                 "operation": "register_module_functions",
                             }
                         )

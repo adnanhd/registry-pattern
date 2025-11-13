@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from abc import ABC
+from types import ModuleType
 from typing import (
     Any,
     ClassVar,
@@ -146,6 +147,18 @@ class TypeRegistry(
         scheme_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
+        """Initialize the TypeRegistry subclass.
+
+        Args:
+            strict (bool): Whether the registry should be strict.
+            abstract (bool): Whether the registry is abstract.
+            logic_namespace (Optional[str]): The namespace for the logic.
+            scheme_namespace (Optional[str]): The namespace for the schema.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            None
+        """
         super().__init_subclass__(scheme_namespace=scheme_namespace, **kwargs)
         if logic_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
@@ -167,6 +180,14 @@ class TypeRegistry(
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> Type[Cls]:
+        """Internalize the given artifact.
+
+        Args:
+            value (Any): The artifact to internalize.
+
+        Returns:
+            Type[Cls]: The internalized artifact.
+        """
         v = _validate_class(value)
         if cls._abstract:
             v = _validate_class_hierarchy(v, abc_class=cls)
@@ -177,10 +198,32 @@ class TypeRegistry(
 
     @classmethod
     def _identifier_of(cls, item: Type[Cls]) -> Hashable:
+        """Return the identifier of the given item.
+
+        Args:
+            item (Type[Cls]): The item to get the identifier for.
+
+        Returns:
+            Hashable: The identifier of the item.
+        """
         return get_type_name(_validate_class(item))
 
     @classmethod
-    def register_module_subclasses(cls, module: Any, raise_error: bool = True) -> Any:
+    def register_module_subclasses(
+        cls, module: ModuleType, raise_error: bool = True
+    ) -> Any:
+        """Register all subclasses of the given module.
+
+        Args:
+            module (ModuleType): The module to register.
+            raise_error (bool, optional): Whether to raise an error if registration fails. Defaults to True.
+
+        Returns:
+            Any: The result of the registration.
+        """
+        assert isinstance(
+            module, ModuleType
+        ), f"Expected ModuleType, got {type(module)}"
         members = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:

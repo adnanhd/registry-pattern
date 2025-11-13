@@ -9,13 +9,14 @@ Behavior:
     to presence/absence guards that raise `RegistryError` with context.
 
 Simple inheritance diagram (Doxygen dot):
-\dot
-digraph RegistryPattern {
-    rankdir=LR;
-    node [shape=rectangle];
-    "RegistryAccessorMixin" -> "RegistryMutatorMixin";
-}
-\enddot
+
+.. code-block:: text
+
+   digraph RegistryPattern {
+       rankdir=LR;
+       node [shape=rectangle];
+       "RegistryAccessorMixin" -> "RegistryMutatorMixin";
+   }
 """
 
 from __future__ import annotations

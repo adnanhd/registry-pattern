@@ -10,13 +10,14 @@ Key points:
   - No mutation APIs are exposed here; see `RegistryMutatorMixin` for writes.
 
 Simple inheritance diagram (Doxygen dot):
-\dot
-digraph RegistryPattern {
-    rankdir=LR;
-    node [shape=rectangle];
-    "RegistryAccessorMixin" -> "Enhanced Operations";
-}
-\enddot
+
+.. code-block:: text
+
+   digraph RegistryPattern {
+       rankdir=LR;
+       node [shape=rectangle];
+       "RegistryAccessorMixin" -> "Enhanced Operations";
+   }
 """
 
 from __future__ import annotations
