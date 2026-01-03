@@ -34,6 +34,7 @@ from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, core_schema
 
 from .container import BuildCfg, is_build_cfg, normalize_cfg
+from .mixin.factorizor import ContainerMixin
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +77,6 @@ class BuildableValidator(Generic[T]):
 
         # Case 2: BuildCfg or dict that looks like BuildCfg
         if isinstance(value, BuildCfg) or is_build_cfg(value):
-            # Import here to avoid circular imports
-            from .mixin.factorizor import ContainerMixin
-
             # Normalize to BuildCfg
             cfg = normalize_cfg(value) if isinstance(value, dict) else value
 
@@ -117,8 +115,6 @@ def _create_validator_function(expected_type: Type) -> Any:
 
         # BuildCfg or dict config
         if isinstance(value, BuildCfg) or is_build_cfg(value):
-            from .mixin.factorizor import ContainerMixin
-
             cfg = normalize_cfg(value) if isinstance(value, dict) else value
 
             try:

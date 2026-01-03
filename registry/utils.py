@@ -34,7 +34,7 @@ from inspect import (
     ismodule,
     signature,
 )
-from types import ModuleType
+from types import GenericAlias, ModuleType
 from typing import (
     Any,
     Callable,
@@ -47,33 +47,11 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    get_args,
+    get_origin,
 )
 
-from typing_extensions import ParamSpec, get_args, runtime_checkable
-
-# Python version compatibility
-if sys.version_info >= (3, 9):
-    from types import GenericAlias
-    from typing import get_args, get_origin
-elif sys.version_info >= (3, 8):
-    from typing import get_args, get_origin
-
-    try:
-        from typing import _GenericAlias as GenericAlias
-    except ImportError:
-        GenericAlias = type(Callable[[int], int])
-else:
-    # Python 3.7
-    def get_origin(tp):
-        return getattr(tp, "__origin__", None)
-
-    def get_args(tp):
-        return getattr(tp, "__args__", ())
-
-    try:
-        from typing import _GenericAlias as GenericAlias
-    except ImportError:
-        GenericAlias = type(Callable[[int], int])
+from typing_extensions import ParamSpec, runtime_checkable
 
 T = TypeVar("T")
 

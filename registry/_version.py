@@ -24,17 +24,20 @@ CLI Usage:
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import platform
+import subprocess
 import sys
 from typing import Any, Dict, Optional
-
-__version__ = "0.4.0"
 
 # Version components
 VERSION_MAJOR = 0
 VERSION_MINOR = 4
 VERSION_PATCH = 0
 VERSION_SUFFIX = ""  # e.g., "alpha", "beta", "rc1"
+
+__version__ = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}{'-' + VERSION_SUFFIX if VERSION_SUFFIX else ''}"
 
 
 def get_version() -> str:
@@ -86,8 +89,6 @@ def _get_pip_package_version(package_name: str) -> Optional[str]:
     Returns:
         Version string or None if not found.
     """
-    import subprocess
-
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pip", "show", package_name],
@@ -116,18 +117,19 @@ def _get_package_version(
     Returns:
         Version string or None if not installed.
     """
-    import importlib
-
     if package_name is None:
         package_name = module_name
 
-    try:
-        module = importlib.import_module(module_name)
-        version = getattr(module, "__version__", None)
-        if version:
-            return version
-    except ImportError:
+    # Use importlib.util.find_spec to check if module exists without importing
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
         return None
+
+    # Module exists, try to get version via import
+    module = importlib.import_module(module_name)
+    version = getattr(module, "__version__", None)
+    if version:
+        return version
 
     # Fallback to pip show
     return _get_pip_package_version(package_name)

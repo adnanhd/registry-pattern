@@ -20,9 +20,22 @@ Usage::
 
 from __future__ import annotations
 
+import json as json_lib
 import logging
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict
+
+import requests
+import rpyc
+import yaml as yaml_lib
+
+# TOML: use tomllib (Python 3.11+) or tomli
+if sys.version_info >= (3, 11):
+    import tomllib as tomli
+else:
+    import tomli
 
 from .fnc_registry import FunctionalRegistry
 
@@ -55,8 +68,6 @@ class SocketEngine(FunctionalRegistry[[str, Dict[str, Any]], Dict[str, Any]]):
 @ConfigFileEngine.register_artifact
 def json(filepath: Path) -> Dict[str, Any]:
     """Load config from JSON file."""
-    import json as json_lib
-
     with open(filepath, "r") as f:
         return json_lib.load(f)
 
@@ -64,10 +75,6 @@ def json(filepath: Path) -> Dict[str, Any]:
 @ConfigFileEngine.register_artifact
 def yaml(filepath: Path) -> Dict[str, Any]:
     """Load config from YAML file."""
-    try:
-        import yaml as yaml_lib
-    except ImportError:
-        raise ImportError("PyYAML not installed. Install with: pip install pyyaml")
     with open(filepath, "r") as f:
         return yaml_lib.safe_load(f)
 
@@ -81,16 +88,6 @@ def yml(filepath: Path) -> Dict[str, Any]:
 @ConfigFileEngine.register_artifact
 def toml(filepath: Path) -> Dict[str, Any]:
     """Load config from TOML file."""
-    try:
-        import tomli
-    except ImportError:
-        # Try stdlib tomllib (Python 3.11+)
-        try:
-            import tomllib as tomli  # type: ignore[import-not-found]
-        except ImportError:
-            raise ImportError(
-                "TOML library not installed. Install with: pip install tomli"
-            )
     with open(filepath, "rb") as f:
         return tomli.load(f)
 
@@ -102,7 +99,6 @@ def xml(filepath: Path) -> Dict[str, Any]:
     Converts XML to dict structure. Attributes become keys prefixed with '@'.
     Text content becomes '_text' key.
     """
-    import xml.etree.ElementTree as ET
 
     def element_to_dict(elem: ET.Element) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
@@ -155,11 +151,6 @@ def rpc(type: str, socket_config: Dict[str, Any]) -> Dict[str, Any]:
             "timeout": 10.0,
         }
     """
-    try:
-        import rpyc
-    except ImportError:
-        raise ImportError("RPyC not installed. Install with: pip install rpyc")
-
     host = socket_config.get("host", "localhost")
     port = socket_config.get("port", 18861)
     timeout = socket_config.get("timeout", 10.0)
@@ -187,8 +178,6 @@ def http(type: str, socket_config: Dict[str, Any]) -> Dict[str, Any]:
             "timeout": 10.0,   # optional
         }
     """
-    import requests
-
     url = socket_config.get("url")
     if not url:
         raise ValueError("Socket config must include 'url'")

@@ -28,15 +28,31 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
+import logging
+import pprint
 import sys
+import traceback
+from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Dict, Optional
+from urllib.parse import unquote, urlparse
+
+import requests
+from flask import Flask, jsonify, request
+
+from ._version import __version__, print_version_info
+from .container import is_build_cfg, normalize_cfg
+from .engines import ConfigFileEngine
+from .mixin import ContainerMixin
+from .storage import RemoteStorageProxy
+from .typ_registry import TypeRegistry
 
 
 def cmd_info(args: argparse.Namespace) -> int:
     """Show detailed version and system information."""
-    from ._version import print_version_info
-
     print_version_info()
     return 0
 
@@ -53,8 +69,6 @@ def load_config_file(filepath: Path) -> Dict[str, Any]:
     Raises:
         ValueError: If file extension is not supported.
     """
-    from .engines import ConfigFileEngine
-
     ext = filepath.suffix.lstrip(".")
     if not ext:
         raise ValueError(f"Cannot determine file type for: {filepath}")
@@ -81,15 +95,6 @@ def connect_to_server(server_url: str) -> Optional[Dict[str, Any]]:
         Server info dict or None on failure.
     """
     try:
-        import requests
-    except ImportError:
-        print(
-            "Error: requests library required for server connection.", file=sys.stderr
-        )
-        print("Install with: pip install requests", file=sys.stderr)
-        return None
-
-    try:
         response = requests.get(f"{server_url.rstrip('/')}/stats", timeout=5)
         response.raise_for_status()
         return response.json()
@@ -108,12 +113,6 @@ def setup_remote_repos(server_url: str, namespaces: list) -> Dict[str, type]:
     Returns:
         Dict mapping namespace names to remote registry proxy classes.
     """
-    from urllib.parse import urlparse
-
-    from .mixin import ContainerMixin
-    from .storage import RemoteStorageProxy
-    from .typ_registry import TypeRegistry
-
     parsed = urlparse(server_url)
     host = parsed.hostname or "localhost"
     port = parsed.port or 8001
@@ -141,12 +140,6 @@ def setup_remote_repos(server_url: str, namespaces: list) -> Dict[str, type]:
 
 def cmd_build(args: argparse.Namespace) -> int:
     """Build objects from a config file."""
-    import json
-    import pprint
-
-    from .container import BuildCfg, is_build_cfg, normalize_cfg
-    from .mixin import ContainerMixin
-
     filepath = Path(args.config_file)
     if not filepath.exists():
         print(f"Error: Config file not found: {filepath}", file=sys.stderr)
@@ -227,8 +220,6 @@ def cmd_build(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"Error building '{name}': {e}", file=sys.stderr)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
 
@@ -265,11 +256,6 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Load config, build objects, and execute an entry point."""
-    import importlib.util
-
-    from .container import is_build_cfg, normalize_cfg
-    from .mixin import ContainerMixin
-
     filepath = Path(args.config_file)
     if not filepath.exists():
         print(f"Error: Config file not found: {filepath}", file=sys.stderr)
@@ -346,8 +332,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"Error executing '{entry}': {e}", file=sys.stderr)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
     else:
@@ -363,8 +347,6 @@ def cmd_run(args: argparse.Namespace) -> int:
             except Exception as e:
                 print(f"Error running '{entry}': {e}", file=sys.stderr)
                 if args.verbose:
-                    import traceback
-
                     traceback.print_exc()
                 return 1
         else:
@@ -377,22 +359,6 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_server(args: argparse.Namespace) -> int:
     """Start the registry storage server."""
-    import json
-    import logging
-    import os
-    from collections import defaultdict
-    from datetime import datetime
-    from threading import Lock
-    from typing import Any, Dict
-    from urllib.parse import unquote
-
-    try:
-        from flask import Flask, jsonify, request
-    except ImportError:
-        print("Error: Flask is required for the server.", file=sys.stderr)
-        print("Install with: pip install flask", file=sys.stderr)
-        return 1
-
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -630,8 +596,6 @@ def cmd_server(args: argparse.Namespace) -> int:
 
 def main() -> int:
     """CLI entry point for registry-pattern."""
-    from ._version import __version__
-
     parser = argparse.ArgumentParser(
         prog="python -m registry",
         description="Registry Pattern - DI Container / IoC Framework",
