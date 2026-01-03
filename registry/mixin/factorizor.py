@@ -1,23 +1,56 @@
-r"""Factory pattern mixin for recursive artifact instantiation.
+r"""Container mixin for DI / IoC object graph construction.
 
-Provides:
-  - Scheme storage for artifacts (local or remote)
-  - Recursive factorization from dicts, config files, and RPC
-  - Extensible engine registries for different instantiation methods
+This module provides `ContainerMixin`, a mixin that adds recursive object
+instantiation from nested configs using the BuildCfg envelope schema.
+
+Features:
+  - Multi-repo support via _repos class variable
+  - Context injection (ctx parameter) for cross-references
+  - Recursive nested config resolution
+  - Extras separation (unknown kwargs -> meta._unused_data)
+  - Pydantic schema validation per (repo, type)
+
+Usage::
+
+    class ModelRegistry(TypeRegistry[nn.Module], ContainerMixin):
+        pass
+
+    class TransformRegistry(TypeRegistry[Any], ContainerMixin):
+        pass
+
+    # Configure repos
+    ContainerMixin.configure_repos({
+        "models": ModelRegistry,
+        "transforms": TransformRegistry,
+        "default": ModelRegistry,
+    })
+
+    # Build from config
+    cfg = BuildCfg(type="ResNet18", repo="models", data={"num_classes": 10})
+    model = ContainerMixin.build_cfg(cfg)
 """
 
 from __future__ import annotations
 
 import inspect
-import json
 import logging
-from pathlib import Path
-from typing import Any, ClassVar, Dict, Generic, Hashable, Optional, TypeVar, Union
+from inspect import Parameter
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Generic,
+    Hashable,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+)
 
-from pydantic import BaseModel
-from pydantic import ValidationError as PydanticValidationError
+from pydantic import BaseModel, ConfigDict, create_model
 
-from ..utils import ValidationError
+from ..container import BuildCfg, is_build_cfg, normalize_cfg
+from ..utils import ValidationError, get_callable_signature, pydantic_to_dict
 from .validator import MutableValidatorMixin
 
 logger = logging.getLogger(__name__)
@@ -25,412 +58,367 @@ logger = logging.getLogger(__name__)
 KeyType = TypeVar("KeyType", bound=Hashable)
 ValType = TypeVar("ValType")
 
+__all__ = ["ContainerMixin", "RegistryFactorizorMixin"]
 
-class RegistryFactorizorMixin(
+
+class ParamsBase(BaseModel):
+    """Base model for auto-extracted parameter schemas."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class ContainerMixin(
     MutableValidatorMixin[KeyType, ValType], Generic[KeyType, ValType]
 ):
-    """Mixin for factory-pattern instantiation with recursive validation.
+    """Mixin for DI container / IoC object graph construction.
 
-    Responsibilities:
-        - Store pydantic schemes for registered artifacts
-        - Factorize artifacts from dicts, files, or network
-        - Recursively validate and instantiate nested dependencies
+    Class Variables:
+        _repos: Mapping of repo names to registry classes.
+        _ctx: Shared context for cross-references between built objects.
+        _schemetry: Mapping of identifiers to Pydantic parameter models.
+
+    Methods:
+        configure_repos: Set up multi-repo mapping.
+        build_cfg: Build an object from a BuildCfg.
+        build_value: Recursively resolve nested configs.
+        build_named: Build and store in context.
+        clear_context: Reset the shared context.
     """
 
-    _schemetry: ClassVar[Dict[str, type[BaseModel]]]  # scheme storage
-    _scheme_storage_proxy: ClassVar[
-        Optional[Any]
-    ] = None  # remote storage if configured
+    _repos: ClassVar[Dict[str, type]] = {}
+    _ctx: ClassVar[Dict[str, Any]] = {}
+    _schemetry: ClassVar[Dict[str, Type[BaseModel]]] = {}
 
     @classmethod
-    def __init_subclass__(
-        cls,
-        scheme_namespace: Optional[str] = None,
-        **kwargs,
-    ) -> None:
+    def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-
-        if scheme_namespace is None:
-            cls._schemetry = {}
-            cls._scheme_storage_proxy = None
-        else:
-            # Use remote storage for schemes
-            from ..storage import RemoteStorageProxy
-
-            cls._scheme_storage_proxy = RemoteStorageProxy[str, Dict[str, Any]](
-                namespace=scheme_namespace
-            )
-            cls._schemetry = {}  # Local cache
-
+        # Each subclass gets its own scheme storage
+        cls._schemetry = {}
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "Initialized FactorizorMixin for %s (scheme_namespace=%s)",
-                cls.__name__,
-                scheme_namespace,
-            )
+            logger.debug("Initialized ContainerMixin for %s", cls.__name__)
+
+    # -------------------------------------------------------------------------
+    # Repo Configuration
+    # -------------------------------------------------------------------------
 
     @classmethod
-    def _save_scheme(cls, identifier: str, scheme: type[BaseModel]) -> None:
-        """Save a pydantic scheme to storage."""
-        cls._schemetry[identifier] = scheme
+    def configure_repos(cls, repos: Dict[str, type]) -> None:
+        """Configure the multi-repo mapping.
 
-        if cls._scheme_storage_proxy is not None:
-            # Serialize scheme as json schema
-            schema_dict = scheme.model_json_schema()
-            cls._scheme_storage_proxy[identifier] = schema_dict
-
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Saved scheme for %s", identifier)
-
-    @classmethod
-    def _get_scheme(cls, identifier: str) -> type[BaseModel]:
-        """Retrieve a pydantic scheme from storage."""
-        if identifier in cls._schemetry:
-            return cls._schemetry[identifier]
-
-        if cls._scheme_storage_proxy is not None:
-            # Try remote storage
-            try:
-                schema_dict = cls._scheme_storage_proxy[identifier]
-                # Note: reconstructing pydantic models from json schema is complex
-                # For now, we rely on local cache
-                raise ValidationError(
-                    f"Scheme {identifier} not in local cache",
-                    ["Ensure artifact is registered in this process"],
-                    {"identifier": identifier},
-                )
-            except Exception:
-                pass
-
-        raise ValidationError(
-            f"Scheme not found: {identifier}",
-            ["Register the artifact first", "Check the identifier spelling"],
-            {"identifier": identifier},
-        )
-
-    @classmethod
-    def _extract_scheme_from_artifact(cls, artifact: Any) -> type[BaseModel]:
-        """Extract or create a pydantic scheme from an artifact.
-
-        For functions: use signature parameters
-        For classes: use __init__ signature (excluding self)
+        Args:
+            repos: Mapping of repo names to registry classes.
         """
-        from inspect import Parameter, _empty, signature
+        cls._repos = dict(repos)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Configured repos: %s", list(repos.keys()))
 
-        from pydantic import create_model
+    @classmethod
+    def get_repo(cls, name: str) -> type:
+        """Get a registry class by repo name.
 
-        # Determine if it's a class or function
-        if inspect.isclass(artifact):
-            sig = signature(artifact.__init__)
-            params = list(sig.parameters.values())
-            # Remove 'self'
-            if params and params[0].name == "self":
-                params = params[1:]
-        elif callable(artifact):
-            sig = signature(artifact)
-            params = list(sig.parameters.values())
-        else:
+        Args:
+            name: The repo name.
+
+        Returns:
+            The registry class.
+
+        Raises:
+            ValidationError: If repo not found.
+        """
+        if name not in cls._repos:
+            available = list(cls._repos.keys()) or ["<none>"]
             raise ValidationError(
-                "Artifact must be a class or callable",
-                ["Pass a function or class"],
-                {"artifact_type": type(artifact).__name__},
+                f"Unknown repo '{name}'",
+                [f"Available repos: {', '.join(available)}"],
+                {"repo": name, "available_repos": available},
             )
+        return cls._repos[name]
 
-        # Build pydantic fields from signature
+    # -------------------------------------------------------------------------
+    # Context Management
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def clear_context(cls) -> None:
+        """Clear the shared context."""
+        cls._ctx.clear()
+
+    @classmethod
+    def get_context(cls) -> Dict[str, Any]:
+        """Get the shared context."""
+        return cls._ctx
+
+    # -------------------------------------------------------------------------
+    # Schema Extraction
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _extract_params_model(cls, artifact: Any) -> Type[BaseModel]:
+        """Extract a Pydantic params model from artifact signature.
+
+        Args:
+            artifact: Class or callable to extract signature from.
+
+        Returns:
+            A dynamically created Pydantic model.
+        """
+        name, sig, params = get_callable_signature(artifact)
+
         fields: Dict[str, Any] = {}
         for param in params:
             if param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
                 continue
+            # Skip 'ctx' parameter - it's injected, not from config
+            if param.name == "ctx":
+                continue
 
-            annotation = param.annotation if param.annotation is not _empty else Any
-            default = param.default if param.default is not _empty else ...
+            annotation = (
+                param.annotation if param.annotation is not Parameter.empty else Any
+            )
+            default = param.default if param.default is not Parameter.empty else ...
             fields[param.name] = (annotation, default)
 
-        # Create pydantic model
-        model_name = f"{getattr(artifact, '__name__', 'Artifact')}Scheme"
-        return create_model(model_name, **fields)  # type: ignore
+        model_name = f"{name}Params"
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Extracting params model '%s' with fields: %s",
+                model_name,
+                list(fields.keys()),
+            )
+
+        return create_model(model_name, __base__=ParamsBase, **fields)  # type: ignore[call-overload]
 
     @classmethod
-    def _inject_pydantic_handler(cls, target: Any, identifier: str) -> None:
-        """Inject __get_pydantic_core_schema__ and __get_pydantic_json_schema__ for Pydantic v2."""
-        from pydantic_core import core_schema
+    def _save_scheme(cls, identifier: str, scheme: Type[BaseModel]) -> None:
+        """Save a params model for an identifier."""
+        cls._schemetry[identifier] = scheme
 
-        def __get_pydantic_core_schema__(source_type, handler):
-            """Allow Pydantic to validate this type from dict or instance."""
+    @classmethod
+    def _get_scheme(cls, identifier: str) -> Optional[Type[BaseModel]]:
+        """Get a params model for an identifier."""
+        return cls._schemetry.get(identifier)
 
-            def validate_from_dict_or_instance(value: Any):
-                # Already an instance? Return as-is
-                if isinstance(value, source_type):
-                    return value
-                # Dict? Factorize it recursively
-                if isinstance(value, dict):
-                    return cls.factorize_artifact(identifier, **value)
-                # Invalid type
-                raise ValueError(
-                    f"Expected {source_type.__name__} instance or dict, "
-                    f"got {type(value).__name__}"
-                )
-
-            # Use union schema: either instance or dict
-            python_schema = core_schema.union_schema(
-                [
-                    core_schema.is_instance_schema(source_type),
-                    core_schema.chain_schema(
-                        [
-                            core_schema.dict_schema(),
-                            core_schema.no_info_plain_validator_function(
-                                validate_from_dict_or_instance
-                            ),
-                        ]
-                    ),
-                ]
-            )
-
-            return core_schema.with_info_plain_validator_function(
-                lambda value, _: validate_from_dict_or_instance(value),
-                serialization=core_schema.plain_serializer_function_ser_schema(
-                    lambda instance: instance,
-                    return_schema=core_schema.any_schema(),
-                ),
-            )
-
-        def __get_pydantic_json_schema__(core_schema_obj, handler):
-            """Provide JSON schema representation for this type."""
-            # Get the scheme for this type to generate proper JSON schema
-            try:
-                scheme = cls._get_scheme(identifier)
-                # Use the scheme's JSON schema as our JSON schema
-                return handler(scheme.__pydantic_core_schema__)
-            except Exception:
-                # Fallback: return object schema
-                return {"type": "object"}
-
-        # Inject as classmethods for classes
-        if inspect.isclass(target):
-            setattr(
-                target,
-                "__get_pydantic_core_schema__",
-                classmethod(__get_pydantic_core_schema__),
-            )
-            setattr(
-                target,
-                "__get_pydantic_json_schema__",
-                staticmethod(__get_pydantic_json_schema__),
-            )
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Injected pydantic handlers into %s", target.__name__)
+    # -------------------------------------------------------------------------
+    # Registration Override
+    # -------------------------------------------------------------------------
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> ValType:
-        """Override to save schemes and inject pydantic handlers when registering."""
-        # Call parent validation
+        """Override to extract and save params model on registration."""
         artifact = super()._internalize_artifact(value)
 
-        # Extract and save scheme, inject pydantic handler
+        # Extract and save scheme
         try:
             identifier = str(cls._identifier_of(artifact))
-            scheme = cls._extract_scheme_from_artifact(artifact)
-            cls._save_scheme(identifier, scheme)
-
-            # Inject pydantic handler for recursive validation
-            cls._inject_pydantic_handler(artifact, identifier)
-
+            # Check if a custom params_model was provided (via register_artifact)
+            if not cls._get_scheme(identifier):
+                scheme = cls._extract_params_model(artifact)
+                cls._save_scheme(identifier, scheme)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Saved auto-extracted scheme for %s", identifier)
         except Exception as e:
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Could not extract scheme: %s", e)
+                logger.debug("Could not extract scheme for %r: %s", value, e)
 
         return artifact
 
+    # -------------------------------------------------------------------------
+    # Build Methods
+    # -------------------------------------------------------------------------
+
     @classmethod
-    def _recursive_factorize(cls, annotation: Any, value: Any) -> Any:
-        """Recursively factorize nested artifacts.
+    def build_value(cls, value: Any) -> Any:
+        """Recursively resolve nested configs.
 
-        If annotation is a registered type and value is a dict,
-        factorize that type from the dict.
+        Args:
+            value: Any value that may contain nested BuildCfg.
+
+        Returns:
+            The resolved value with all nested configs built.
         """
-        # Get origin and args for generic types
-        from typing import get_args, get_origin
-
-        origin = get_origin(annotation)
-
-        # Handle Optional[X] -> Union[X, None]
-        if origin is Union:
-            args = get_args(annotation)
-            # Try each arg that isn't None
-            for arg in args:
-                if arg is type(None):
-                    continue
-                try:
-                    return cls._recursive_factorize(arg, value)
-                except Exception:
-                    continue
-            return value
-
-        # If it's a registered type and value is a dict, factorize it
-        if inspect.isclass(annotation) and isinstance(value, dict):
-            try:
-                # Check if this type is registered in any registry
-                identifier = str(getattr(annotation, "__name__", annotation))
-                if identifier in cls._schemetry or cls.has_identifier(identifier):
-                    return cls.factorize_artifact(identifier, **value)
-            except Exception as e:
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug("Could not recursive factorize %s: %s", annotation, e)
-
+        if isinstance(value, BuildCfg):
+            return cls.build_cfg(value)
+        if is_build_cfg(value):
+            return cls.build_cfg(normalize_cfg(value))
+        if isinstance(value, dict):
+            return {k: cls.build_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [cls.build_value(v) for v in value]
+        if isinstance(value, tuple):
+            return tuple(cls.build_value(v) for v in value)
         return value
 
     @classmethod
-    def factorize_artifact(
-        cls,
-        type: str,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        """Factorize (instantiate) an artifact with recursive validation.
+    def build_named(cls, key: str, cfg: Union[BuildCfg, Dict[str, Any]]) -> Any:
+        """Build an object and store it in the context.
 
         Args:
-            type: Identifier of the registered artifact
-            *args: Positional arguments
-            **kwargs: Keyword arguments
+            key: Context key to store the built object under.
+            cfg: BuildCfg or raw dict config.
 
         Returns:
-            Instantiated artifact
+            The built object.
+        """
+        if not isinstance(cfg, BuildCfg):
+            cfg = normalize_cfg(cfg)
+        obj = cls.build_cfg(cfg)
+        cls._ctx[key] = obj
+        return obj
+
+    @classmethod
+    def build_cfg(cls, cfg: Union[BuildCfg, Dict[str, Any]]) -> Any:
+        """Build an object from a BuildCfg.
+
+        This is the main entry point for object graph construction.
+
+        Args:
+            cfg: BuildCfg or raw dict config.
+
+        Returns:
+            The built object with meta attached.
 
         Raises:
-            ValidationError: If validation or instantiation fails
+            ValidationError: If building fails.
         """
-        # Get the artifact and scheme
-        artifact = cls.get_artifact(type)
-        scheme = cls._get_scheme(type)
+        if not isinstance(cfg, BuildCfg):
+            cfg = normalize_cfg(cfg)
 
-        # If args provided, convert to kwargs using parameter names
-        if args:
-            sig = inspect.signature(
-                artifact.__init__ if inspect.isclass(artifact) else artifact
-            )
-            params = list(sig.parameters.values())
-            if inspect.isclass(artifact) and params and params[0].name == "self":
-                params = params[1:]
-
-            for i, (param, arg) in enumerate(zip(params, args)):
-                if param.name not in kwargs:
-                    kwargs[param.name] = arg
-
-        # Recursively factorize nested artifacts
-        sig = inspect.signature(
-            artifact.__init__ if inspect.isclass(artifact) else artifact
-        )
-        params = list(sig.parameters.values())
-        if inspect.isclass(artifact) and params and params[0].name == "self":
-            params = params[1:]
-
-        for param in params:
-            if param.name in kwargs and param.annotation is not inspect.Parameter.empty:
-                kwargs[param.name] = cls._recursive_factorize(
-                    param.annotation, kwargs[param.name]
-                )
-
-        # Validate with pydantic
-        try:
-            validated = scheme(**kwargs)
-        except PydanticValidationError as e:
-            raise ValidationError(
-                f"Validation failed for {type}: {e}",
-                ["Check argument types and required fields"],
-                {"type": type, "errors": str(e)},
-            ) from e
-
-        # Instantiate
-        config_dict = (
-            validated.model_dump()
-            if hasattr(validated, "model_dump")
-            else validated.dict()
-        )
-
-        if inspect.isclass(artifact):
-            return artifact(**config_dict)
+        # 1. Resolve repo -> registry
+        repo_name = cfg.repo
+        if repo_name in cls._repos:
+            registry = cls._repos[repo_name]
+        elif repo_name == "default" and not cls._repos:
+            # Use self as registry if no repos configured
+            registry = cls
         else:
-            return artifact(**config_dict)
+            registry = cls.get_repo(repo_name)
 
-    @classmethod
-    def factorize_from_file(
-        cls,
-        type: str,
-        filepath: Union[str, Path],
-        engine: Optional[str] = None,
-    ) -> Any:
-        """Factorize an artifact from a config file.
+        # 2. Get artifact from registry
+        artifact = registry.get_artifact(cfg.type)
 
-        Args:
-            type: Identifier of the registered artifact
-            filepath: Path to config file
-            engine: Optional engine name (auto-detected from extension if None)
+        # 3. Get params model and validate data
+        params_model = (
+            registry._get_scheme(cfg.type) if hasattr(registry, "_get_scheme") else None
+        )
+        validated_data = dict(cfg.data)
+        unused_data: Dict[str, Any] = {}
 
-        Returns:
-            Instantiated artifact
-        """
-        from ..engines import ConfigFileEngine
+        if params_model is not None:
+            try:
+                # Get the known field names from the model
+                known_fields = set(params_model.model_fields.keys())
 
-        filepath = Path(filepath)
+                # Separate known fields from extras BEFORE validation
+                data_for_validation = {}
+                for k, v in cfg.data.items():
+                    if k in known_fields:
+                        data_for_validation[k] = v
+                    else:
+                        unused_data[k] = v
 
-        if not filepath.exists():
+                # Validate only the known fields
+                validated = params_model.model_validate(data_for_validation)
+
+                # Also check for any pydantic extras (if model allows extra="allow")
+                extras = getattr(validated, "__pydantic_extra__", {}) or {}
+                if extras:
+                    unused_data.update(dict(extras))
+
+                # Get validated/coerced fields
+                validated_data = {
+                    k: getattr(validated, k)
+                    for k in known_fields
+                    if hasattr(validated, k)
+                }
+            except Exception as e:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Schema validation failed for %s: %s", cfg.type, e)
+                # Fall back to raw data
+
+        # 4. Recursively build nested configs
+        data = {k: cls.build_value(v) for k, v in validated_data.items()}
+
+        # 5. Inspect builder signature for ctx and filter kwargs
+        if inspect.isclass(artifact):
+            try:
+                sig = inspect.signature(artifact.__init__)
+            except (ValueError, TypeError):
+                sig = None
+        elif callable(artifact):
+            try:
+                sig = inspect.signature(artifact)
+            except (ValueError, TypeError):
+                sig = None
+        else:
+            sig = None
+
+        pass_kwargs: Dict[str, Any] = {}
+        if sig is not None:
+            params = sig.parameters
+            accepts_var_kw = any(
+                p.kind == Parameter.VAR_KEYWORD for p in params.values()
+            )
+            allowed = {
+                name
+                for name, p in params.items()
+                if p.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+                and name != "self"
+            }
+
+            for k, v in data.items():
+                if accepts_var_kw or k in allowed:
+                    pass_kwargs[k] = v
+                else:
+                    unused_data[k] = v
+
+            # Inject ctx if builder accepts it
+            if "ctx" in params:
+                pass_kwargs["ctx"] = cls._ctx
+        else:
+            pass_kwargs = data
+
+        # 6. Update meta with unused data
+        meta = dict(cfg.meta)
+        if unused_data:
+            meta.setdefault("_unused_data", {}).update(unused_data)
+
+        # 7. Instantiate
+        try:
+            if inspect.isclass(artifact):
+                obj = artifact(**pass_kwargs)
+            else:
+                obj = artifact(**pass_kwargs)
+        except TypeError as e:
             raise ValidationError(
-                f"Config file not found: {filepath}",
-                ["Check the file path"],
-                {"filepath": str(filepath)},
+                f"Build failed for repo='{repo_name}' type='{cfg.type}'",
+                [
+                    f"Error: {e}",
+                    f"Passed kwargs: {list(pass_kwargs.keys())}",
+                ],
+                {
+                    "repo": repo_name,
+                    "type": cfg.type,
+                    "kwargs": list(pass_kwargs.keys()),
+                },
+            ) from e
+
+        # 8. Attach meta
+        if meta:
+            try:
+                setattr(obj, "__meta__", meta)
+            except Exception:
+                pass
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Built %s from repo=%s type=%s",
+                type(obj).__name__,
+                repo_name,
+                cfg.type,
             )
 
-        # Auto-detect engine from extension
-        if engine is None:
-            engine = filepath.suffix.lstrip(".")
+        return obj
 
-        # Load config using engine
-        try:
-            loader = ConfigFileEngine.get_artifact(engine)
-            config = loader(filepath)
-        except Exception as e:
-            raise ValidationError(
-                f"Failed to load config from {filepath}: {e}",
-                [
-                    f"Ensure {engine} engine is registered",
-                    "Check file format is valid",
-                ],
-                {"filepath": str(filepath), "engine": engine},
-            ) from e
 
-        # Factorize from loaded config
-        return cls.factorize_artifact(type, **config)
-
-    @classmethod
-    def factorize_from_socket(
-        cls,
-        type: str,
-        socket_config: Dict[str, Any],
-        protocol: str = "rpc",
-    ) -> Any:
-        """Factorize an artifact via network/RPC.
-
-        Args:
-            type: Identifier of the registered artifact
-            socket_config: Configuration for socket connection
-            protocol: Protocol name (default: "rpc")
-
-        Returns:
-            Instantiated artifact
-        """
-        from ..engines import SocketEngine
-
-        try:
-            handler = SocketEngine.get_artifact(protocol)
-            config = handler(type, socket_config)
-        except Exception as e:
-            raise ValidationError(
-                f"Failed to factorize via {protocol}: {e}",
-                [
-                    f"Ensure {protocol} engine is registered",
-                    "Check socket configuration",
-                ],
-                {"protocol": protocol, "type": type},
-            ) from e
-
-        return cls.factorize_artifact(type, **config)
+# Alias for backward compatibility
+RegistryFactorizorMixin = ContainerMixin

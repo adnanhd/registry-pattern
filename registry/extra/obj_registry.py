@@ -7,11 +7,13 @@ import logging
 import weakref
 from typing import Any, ClassVar, Dict, Generic, Hashable, List, Tuple, TypeVar
 
-from .mixin import MutableValidatorMixin
-from .utils import (
+from ..mixin import MutableValidatorMixin
+from ..utils import (
     ConformanceError,
+    RegistryError,
     ValidationError,
     _validate_function_signature,
+    cleanup_dead_weakrefs,
     get_protocol,
     get_type_name,
 )
@@ -21,11 +23,8 @@ logger = logging.getLogger(__name__)
 ObjT = TypeVar("ObjT")
 
 
-class RegistryError(ValidationError):
-    """Raised when a stored weak reference cannot be resolved."""
-
-
 def get_mem_addr(obj: Any, with_prefix: bool = True) -> str:
+    """Get memory address of an object as hex string."""
     addr = id(obj)
     return f"{addr:#x}" if with_prefix else f"{addr:x}"
 
@@ -50,7 +49,7 @@ def _validate_instance_hierarchy(instance: ObjT, /, expected_type: type) -> ObjT
     return instance
 
 
-def _validate_instance_structure(obj: Any, /, expected_type: type):
+def _validate_instance_structure(obj: Any, /, expected_type: type) -> Any:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Validating structure of instance %s against protocol %s",
@@ -109,7 +108,7 @@ class ObjectRegistry(MutableValidatorMixin[Hashable, ObjT], Generic[ObjT]):
     __slots__: ClassVar[Tuple[str, ...]] = ()
 
     @classmethod
-    def _get_mapping(cls):
+    def _get_mapping(cls) -> Dict[Hashable, Any]:
         return cls._repository
 
     @classmethod
@@ -178,15 +177,4 @@ class ObjectRegistry(MutableValidatorMixin[Hashable, ObjT], Generic[ObjT]):
     @classmethod
     def cleanup(cls) -> int:
         """Purge dead weakrefs; return number removed."""
-        dead = []
-        for k, v in list(cls._repository.items()):
-            try:
-                if isinstance(v, weakref.ref) and v() is None:
-                    dead.append(k)
-            except Exception:
-                dead.append(k)
-        for k in dead:
-            cls._repository.pop(k, None)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Cleaned %d dead references from %s", len(dead), cls.__name__)
-        return len(dead)
+        return cleanup_dead_weakrefs(cls._repository, key_is_weakref=False)

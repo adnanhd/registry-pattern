@@ -1,7 +1,4 @@
-"""Utility exceptions and helpers for registry mixins.
-
-This module defines a small hierarchy of rich exceptions used throughout the
-registry access/validation/mutation mixins, plus simple helpers.
+r"""Utility exceptions and helpers for registry mixins.
 
 Exceptions:
     ValidationError: Base class carrying `suggestions` and `context` metadata.
@@ -11,17 +8,46 @@ Exceptions:
     RegistryError: Raised when mapping errors occur.
 
 Helpers:
-    get_type_name(cls, qualname=False): Return a human-readable type name.
+    get_type_name: Return a human-readable type name.
+    get_func_name: Return a human-readable function name.
+    get_artifact_name: Return name from any artifact (class, function, or object).
+    get_callable_signature: Extract signature from class or function.
+    pydantic_to_dict: Convert Pydantic model to dict (v1/v2 compatible).
+    build_error_context: Build standardized error context dict.
 """
 
 import collections.abc
 import inspect
 import logging
 import sys
+import weakref
 from functools import partial, reduce, wraps
-from inspect import getmembers, isbuiltin, isclass, isfunction, ismethod, ismodule
+from inspect import (
+    Parameter,
+    Signature,
+    _empty,
+    getmembers,
+    isbuiltin,
+    isclass,
+    isfunction,
+    ismethod,
+    ismodule,
+    signature,
+)
 from types import ModuleType
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Hashable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from typing_extensions import ParamSpec, get_args, runtime_checkable
 
@@ -145,6 +171,23 @@ def get_func_name(func: Callable[..., Any], qualname: bool = False) -> str:
     while hasattr(func, "__wrapped__"):
         func = getattr(func, "__wrapped__")
     return getattr(func, "__qualname__" if qualname else "__name__", str(func))
+
+
+def get_artifact_name(artifact: Any, qualname: bool = False) -> str:
+    """Return a readable name for any artifact (class, function, or object).
+
+    Args:
+        artifact: The artifact to name.
+        qualname: If True, return the qualified name when available.
+
+    Returns:
+        The artifact's name or string representation.
+    """
+    if isclass(artifact):
+        return get_type_name(artifact, qualname)
+    if callable(artifact):
+        return get_func_name(artifact, qualname)
+    return getattr(artifact, "__name__", str(artifact))
 
 
 def _def_checking(v: Any) -> Any:
@@ -377,3 +420,159 @@ def _validate_function_signature(
                 "actual_type": str(actual_sig),
             },
         )
+
+
+# -----------------------------------------------------------------------------
+# New Utility Functions for Code Simplification
+# -----------------------------------------------------------------------------
+
+
+def get_callable_signature(
+    artifact: Union[Callable[..., Any], type],
+) -> Tuple[str, Signature, List[Parameter]]:
+    """Extract signature from a class or callable, removing 'self' for classes.
+
+    Args:
+        artifact: A class or callable to inspect.
+
+    Returns:
+        Tuple of (name, signature, parameters list without 'self').
+
+    Raises:
+        ValidationError: If artifact is not a class or callable.
+    """
+    if isclass(artifact):
+        name = getattr(artifact, "__name__", str(artifact))
+        try:
+            sig = signature(artifact.__init__)
+        except (TypeError, ValueError) as e:
+            raise ValidationError(
+                f"Cannot inspect __init__ of class {name}: {e}",
+                ["Provide an explicit __init__ with type annotations"],
+                {"artifact_name": name, "operation": "inspect_signature"},
+            ) from e
+        params = list(sig.parameters.values())
+        if params and params[0].name == "self":
+            params = params[1:]
+        sig = sig.replace(parameters=params)
+        return name, sig, params
+    elif callable(artifact):
+        name = get_func_name(artifact, qualname=False)
+        try:
+            sig = signature(artifact)
+        except (TypeError, ValueError) as e:
+            raise ValidationError(
+                f"Cannot inspect callable {name}: {e}",
+                ["Ensure it's a Python callable with inspectable signature"],
+                {"artifact_name": name, "operation": "inspect_signature"},
+            ) from e
+        return name, sig, list(sig.parameters.values())
+    else:
+        raise ValidationError(
+            f"{artifact!r} is neither a class nor a callable",
+            ["Pass a function or class object"],
+            {"actual_type": type(artifact).__name__},
+        )
+
+
+def pydantic_to_dict(model: Any) -> Dict[str, Any]:
+    """Convert a Pydantic model to dict, compatible with v1 and v2.
+
+    Args:
+        model: A Pydantic BaseModel instance.
+
+    Returns:
+        Dictionary representation of the model.
+    """
+    if hasattr(model, "model_dump"):
+        return dict(model.model_dump())
+    return dict(model.dict())
+
+
+def build_error_context(
+    operation: str,
+    registry_cls: Optional[type] = None,
+    key: Optional[Any] = None,
+    artifact: Optional[Any] = None,
+    **extra: Any,
+) -> Dict[str, Any]:
+    """Build a standardized error context dictionary.
+
+    Args:
+        operation: The operation being performed.
+        registry_cls: The registry class (optional).
+        key: The key being operated on (optional).
+        artifact: The artifact being operated on (optional).
+        **extra: Additional context key-value pairs.
+
+    Returns:
+        Dictionary suitable for ValidationError context.
+    """
+    context: Dict[str, Any] = {"operation": operation}
+
+    if registry_cls is not None:
+        context["registry_name"] = getattr(registry_cls, "__name__", "Unknown")
+        context["registry_type"] = get_type_name(type(registry_cls))
+        if hasattr(registry_cls, "_get_mapping"):
+            try:
+                mapping = registry_cls._get_mapping()
+                context["registry_size"] = len(mapping)
+            except Exception:
+                pass
+
+    if key is not None:
+        context["key"] = str(key)
+        context["key_type"] = type(key).__name__
+
+    if artifact is not None:
+        context["artifact_name"] = get_artifact_name(artifact)
+        context["artifact_type"] = type(artifact).__name__
+
+    context.update(extra)
+    return context
+
+
+def is_hashable(value: Any) -> bool:
+    """Check if a value is hashable.
+
+    Args:
+        value: The value to check.
+
+    Returns:
+        True if the value is hashable.
+    """
+    if isinstance(value, Hashable):
+        return True
+    try:
+        hash(value)
+        return True
+    except Exception:
+        return False
+
+
+def cleanup_dead_weakrefs(mapping: Dict[Any, Any], key_is_weakref: bool = True) -> int:
+    """Remove dead weakref entries from a mapping.
+
+    Args:
+        mapping: The mapping to clean up.
+        key_is_weakref: If True, keys are weakrefs; if False, values are weakrefs.
+
+    Returns:
+        Number of dead entries removed.
+    """
+    dead = []
+    for k, v in list(mapping.items()):
+        try:
+            target = k if key_is_weakref else v
+            if isinstance(target, weakref.ref) and target() is None:
+                dead.append(k)
+        except Exception:
+            dead.append(k)
+
+    for k in dead:
+        mapping.pop(k, None)
+
+    if dead and logger.isEnabledFor(logging.DEBUG):
+        logger.debug("Cleaned %d dead weakref entries", len(dead))
+
+    return len(dead)

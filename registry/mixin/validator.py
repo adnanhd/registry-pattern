@@ -231,17 +231,17 @@ class ImmutableValidatorMixin(
             )
         if key_t != Any and not isinstance(value, key_t):
             suggestions = [
-                f"Ensure the key is of type {key_t.__name__}",
-                f"Got {get_type_name(type(value))}, which is not of type {key_t.__name__}",
+                f"Ensure the key is of type {get_type_name(key_t)}",
+                f"Got {get_type_name(type(value))}, which is not of type {get_type_name(key_t)}",
                 "Try converting to the expected type: your_key = key_t(your_key)",
             ]
             context = {
-                "expected_type": key_t.__name__,
+                "expected_type": get_type_name(key_t),
                 "actual_type": get_type_name(type(value)),
                 "artifact_name": str(value),
             }
             raise ValidationError(
-                f"Key must be of type {key_t.__name__}, got {get_type_name(type(value))}",
+                f"Key must be of type {get_type_name(key_t)}, got {get_type_name(type(value))}",
                 suggestions,
                 context,
             )
@@ -253,16 +253,16 @@ class ImmutableValidatorMixin(
         _, val_t = _resolve_typevars(cls)
         if val_t != Any and not isinstance(value, val_t):
             suggestions = [
-                f"Ensure the artifact is of type {val_t.__name__}",
-                f"Got {get_type_name(type(value))}, which is not of type {val_t.__name__}",
+                f"Ensure the artifact is of type {get_type_name(val_t)}",
+                f"Got {get_type_name(type(value))}, which is not of type {get_type_name(val_t)}",
             ]
             context = {
-                "expected_type": val_t.__name__,
+                "expected_type": get_type_name(val_t),
                 "actual_type": get_type_name(type(value)),
                 "artifact_name": str(value),
             }
             raise ValidationError(
-                f"Artifact must be of type {val_t.__name__}, got {get_type_name(type(value))}",
+                f"Artifact must be of type {get_type_name(val_t)}, got {get_type_name(type(value))}",
                 suggestions,
                 context,
             )

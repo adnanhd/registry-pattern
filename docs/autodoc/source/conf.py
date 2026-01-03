@@ -5,10 +5,13 @@ author = "Research Team"
 release = "0.2.0"
 
 extensions = [
-    "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.autodoc.typehints",
+    "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
+    'sphinxcontrib.mermaid'
 ]
 
 autodoc_default_options = {

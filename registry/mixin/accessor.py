@@ -119,7 +119,7 @@ class RegistryAccessorMixin(Generic[KeyType, ValType]):
             context = {
                 "operation": "assert_presence",
                 "registry_name": getattr(cls, "__name__", "Unknown"),
-                "registry_type": get_type_name(cls),
+                "registry_type": get_type_name(type(cls)),
                 "key": str(key),
                 "key_type": type(key).__name__,
                 "registry_size": len(mapping),

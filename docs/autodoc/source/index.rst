@@ -6,6 +6,7 @@ Registry Package Documentation
    :caption: Contents:
 
    modules
+   api
 
 Indices and tables
 ==================

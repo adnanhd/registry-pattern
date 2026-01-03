@@ -17,9 +17,14 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
+    cast,
+    overload,
 )
 
-from .mixin import RegistryFactorizorMixin
+from pydantic import BaseModel
+
+from .mixin import ContainerMixin
 from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
@@ -123,11 +128,18 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
 
 
 class TypeRegistry(
-    RegistryFactorizorMixin[Hashable, Type[Cls]],
+    ContainerMixin[Hashable, Type[Cls]],
     ABC,
     Generic[Cls],
 ):
-    """Registry for classes, with optional inheritance/protocol enforcement."""
+    """Registry for classes, with optional inheritance/protocol enforcement.
+
+    Supports:
+      - Registration with optional explicit params_model
+      - Auto-extraction of params_model from __init__ signature
+      - Strict mode for protocol/inheritance checking
+      - Multi-repo DI container via ContainerMixin
+    """
 
     _repository: MutableMapping[Hashable, Type[Cls]]
     _strict: ClassVar[bool] = False
@@ -144,22 +156,16 @@ class TypeRegistry(
         strict: bool = False,
         abstract: bool = False,
         logic_namespace: Optional[str] = None,
-        scheme_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize the TypeRegistry subclass.
 
         Args:
-            strict (bool): Whether the registry should be strict.
-            abstract (bool): Whether the registry is abstract.
-            logic_namespace (Optional[str]): The namespace for the logic.
-            scheme_namespace (Optional[str]): The namespace for the schema.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            None
+            strict: Enforce protocol conformance checks.
+            abstract: Require registered classes to inherit from this registry.
+            logic_namespace: Optional remote storage namespace.
         """
-        super().__init_subclass__(scheme_namespace=scheme_namespace, **kwargs)
+        super().__init_subclass__(**kwargs)
         if logic_namespace is None:
             cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         else:
@@ -170,24 +176,15 @@ class TypeRegistry(
         cls._abstract = abstract
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s, logic_namespace=%s, schema_namespace=%s)",
+                "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s)",
                 get_type_name(cls),
                 strict,
                 abstract,
-                logic_namespace,
-                scheme_namespace,
             )
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> Type[Cls]:
-        """Internalize the given artifact.
-
-        Args:
-            value (Any): The artifact to internalize.
-
-        Returns:
-            Type[Cls]: The internalized artifact.
-        """
+        """Validate and internalize a class artifact."""
         v = _validate_class(value)
         if cls._abstract:
             v = _validate_class_hierarchy(v, abc_class=cls)
@@ -198,35 +195,114 @@ class TypeRegistry(
 
     @classmethod
     def _identifier_of(cls, item: Type[Cls]) -> Hashable:
-        """Return the identifier of the given item.
+        """Return the identifier (class name) for an artifact."""
+        return get_type_name(_validate_class(item))
+
+    # -------------------------------------------------------------------------
+    # Registration with params_model support
+    # -------------------------------------------------------------------------
+
+    @overload
+    @classmethod
+    def register_artifact(
+        cls,
+        artifact: Type[Cls],
+        *,
+        params_model: Optional[Type[BaseModel]] = None,
+    ) -> Type[Cls]:
+        """Register a class artifact with optional params_model."""
+        ...
+
+    @overload
+    @classmethod
+    def register_artifact(
+        cls,
+        *,
+        params_model: Optional[Type[BaseModel]] = None,
+    ) -> Any:
+        """Decorator form: register a class with optional params_model."""
+        ...
+
+    @classmethod
+    def register_artifact(
+        cls,
+        artifact: Optional[Type[Cls]] = None,
+        *,
+        params_model: Optional[Type[BaseModel]] = None,
+    ) -> Union[Type[Cls], Any]:
+        """Register a class artifact with optional explicit params_model.
+
+        Can be used as a decorator or called directly.
 
         Args:
-            item (Type[Cls]): The item to get the identifier for.
+            artifact: The class to register.
+            params_model: Optional Pydantic model for parameter validation.
+                If not provided, auto-extracted from __init__ signature.
 
         Returns:
-            Hashable: The identifier of the item.
+            The registered class (or decorator if artifact is None).
+
+        Example::
+
+            @MyRegistry.register_artifact(params_model=MyParams)
+            class MyClass:
+                def __init__(self, x: int): ...
+
+            # Or auto-extract:
+            @MyRegistry.register_artifact
+            class MyClass:
+                def __init__(self, x: int): ...
         """
-        return get_type_name(_validate_class(item))
+
+        def _do_register(art: Type[Cls]) -> Type[Cls]:
+            # Save explicit params_model before registration
+            if params_model is not None:
+                identifier = get_type_name(_validate_class(art))
+                cls._save_scheme(identifier, params_model)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "Saved explicit params_model for %s: %s",
+                        identifier,
+                        params_model.__name__,
+                    )
+
+            # Use parent's register_artifact for the actual registration
+            return cast(Type[Cls], super(TypeRegistry, cls).register_artifact(art))
+
+        if artifact is None:
+            # Decorator form: @register_artifact(params_model=...)
+            return _do_register
+        else:
+            # Direct call: register_artifact(MyClass, params_model=...)
+            return _do_register(artifact)
+
+    # -------------------------------------------------------------------------
+    # Module Registration
+    # -------------------------------------------------------------------------
 
     @classmethod
     def register_module_subclasses(
-        cls, module: ModuleType, raise_error: bool = True
-    ) -> Any:
-        """Register all subclasses of the given module.
+        cls,
+        module: ModuleType,
+        raise_error: bool = True,
+    ) -> ModuleType:
+        """Register all classes from a module.
 
         Args:
-            module (ModuleType): The module to register.
-            raise_error (bool, optional): Whether to raise an error if registration fails. Defaults to True.
+            module: The module to scan.
+            raise_error: Whether to raise on registration failure.
 
         Returns:
-            Any: The result of the registration.
+            The module (for chaining).
         """
-        assert isinstance(
-            module, ModuleType
-        ), f"Expected ModuleType, got {type(module)}"
+        assert isinstance(module, ModuleType), (
+            f"Expected ModuleType, got {type(module)}"
+        )
         members = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:
+            if not inspect.isclass(obj):
+                continue
             name = get_object_name(obj)
             try:
                 cls.register_artifact(obj)

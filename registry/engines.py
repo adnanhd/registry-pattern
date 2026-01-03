@@ -5,9 +5,7 @@ Provides two registries:
 - ConfigFileEngine: maps file extensions to loader functions
 - SocketEngine: maps protocols to RPC/network handlers
 
-Usage:
-
-.. code-block:: python
+Usage::
 
     @ConfigFileEngine.register_artifact
     def json(filepath: Path) -> dict:
@@ -33,7 +31,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["ConfigFileEngine", "SocketEngine"]
 
 
-class ConfigFileEngine(FunctionalRegistry[[], Dict[str, Any]]):
+class ConfigFileEngine(FunctionalRegistry[[Path], Dict[str, Any]]):
     """Registry for config file loaders.
 
     Each registered function takes a filepath and returns a config dict.
@@ -41,7 +39,7 @@ class ConfigFileEngine(FunctionalRegistry[[], Dict[str, Any]]):
     """
 
 
-class SocketEngine(FunctionalRegistry[[], Dict[str, Any]]):
+class SocketEngine(FunctionalRegistry[[str, Dict[str, Any]], Dict[str, Any]]):
     """Registry for socket/network handlers.
 
     Each registered function takes a type and socket config, returns config dict.
@@ -57,21 +55,21 @@ class SocketEngine(FunctionalRegistry[[], Dict[str, Any]]):
 @ConfigFileEngine.register_artifact
 def json(filepath: Path) -> Dict[str, Any]:
     """Load config from JSON file."""
-    import json
+    import json as json_lib
 
     with open(filepath, "r") as f:
-        return json.load(f)
+        return json_lib.load(f)
 
 
 @ConfigFileEngine.register_artifact
 def yaml(filepath: Path) -> Dict[str, Any]:
     """Load config from YAML file."""
     try:
-        import yaml
+        import yaml as yaml_lib
     except ImportError:
         raise ImportError("PyYAML not installed. Install with: pip install pyyaml")
     with open(filepath, "r") as f:
-        return yaml.safe_load(f)
+        return yaml_lib.safe_load(f)
 
 
 @ConfigFileEngine.register_artifact
@@ -88,7 +86,7 @@ def toml(filepath: Path) -> Dict[str, Any]:
     except ImportError:
         # Try stdlib tomllib (Python 3.11+)
         try:
-            import tomllib as tomli  # type: ignore
+            import tomllib as tomli  # type: ignore[import-not-found]
         except ImportError:
             raise ImportError(
                 "TOML library not installed. Install with: pip install tomli"
@@ -106,7 +104,8 @@ def toml(filepath: Path) -> Dict[str, Any]:
 def rpc(type: str, socket_config: Dict[str, Any]) -> Dict[str, Any]:
     """RPC-based factorization handler.
 
-    Socket config format:
+    Socket config format::
+
         {
             "host": "localhost",
             "port": 5000,
@@ -136,7 +135,8 @@ def rpc(type: str, socket_config: Dict[str, Any]) -> Dict[str, Any]:
 def http(type: str, socket_config: Dict[str, Any]) -> Dict[str, Any]:
     """HTTP-based factorization handler.
 
-    Socket config format:
+    Socket config format::
+
         {
             "url": "http://example.com/api/config",
             "method": "POST",  # optional, default GET

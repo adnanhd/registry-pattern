@@ -5,15 +5,18 @@ from __future__ import annotations
 import logging
 import weakref
 from abc import ABC
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, _ProtocolMeta
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
-from .mixin import MutableValidatorMixin
-from .utils import (
+from ..mixin import MutableValidatorMixin
+from ..utils import (
     ConformanceError,
+    RegistryError,
     ValidationError,
+    cleanup_dead_weakrefs,
     get_object_name,
     get_protocol,
     get_type_name,
+    is_hashable,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,21 +25,7 @@ ObjT = TypeVar("ObjT")
 CfgT = TypeVar("CfgT", bound=Dict[str, Any])
 
 
-class RegistryError(ValidationError):
-    """Raised when a weakref key cannot be resolved."""
-
-
-def _is_hashable(x: Any) -> bool:
-    if hasattr(x, "__hash__"):
-        return True
-    try:
-        hash(x)
-        return True
-    except Exception:
-        return False
-
-
-def _validate_instance_hierarchy(instance: Any, /, expected_type: _ProtocolMeta) -> Any:
+def _validate_instance_hierarchy(instance: Any, /, expected_type: type) -> Any:
     if not isinstance(instance, expected_type):
         raise ValidationError(
             f"{instance} is not an instance of {getattr(expected_type, '__name__', str(expected_type))}",
@@ -50,7 +39,7 @@ def _validate_instance_hierarchy(instance: Any, /, expected_type: _ProtocolMeta)
     return instance
 
 
-def _validate_instance_structure(obj: Any, /, expected_type: _ProtocolMeta) -> Any:
+def _validate_instance_structure(obj: Any, /, expected_type: type) -> Any:
     missing: List[str] = []
     for name in dir(expected_type):
         if name.startswith("_"):
@@ -79,7 +68,7 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
     __slots__: Tuple[str, ...] = ()
 
     @classmethod
-    def _get_mapping(cls):
+    def _get_mapping(cls) -> Dict[Any, CfgT]:
         return cls._repository
 
     @classmethod
@@ -100,7 +89,7 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
     def _internalize_identifier(cls, value: ObjT) -> Any:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Validating config key object: %r", value)
-        if not _is_hashable(value):
+        if not is_hashable(value):
             raise ValidationError(
                 f"Key must be hashable, got {get_type_name(type(value))}",
                 [
@@ -150,8 +139,8 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
                         "registry_name": cls.__name__,
                     },
                 )
-            return actual  # type: ignore
-        if not _is_hashable(value):
+            return actual  # type: ignore[return-value]
+        if not is_hashable(value):
             raise ValidationError(
                 f"Key must be hashable, got {type(value).__name__}",
                 ["Use hashable objects as keys"],
@@ -161,7 +150,7 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
                     "key": str(value),
                 },
             )
-        return value  # type: ignore
+        return value  # type: ignore[return-value]
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> CfgT:
@@ -173,7 +162,7 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
                 ["Use dict() or {} to create configuration"],
                 {"expected_type": "dict", "actual_type": type(value).__name__},
             )
-        return value
+        return value  # type: ignore[return-value]
 
     @classmethod
     def _externalize_artifact(cls, value: CfgT) -> CfgT:
@@ -183,21 +172,16 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
     def _find_weakref_key(cls, key: Any) -> Optional[weakref.ref]:
         if isinstance(key, weakref.ref):
             return key if key in cls._repository else None
-        dead = []
+        # Clean up dead refs while searching
+        cleanup_dead_weakrefs(cls._repository, key_is_weakref=True)
         for wref in list(cls._repository.keys()):
             if isinstance(wref, weakref.ref):
                 try:
                     obj = wref()
                     if obj is key:
                         return wref
-                    if obj is None:
-                        dead.append(wref)
                 except Exception:
-                    dead.append(wref)
-        for w in dead:
-            cls._repository.pop(w, None)
-        if logger.isEnabledFor(logging.DEBUG) and dead:
-            logger.debug("Purged %d dead weakref keys during lookup", len(dead))
+                    pass
         return None
 
     @classmethod
@@ -239,15 +223,4 @@ class ConfigRegistry(MutableValidatorMixin[Any, CfgT], ABC, Generic[ObjT, CfgT])
     @classmethod
     def cleanup(cls) -> int:
         """Remove entries whose weakref keys are dead."""
-        dead = [
-            w
-            for w in list(cls._repository.keys())
-            if isinstance(w, weakref.ref) and w() is None
-        ]
-        for w in dead:
-            cls._repository.pop(w, None)
-        if logger.isEnabledFor(logging.DEBUG) and dead:
-            logger.debug(
-                "Cleaned %d dead weakref keys from %s", len(dead), cls.__name__
-            )
-        return len(dead)
+        return cleanup_dead_weakrefs(cls._repository, key_is_weakref=True)

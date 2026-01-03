@@ -2,7 +2,6 @@
 .coverage
 *.egg-info/
 .pytest_cache/
-docs/
 build/
 dist/
 **/.myrsyncbackup
