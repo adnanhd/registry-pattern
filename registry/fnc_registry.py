@@ -231,9 +231,9 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
         Returns:
             The module (for chaining).
         """
-        assert isinstance(module, ModuleType), (
-            f"Expected ModuleType, got {type(module)}"
-        )
+        assert isinstance(
+            module, ModuleType
+        ), f"Expected ModuleType, got {type(module)}"
         members: List[Any] = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:

@@ -295,9 +295,9 @@ class TypeRegistry(
         Returns:
             The module (for chaining).
         """
-        assert isinstance(module, ModuleType), (
-            f"Expected ModuleType, got {type(module)}"
-        )
+        assert isinstance(
+            module, ModuleType
+        ), f"Expected ModuleType, got {type(module)}"
         members = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:

@@ -77,6 +77,62 @@ def get_platform_info() -> Dict[str, str]:
     }
 
 
+def _get_pip_package_version(package_name: str) -> Optional[str]:
+    """Get package version via pip show.
+
+    Args:
+        package_name: Name of the package to query.
+
+    Returns:
+        Version string or None if not found.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "show", package_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.startswith("Version:"):
+                    return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return None
+
+
+def _get_package_version(
+    module_name: str, package_name: Optional[str] = None
+) -> Optional[str]:
+    """Get package version, trying __version__ first, then pip show.
+
+    Args:
+        module_name: Name of the module to import.
+        package_name: Package name for pip (defaults to module_name).
+
+    Returns:
+        Version string or None if not installed.
+    """
+    import importlib
+
+    if package_name is None:
+        package_name = module_name
+
+    try:
+        module = importlib.import_module(module_name)
+        version = getattr(module, "__version__", None)
+        if version:
+            return version
+    except ImportError:
+        return None
+
+    # Fallback to pip show
+    return _get_pip_package_version(package_name)
+
+
 def get_dependency_versions() -> Dict[str, Optional[str]]:
     """Get versions of key dependencies.
 
@@ -85,45 +141,11 @@ def get_dependency_versions() -> Dict[str, Optional[str]]:
     """
     deps: Dict[str, Optional[str]] = {}
 
-    # Pydantic
-    try:
-        import pydantic
-
-        deps["pydantic"] = pydantic.__version__
-    except ImportError:
-        deps["pydantic"] = None
-
-    # Pydantic core
-    try:
-        import pydantic_core
-
-        deps["pydantic_core"] = pydantic_core.__version__
-    except ImportError:
-        deps["pydantic_core"] = None
-
-    # typing_extensions
-    try:
-        import typing_extensions
-
-        deps["typing_extensions"] = getattr(typing_extensions, "__version__", "unknown")
-    except ImportError:
-        deps["typing_extensions"] = None
-
-    # PyTorch (optional)
-    try:
-        import torch
-
-        deps["torch"] = torch.__version__
-    except ImportError:
-        deps["torch"] = None
-
-    # torchvision (optional)
-    try:
-        import torchvision
-
-        deps["torchvision"] = torchvision.__version__
-    except ImportError:
-        deps["torchvision"] = None
+    deps["pydantic"] = _get_package_version("pydantic")
+    deps["pydantic_core"] = _get_package_version("pydantic_core", "pydantic-core")
+    deps["typing_extensions"] = _get_package_version("typing_extensions")
+    deps["torch"] = _get_package_version("torch")
+    deps["torchvision"] = _get_package_version("torchvision")
 
     return deps
 
@@ -161,12 +183,6 @@ def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
     if info is None:
         info = get_version_info()
 
-    lines = [
-        f"registry-pattern: {info['registry_pattern']}",
-        "",
-        "Python:",
-    ]
-
     # Python info with aligned colons
     py_info = info["python"]
     py_fields = [
@@ -174,12 +190,6 @@ def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
         ("Implementation", py_info["implementation"]),
         ("Executable", py_info["executable"]),
     ]
-    py_width = max(len(f[0]) for f in py_fields)
-    for label, value in py_fields:
-        lines.append(f"  {label:<{py_width}} : {value}")
-
-    lines.append("")
-    lines.append("Platform:")
 
     # Platform info with aligned colons
     plat_info = info["platform"]
@@ -188,19 +198,39 @@ def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
         ("Release", plat_info["release"]),
         ("Machine", plat_info["machine"]),
     ]
-    plat_width = max(len(f[0]) for f in plat_fields)
-    for label, value in plat_fields:
-        lines.append(f"  {label:<{plat_width}} : {value}")
-
-    lines.append("")
-    lines.append("Dependencies:")
 
     # Dependencies with aligned colons
     deps = info["dependencies"]
     dep_items = [(pkg, ver if ver else "not installed") for pkg, ver in deps.items()]
+
+    # Calculate max widths for alignment
+    py_width = max(len(f[0]) for f in py_fields)
+    plat_width = max(len(f[0]) for f in plat_fields)
     dep_width = max(len(d[0]) for d in dep_items)
+    width = max(py_width, plat_width, dep_width)
+
+    # Python info
+    lines = [
+        f"registry-pattern: {info['registry_pattern']}",
+        "",
+        "Python:",
+    ]
+    for label, value in py_fields:
+        lines.append(f"  {label:>{width}} : {value}")
+
+    # Platform info
+    lines.append("")
+    lines.append("Platform:")
+
+    for label, value in plat_fields:
+        lines.append(f"  {label:>{width}} : {value}")
+
+    # Dependencies
+    lines.append("")
+    lines.append("Dependencies:")
+
     for pkg, ver in dep_items:
-        lines.append(f"  {pkg:<{dep_width}} : {ver}")
+        lines.append(f"  {pkg:>{width}} : {ver}")
 
     return "\n".join(lines)
 

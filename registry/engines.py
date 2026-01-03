@@ -95,6 +95,49 @@ def toml(filepath: Path) -> Dict[str, Any]:
         return tomli.load(f)
 
 
+@ConfigFileEngine.register_artifact
+def xml(filepath: Path) -> Dict[str, Any]:
+    """Load config from XML file.
+
+    Converts XML to dict structure. Attributes become keys prefixed with '@'.
+    Text content becomes '_text' key.
+    """
+    import xml.etree.ElementTree as ET
+
+    def element_to_dict(elem: ET.Element) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+
+        # Add attributes with @ prefix
+        for key, value in elem.attrib.items():
+            result[f"@{key}"] = value
+
+        # Process children
+        children: Dict[str, list] = {}
+        for child in elem:
+            child_data = element_to_dict(child)
+            if child.tag in children:
+                children[child.tag].append(child_data)
+            else:
+                children[child.tag] = [child_data]
+
+        # Flatten single-item lists
+        for tag, items in children.items():
+            result[tag] = items[0] if len(items) == 1 else items
+
+        # Add text content
+        if elem.text and elem.text.strip():
+            if result:
+                result["_text"] = elem.text.strip()
+            else:
+                return elem.text.strip()  # type: ignore[return-value]
+
+        return result
+
+    tree = ET.parse(filepath)
+    root = tree.getroot()
+    return {root.tag: element_to_dict(root)}
+
+
 # ============================================================================
 # Default Socket Engines
 # ============================================================================
