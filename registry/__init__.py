@@ -45,7 +45,12 @@ Usage::
     model = ContainerMixin.build_cfg(cfg)
 """
 
-from ._version import __version__
+from ._version import (
+    __version__,
+    get_debug_info,
+    get_version_info,
+    print_version_info,
+)
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .engines import ConfigFileEngine, SocketEngine
 from .fnc_registry import FunctionalRegistry
@@ -62,8 +67,11 @@ from .utils import (
 )
 
 __all__ = [
-    # Version
+    # Version utilities
     "__version__",
+    "get_version_info",
+    "get_debug_info",
+    "print_version_info",
     # Core registries
     "TypeRegistry",
     "FunctionalRegistry",

@@ -4,63 +4,125 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "registry-pattern"
-version = "0.3.0"
-description = "A flexible registry pattern implementation with validation, type safety, and remote synchronization"
+dynamic = ["version"]
+description = "A flexible registry pattern with DI container, Pydantic validation, and recursive config building"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Adnan Harun Dogan", email = "adnanharundogan@gmail.com"}
+]
+keywords = [
+    "registry",
+    "pattern",
+    "dependency-injection",
+    "di-container",
+    "ioc",
+    "pydantic",
+    "validation",
+    "factory-pattern",
+    "configuration",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Object Brokering",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pydantic>=2.0",
     "typing-extensions>=4.0",
-    "requests>=2.25.0",
 ]
 
 [project.optional-dependencies]
-server = [
-    "flask>=2.0",
+torch = [
+    "torch>=2.0",
+    "torchvision>=0.15",
 ]
-examples = [
-    "pyyaml>=5.4",
+yaml = [
+    "pyyaml>=6.0",
 ]
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
-    "mkdocstrings[python]>=0.25",
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+    "sphinx-autodoc-typehints>=1.25",
 ]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "black>=23.0",
-    "mypy>=1.0",
+    "flake8>=6.0",
+    "pyright>=1.1",
     "ruff>=0.1.0",
 ]
 all = [
-    "registry-pattern[server,examples,docs,dev]",
+    "registry-pattern[torch,yaml,docs,dev]",
 ]
 
-[project.scripts]
-registry-server = "registry.__main__:main"
-
 [project.urls]
-Homepage = "https://github.com/yourusername/registry"
-Repository = "https://github.com/yourusername/registry"
+Homepage = "https://github.com/adnanhd/registry-pattern"
+Repository = "https://github.com/adnanhd/registry-pattern"
+Documentation = "https://registry-pattern.readthedocs.io/"
+Issues = "https://github.com/adnanhd/registry-pattern/issues"
 
 [tool.setuptools]
-packages = ["registry", "registry.mixin"]
+packages = ["registry", "registry.mixin", "registry.extra"]
+
+[tool.setuptools.dynamic]
+version = {attr = "registry._version.__version__"}
 
 [tool.setuptools.package-data]
 registry = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+exclude = '''
+/(
+    \.git
+    | \.venv
+    | build
+    | dist
+    | \.eggs
+)/
+'''
+
+[tool.pyright]
+include = ["registry", "tests"]
+exclude = ["build", "dist", ".venv"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["registry"]
+omit = ["tests/*", "examples/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
