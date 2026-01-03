@@ -16,6 +16,10 @@ Usage:
 
     # Print formatted version info (for bug reports)
     print_version_info()
+
+CLI Usage:
+    python -m registry --version
+    python -m registry info
 """
 
 from __future__ import annotations
@@ -146,7 +150,7 @@ def get_version_info() -> Dict[str, Any]:
 
 
 def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
-    """Format version info as a human-readable string.
+    """Format version info as a human-readable string with aligned colons.
 
     Args:
         info: Version info dict from get_version_info(). If None, fetches it.
@@ -161,21 +165,42 @@ def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
         f"registry-pattern: {info['registry_pattern']}",
         "",
         "Python:",
-        f"  Version: {info['python']['version']}",
-        f"  Implementation: {info['python']['implementation']}",
-        f"  Executable: {info['python']['executable']}",
-        "",
-        "Platform:",
-        f"  System: {info['platform']['system']}",
-        f"  Release: {info['platform']['release']}",
-        f"  Machine: {info['platform']['machine']}",
-        "",
-        "Dependencies:",
     ]
 
-    for pkg, ver in info["dependencies"].items():
-        status = ver if ver else "not installed"
-        lines.append(f"  {pkg}: {status}")
+    # Python info with aligned colons
+    py_info = info["python"]
+    py_fields = [
+        ("Version", py_info["version"]),
+        ("Implementation", py_info["implementation"]),
+        ("Executable", py_info["executable"]),
+    ]
+    py_width = max(len(f[0]) for f in py_fields)
+    for label, value in py_fields:
+        lines.append(f"  {label:<{py_width}} : {value}")
+
+    lines.append("")
+    lines.append("Platform:")
+
+    # Platform info with aligned colons
+    plat_info = info["platform"]
+    plat_fields = [
+        ("System", plat_info["system"]),
+        ("Release", plat_info["release"]),
+        ("Machine", plat_info["machine"]),
+    ]
+    plat_width = max(len(f[0]) for f in plat_fields)
+    for label, value in plat_fields:
+        lines.append(f"  {label:<{plat_width}} : {value}")
+
+    lines.append("")
+    lines.append("Dependencies:")
+
+    # Dependencies with aligned colons
+    deps = info["dependencies"]
+    dep_items = [(pkg, ver if ver else "not installed") for pkg, ver in deps.items()]
+    dep_width = max(len(d[0]) for d in dep_items)
+    for pkg, ver in dep_items:
+        lines.append(f"  {pkg:<{dep_width}} : {ver}")
 
     return "\n".join(lines)
 
@@ -191,8 +216,8 @@ def print_version_info() -> None:
         registry-pattern: 0.4.0
 
         Python:
-          Version: 3.11.5
-          Implementation: CPython
+          Version        : 3.11.5
+          Implementation : CPython
           ...
     """
     print(format_version_info())
