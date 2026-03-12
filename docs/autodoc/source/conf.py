@@ -11,7 +11,7 @@ extensions = [
     "sphinx.ext.autodoc.typehints",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    'sphinxcontrib.mermaid'
+    "sphinxcontrib.mermaid",
 ]
 
 autodoc_default_options = {

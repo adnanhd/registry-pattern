@@ -19,7 +19,7 @@ Requirements:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -114,7 +114,7 @@ class ResNet18Params(ParamsBase):
 
 
 class ComposeParams(ParamsBase):
-    ops: list[Any]
+    ops: List[Any]
 
 
 class ToTensorParams(ParamsBase):

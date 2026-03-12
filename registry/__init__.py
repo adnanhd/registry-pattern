@@ -45,6 +45,33 @@ Usage::
     model = ContainerMixin.build_cfg(cfg)
 """
 
+import sys
+
+_REQUIRED_DEPS = {
+    "pydantic": "pip install pydantic",
+    "typing_extensions": "pip install typing-extensions",
+    "yaml": "pip install pyyaml",
+    "requests": "pip install requests",
+    "rpyc": "pip install rpyc",
+    "flask": "pip install flask",
+}
+
+if sys.version_info < (3, 11):
+    _REQUIRED_DEPS["tomli"] = "pip install tomli"
+
+_missing = []
+for _mod, _install in _REQUIRED_DEPS.items():
+    try:
+        __import__(_mod)
+    except ImportError:
+        _missing.append(f"  - {_mod}: {_install}")
+
+if _missing:
+    raise ImportError(
+        "registry-pattern is missing required dependencies:\n"
+        + "\n".join(_missing)
+    )
+
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .engines import ConfigFileEngine, SocketEngine

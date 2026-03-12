@@ -20,7 +20,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -252,7 +252,7 @@ class AdamParams(BaseModel):
     """Adam Parameters Schema."""
 
     lr: float = Field(default=0.001, ge=0)
-    betas: tuple[float, float] = (0.9, 0.999)
+    betas: Tuple[float, float] = (0.9, 0.999)
     weight_decay: float = Field(default=0, ge=0)
 
 
@@ -263,7 +263,7 @@ class AdamOptimizer:
     def __init__(
         self,
         lr: float = 0.001,
-        betas: tuple[float, float] = (0.9, 0.999),
+        betas: Tuple[float, float] = (0.9, 0.999),
         weight_decay: float = 0,
     ):
         self.lr = lr

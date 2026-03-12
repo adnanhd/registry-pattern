@@ -147,6 +147,7 @@ try:
     @ModelRegistry.register_artifact
     class MLPModel:  # Already registered above
         pass
+
 except Exception as e:
     print(f"  Error: {type(e).__name__}")
     print(f"  Duplicates are prevented by default")

@@ -34,7 +34,7 @@ from inspect import (
     ismodule,
     signature,
 )
-from types import GenericAlias, ModuleType
+from types import ModuleType
 from typing import (
     Any,
     Callable,
@@ -268,7 +268,7 @@ def compose(*functions: Callable[..., Any], wrap: bool = True) -> Callable[..., 
 
 
 def _validate_function_signature(
-    func: Callable[..., Any], expected_callable_alias: GenericAlias
+    func: Callable[..., Any], expected_callable_alias: Any
 ) -> None:
     """Validate that func's signature matches the expected Callable type annotation."""
     if logger.isEnabledFor(logging.DEBUG):

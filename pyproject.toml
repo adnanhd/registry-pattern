@@ -7,7 +7,7 @@ name = "registry-pattern"
 dynamic = ["version"]
 description = "A flexible registry pattern with DI container, Pydantic validation, and recursive config building"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Adnan Harun Dogan", email = "adnanharundogan@gmail.com"}
@@ -29,6 +29,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -93,7 +95,7 @@ addopts = "-v --tb=short"
 
 [tool.black]
 line-length = 88
-target-version = ["py310", "py311", "py312"]
+target-version = ["py38", "py39", "py310", "py311", "py312"]
 exclude = '''
 /(
     \.git
@@ -107,14 +109,14 @@ exclude = '''
 [tool.pyright]
 include = ["registry", "tests"]
 exclude = ["build", "dist", ".venv"]
-pythonVersion = "3.10"
+pythonVersion = "3.8"
 typeCheckingMode = "basic"
 reportMissingImports = true
 reportMissingTypeStubs = false
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py38"
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
