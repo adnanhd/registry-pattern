@@ -8,5 +8,7 @@ The main configuration is in pyproject.toml. This file exists for:
 
 from setuptools import setup
 
+from registry._version import __version__
+
 if __name__ == "__main__":
-    setup()
+    setup(name="registry-pattern", version=__version__)
