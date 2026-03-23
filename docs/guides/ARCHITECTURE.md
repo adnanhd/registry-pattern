@@ -57,6 +57,104 @@ The registry system uses a composition of mixins to achieve separation of concer
 └─────────────────────────────────────────────┘
 ```
 
+## Execution Flow Diagrams
+
+### Registration Flow
+
+```mermaid
+flowchart TD
+    A["@Registry.register_artifact"] --> B["_identifier_of(artifact)"]
+    B --> C["_internalize_identifier(key)"]
+    C --> D["_internalize_artifact(value)"]
+    D --> E{Validation Cache<br/>hit?}
+    E -->|Hit| F["_set_artifact(key, value)"]
+    E -->|Miss| G{strict mode?}
+    G -->|Yes| H["Validate signature/protocol"]
+    G -->|No| I{abstract mode?}
+    H --> I
+    I -->|Yes| J["Validate class hierarchy"]
+    I -->|No| K["Cache validation result"]
+    J --> K
+    K --> F
+    F --> L["Stored in Storage Backend"]
+
+    style A fill:#4a9eff,color:#fff
+    style L fill:#22c55e,color:#fff
+```
+
+### Artifact Lookup Flow
+
+```mermaid
+flowchart TD
+    A["Registry.get_artifact(key)"] --> B["_internalize_identifier(key)"]
+    B --> C["_get_artifact(key)"]
+    C --> D{Found?}
+    D -->|No| E["RegistryError\n+ suggestions\n+ available_keys"]
+    D -->|Yes| F["_externalize_artifact(value)"]
+    F --> G{Validation Cache<br/>hit?}
+    G -->|Hit| H["Return artifact"]
+    G -->|Miss| I["Re-validate artifact"]
+    I --> J["Cache result"]
+    J --> H
+
+    style A fill:#4a9eff,color:#fff
+    style H fill:#22c55e,color:#fff
+    style E fill:#ef4444,color:#fff
+```
+
+### BuildCfg Factory Flow
+
+```mermaid
+flowchart TD
+    A["BuildCfg(type, repo, data, meta)"] --> B["ContainerMixin.build_cfg(cfg)"]
+    B --> C["Resolve repo → get registry"]
+    C --> D["Retrieve artifact by type"]
+    D --> E["_extract_params_model(artifact)"]
+    E --> F["Validate & coerce data\nvia Pydantic schema"]
+    F --> G{Nested BuildCfg\nin data values?}
+    G -->|Yes| H["build_value() recursively"]
+    H --> G
+    G -->|No| I["Filter kwargs by\n__init__ signature"]
+    I --> J{ctx parameter\nin signature?}
+    J -->|Yes| K["Inject shared _ctx dict"]
+    J -->|No| L["artifact(**kwargs)"]
+    K --> L
+    L --> M["Attach __meta__\nto built object"]
+    M --> N["Return instance"]
+
+    style A fill:#4a9eff,color:#fff
+    style N fill:#22c55e,color:#fff
+```
+
+### DI Container: Nested Object Graph
+
+```mermaid
+flowchart LR
+    subgraph Config
+        TC["TrainerCfg\n(BuildCfg)"]
+        MC["ModelCfg\n(BuildCfg)"]
+        OC["OptimizerCfg\n(BuildCfg)"]
+        TC -->|"data.model"| MC
+        TC -->|"data.optimizer"| OC
+    end
+
+    subgraph Build["build_cfg (recursive)"]
+        direction TB
+        B1["build ModelCfg"] --> B2["build OptimizerCfg"]
+        B2 --> B3["build TrainerCfg\nwith resolved deps"]
+    end
+
+    subgraph Context["Shared _ctx"]
+        CTX["encoder: Encoder\nmodel: Model"]
+    end
+
+    Config --> Build
+    Build <-->|"ctx injection"| Context
+    Build --> R["Trainer instance\nwith live Model & Optimizer"]
+
+    style R fill:#22c55e,color:#fff
+```
+
 ## Core Design Principles
 
 ### 1. Separation of Concerns
