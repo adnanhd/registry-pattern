@@ -30,7 +30,7 @@ Usage::
 
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
 from .container import BuildCfg, is_build_cfg, normalize_cfg
-from .factory import build, resolve
+from .factory import build, resolve, serialize, validate
 from .fnc_registry import FunctionalRegistry
 from .meters import (
     CPUMeter,
@@ -65,7 +65,6 @@ from .utils import (
     RegistryError,
     ValidationError,
 )
-from .validators import ValidatorRegistry
 
 __all__ = [
     # Version utilities
@@ -73,11 +72,11 @@ __all__ = [
     "get_version_info",
     "get_debug_info",
     "print_version_info",
-    # Core registries
+    # Core registries (pipeline-internal registries -- ValidatorRegistry /
+    # SerializerRegistry -- live in their submodules; import from there if needed.)
     "TypeRegistry",
     "FunctionalRegistry",
     "SchemeRegistry",
-    "ValidatorRegistry",
     # DI Container
     "BuildCfg",
     "ContainerMixin",
@@ -87,6 +86,8 @@ __all__ = [
     # Factory
     "build",
     "resolve",
+    "validate",
+    "serialize",
     # Meters (measure -> meta)
     "FactoryMeter",
     "LifetimeMeter",

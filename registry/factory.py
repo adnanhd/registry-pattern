@@ -33,7 +33,7 @@ from .validators import resolve_validator
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build", "resolve"]
+__all__ = ["build", "resolve", "validate", "serialize"]
 
 
 _REF_RE = re.compile(r"^\$([A-Za-z_][\w.]*)(\(\))?$")
@@ -84,22 +84,61 @@ def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
     )
 
 
+def validate(
+    target: type | Callable[..., Any] | str,
+    data: Any,
+    *,
+    validator: str = "python",
+) -> dict[str, Any]:
+    """Run the medium decoder + Pydantic schema check, return validated kwargs.
+
+    Sits between ``resolve`` (no work) and ``build`` (full pipeline). Useful
+    for dry-run / config-lint flows where you want to verify a payload before
+    paying the construction cost.
+    """
+    if isinstance(target, str):
+        _, target = resolve(target)
+    medium_fn = resolve_validator(validator)
+    return medium_fn(target, data if data is not None else {})
+
+
 def build(
-    cfg: BuildCfg | dict[str, Any],
+    cfg_or_target: BuildCfg | dict[str, Any] | type | Callable[..., Any],
+    data: Any = None,
     *,
     validator: str = "pydantic",
     ctx: dict[str, Any] | None = None,
 ) -> Any:
-    """Recursively construct from a normalized envelope.
+    """Recursively construct from a normalized envelope OR explicit class+data.
 
-    Args:
-        cfg: ``BuildCfg`` instance or dict shaped like one.
-        validator: Name of a registered validator engine (default: ``"pydantic"``).
-        ctx: Sibling/parent context for ``$ref`` resolution. Mutated as siblings build.
+    Two call modes:
 
-    Returns:
-        The constructed instance (for class targets) or the function's return value.
+    1. **Envelope mode** -- ``build(cfg)`` where ``cfg`` is a ``BuildCfg`` or
+       a ``{"type": ..., "data": ...}`` dict. ``data`` is ignored.
+
+    2. **Explicit class mode** -- ``build(MLP, raw_data, validator="yaml")``
+       where the first arg is the class/callable itself and ``raw_data`` is
+       in the format the chosen ``validator`` medium expects. Available
+       mediums: ``"python"`` (dict), ``"yaml"`` (str), ``"json"`` (str),
+       ``"argparse"`` (Namespace), plus the registry's ``"pydantic"``,
+       ``"jsonargparse"``, ``"noop"``.
+
+    Both modes go through the same pipeline (validation, meters, reporters,
+    post hooks, meta). Returns the constructed instance or function result.
     """
+    # Explicit class mode: decode raw data via the medium, then run the
+    # standard envelope pipeline with validator="noop" (already validated).
+    if not isinstance(cfg_or_target, (BuildCfg, dict)) and callable(cfg_or_target):
+        target = cfg_or_target
+        medium_fn = resolve_validator(validator)
+        kwargs = medium_fn(target, data if data is not None else {})
+        return build(
+            BuildCfg(type=target.__name__, data=kwargs),
+            ctx=ctx,
+            validator="noop",
+        )
+
+    cfg = cfg_or_target
     # Preserve a reference to the original dict so meta can be written back.
     raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
@@ -188,3 +227,61 @@ def build(
         emit_meter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
         emit_reporter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
         raise
+
+
+# ---------------------------------------------------------------------------
+# Serialization side (instance -> medium-encoded output)
+# ---------------------------------------------------------------------------
+
+
+class SerializerRegistry(FunctionalRegistry):
+    """String-keyed registry of serializer engines for ``serialize()``."""
+
+
+@SerializerRegistry.register_artifact
+def python(instance: Any) -> dict[str, Any]:
+    """Read constructor-arg attributes off the instance into a dict."""
+    import inspect
+
+    sig = inspect.signature(type(instance).__init__)
+    return {
+        n: getattr(instance, n)
+        for n in sig.parameters
+        if n != "self" and hasattr(instance, n)
+    }
+
+
+@SerializerRegistry.register_artifact
+def yaml(instance: Any) -> str:
+    """YAML string from ``python()``."""
+    import yaml as _yaml
+
+    return _yaml.safe_dump(python(instance))
+
+
+@SerializerRegistry.register_artifact
+def json(instance: Any) -> str:
+    """JSON string from ``python()``."""
+    import json as _json
+
+    return _json.dumps(python(instance))
+
+
+def serialize(
+    instance: Any,
+    *,
+    ctx: dict[str, Any] | None = None,  # noqa: ARG001 -- reserved for future nested serdes
+    serializator: str = "python",
+) -> Any:
+    """Serialize ``instance`` via the named serializer medium.
+
+    Symmetric counterpart to ``build()``:
+
+    - ``serialize(obj, serializator="python")`` -> dict
+    - ``serialize(obj, serializator="yaml")``   -> yaml string
+    - ``serialize(obj, serializator="json")``   -> json string
+
+    Register custom mediums via ``SerializerRegistry.register_artifact``.
+    """
+    encoder = SerializerRegistry.get_artifact(serializator)
+    return encoder(instance)

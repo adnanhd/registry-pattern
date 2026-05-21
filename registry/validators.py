@@ -58,6 +58,37 @@ def noop(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, A
     return dict(data)
 
 
+@ValidatorRegistry.register_artifact
+def python(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+    """Python-native dict input; validate against target's signature via Pydantic."""
+    return pydantic(target, data if isinstance(data, dict) else dict(data))
+
+
+@ValidatorRegistry.register_artifact
+def yaml(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+    """YAML string input; decode then python-validate."""
+    import yaml as _yaml
+
+    decoded = _yaml.safe_load(data) if isinstance(data, str) else data
+    return python(target, decoded)
+
+
+@ValidatorRegistry.register_artifact
+def json(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+    """JSON string input; decode then python-validate."""
+    import json as _json
+
+    decoded = _json.loads(data) if isinstance(data, str) else data
+    return python(target, decoded)
+
+
+@ValidatorRegistry.register_artifact
+def argparse(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+    """argparse.Namespace input; ``vars(ns)`` then python-validate."""
+    decoded = vars(data) if hasattr(data, "__dict__") and not isinstance(data, dict) else data
+    return python(target, decoded)
+
+
 def resolve_validator(name: str) -> Validator:
     """String lookup with helpful error message."""
     return ValidatorRegistry.get_artifact(name)
