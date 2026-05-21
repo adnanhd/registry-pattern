@@ -65,7 +65,7 @@ class TestNestedConfigs:
                 self.inner = inner
                 self.name = name
 
-        ContainerMixin.configure_repos(
+        ContainerMixin._repos.update(
             {"outer": OuterRegistry, "inner": InnerRegistry, "default": OuterRegistry}
         )
 
@@ -101,7 +101,7 @@ class TestNestedConfigs:
         def container(items: List[Any]):
             return {"container": items}
 
-        ContainerMixin.configure_repos({"default": ListRegistry})
+        ContainerMixin._repos.update({"default": ListRegistry})
 
         cfg = BuildCfg(
             type="container",
@@ -179,7 +179,7 @@ class TestContextInjection:
                 self.params = params
                 self.lr = lr
 
-        ContainerMixin.configure_repos(
+        ContainerMixin._repos.update(
             {
                 "models": ModelsRegistry,
                 "optimizers": OptimizersRegistry,
@@ -287,7 +287,7 @@ class TestMetaAttachment:
             def __init__(self, x: int):
                 self.x = x
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         cfg = BuildCfg(
             type="MetaClass",
@@ -312,7 +312,7 @@ class TestMetaAttachment:
             def __init__(self, x: int):
                 self.x = x
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         cfg = BuildCfg(
             type="SimpleClass",

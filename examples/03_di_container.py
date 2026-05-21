@@ -58,7 +58,7 @@ class TrainerRegistry(TypeRegistry[object]):
 
 
 # Configure all repos
-ContainerMixin.configure_repos(
+ContainerMixin._repos.update(
     {
         "optimizers": OptimizerRegistry,
         "schedulers": SchedulerRegistry,

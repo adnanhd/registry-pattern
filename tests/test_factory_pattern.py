@@ -39,7 +39,7 @@ class TestFactoryBasics:
             def __init__(self, value: int):
                 self.value = value
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         cfg = BuildCfg(type="SimpleClass", data={"value": 42})
         obj = ContainerMixin.build_cfg(cfg)
@@ -56,7 +56,7 @@ class TestFactoryBasics:
                 self.required = required
                 self.optional = optional
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         cfg = BuildCfg(type="WithDefaults", data={"required": 10})
         obj = ContainerMixin.build_cfg(cfg)
@@ -71,7 +71,7 @@ class TestFactoryBasics:
         def create_dict(a: int, b: str) -> dict:
             return {"a": a, "b": b}
 
-        ContainerMixin.configure_repos({"default": fresh_func_registry})
+        ContainerMixin._repos.update({"default": fresh_func_registry})
 
         cfg = BuildCfg(type="create_dict", data={"a": 1, "b": "hello"})
         result = ContainerMixin.build_cfg(cfg)
@@ -126,7 +126,7 @@ class TestParamsModel:
                 self.x = x
                 self.y = y
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         # Pass strings - should be coerced to int/float
         cfg = BuildCfg(type="CoercedClass", data={"x": "42", "y": "3.14"})
@@ -148,7 +148,7 @@ class TestParamsModel:
             def __init__(self, x: int):
                 self.x = x
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         # Missing required field 'x'
         cfg = BuildCfg(type="StrictClass", data={})
@@ -173,7 +173,7 @@ class TestExtrasHandling:
             def __init__(self, x: int):
                 self.x = x
 
-        ContainerMixin.configure_repos({"default": fresh_type_registry})
+        ContainerMixin._repos.update({"default": fresh_type_registry})
 
         cfg = BuildCfg(
             type="OnlyX",

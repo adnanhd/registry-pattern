@@ -1,8 +1,9 @@
 r"""Registry Pattern - DI Container / IoC Framework.
 
 Core API:
-    TypeRegistry, FunctionalRegistry, SchemeRegistry
+    TypeRegistry, FunctionalRegistry
     BuildCfg, ContainerMixin, Buildable
+    build, resolve, validate, serialize
     ValidationError, RegistryError, CoercionError, ConformanceError, InheritanceError
 
 Optional features live in submodules and require extras:
@@ -54,7 +55,6 @@ from .reporters import (
     reporters,
 )
 from .mixin import ContainerMixin, RegistryFactorizorMixin
-from .sch_registry import SchemeRegistry
 from .typ_registry import TypeRegistry
 from .type_guard import Buildable, BuildableValidator
 from .utils import (
@@ -75,7 +75,6 @@ __all__ = [
     # SerializerRegistry -- live in their submodules; import from there if needed.)
     "TypeRegistry",
     "FunctionalRegistry",
-    "SchemeRegistry",
     # DI Container
     "BuildCfg",
     "ContainerMixin",

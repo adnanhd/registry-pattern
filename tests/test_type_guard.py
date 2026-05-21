@@ -39,7 +39,7 @@ def setup_registries():
     ComponentRegistry.clear_artifacts()
     ServiceRegistry.clear_artifacts()
     ContainerMixin.clear_context()
-    ContainerMixin.configure_repos(
+    ContainerMixin._repos.update(
         {
             "components": ComponentRegistry,
             "services": ServiceRegistry,

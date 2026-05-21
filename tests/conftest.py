@@ -135,7 +135,7 @@ def multi_registry_setup(container_cleanup):
         return ctx[key]
 
     # Configure repos
-    ContainerMixin.configure_repos(
+    ContainerMixin._repos.update(
         {
             "models": ModelRegistry,
             "transforms": TransformRegistry,

@@ -73,7 +73,7 @@ class TrainerRegistry(TypeRegistry[object]):
 
 
 # Configure repos
-ContainerMixin.configure_repos(
+ContainerMixin._repos.update(
     {
         "models": ModelRegistry,
         "optimizers": OptimizerRegistry,
