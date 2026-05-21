@@ -161,6 +161,7 @@ class TypeRegistry(
     _repository: MutableMapping[Hashable, Type[Cls]]
     _strict: ClassVar[bool] = False
     _abstract: ClassVar[bool] = False
+    repo: ClassVar[str] = "default"
     __slots__: ClassVar[Tuple[str, ...]] = ()
 
     @classmethod
@@ -172,6 +173,7 @@ class TypeRegistry(
         cls,
         strict: bool = False,
         abstract: bool = False,
+        repo: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize the TypeRegistry subclass.
@@ -179,6 +181,9 @@ class TypeRegistry(
         Args:
             strict: Enforce protocol conformance checks.
             abstract: Require registered classes to inherit from this registry.
+            repo: Dotted path for hierarchical resolve, e.g. ``"cofinn.networks"``.
+                Defaults to ``cls.__name__``. Used by ``resolve(name, repo=...)``
+                for prefix-or-exact matching across the registry tree.
 
         For remote storage, assign ``cls._repository`` directly with a
         ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
@@ -188,11 +193,13 @@ class TypeRegistry(
         cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         cls._strict = strict
         cls._abstract = abstract
-        _ALL_TYPE_REGISTRIES[cls.__name__] = cls
+        cls.repo = repo if repo is not None else cls.__name__
+        _ALL_TYPE_REGISTRIES[cls.repo] = cls
         _base = _base_type_of(cls)
         logger.info(
-            "registry.created name=%s base=%s strict=%s abstract=%s",
+            "registry.created name=%s repo=%s base=%s strict=%s abstract=%s",
             get_type_name(cls),
+            cls.repo,
             getattr(_base, "__name__", _base),
             strict,
             abstract,

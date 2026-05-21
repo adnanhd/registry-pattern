@@ -77,6 +77,7 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
 
     _repository: MutableMapping[Hashable, Callable[P, R]]
     _strict: ClassVar[bool] = False
+    repo: ClassVar[str] = "default"
     __orig_bases__: ClassVar[Tuple[type, ...]]
     __slots__: ClassVar[Tuple[str, ...]] = ()
 
@@ -96,12 +97,15 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
     def __init_subclass__(
         cls,
         strict: bool = False,
+        repo: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize a FunctionalRegistry subclass.
 
         Args:
             strict: Enforce signature type checking.
+            repo: Dotted path for hierarchical resolve, e.g. ``"cofinn.steps"``.
+                Defaults to ``cls.__name__``.
 
         For remote storage, assign ``cls._repository`` directly with a
         ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
@@ -110,10 +114,12 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
         super().__init_subclass__(**kwargs)
         cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
         cls._strict = strict
-        _ALL_FN_REGISTRIES[cls.__name__] = cls
+        cls.repo = repo if repo is not None else cls.__name__
+        _ALL_FN_REGISTRIES[cls.repo] = cls
         logger.info(
-            "registry.created name=%s kind=FunctionalRegistry strict=%s",
+            "registry.created name=%s repo=%s kind=FunctionalRegistry strict=%s",
             cls.__name__,
+            cls.repo,
             strict,
         )
 
