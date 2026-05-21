@@ -19,6 +19,7 @@ The factory writes computed values back into ``cfg.meta`` and attaches
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Callable
 
@@ -28,6 +29,8 @@ from .observers import emit
 from .schema import process_compute, process_validate, resolve_meta_schema
 from .typ_registry import _ALL_TYPE_REGISTRIES, TypeRegistry
 from .validators import resolve_validator
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["build", "resolve"]
 
@@ -101,6 +104,7 @@ def build(
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
 
+    logger.info("build.start type=%s repo=%s", cfg.type, cfg.repo)
     emit("on_build_start", cfg=cfg, ctx=ctx)
 
     try:
@@ -145,6 +149,12 @@ def build(
         # Observers fire BEFORE writeback so they can mutate meta (e.g. resource
         # observers writing rss/cpu/io counters).
         emit("on_built", target=target, result=result, meta=meta, ctx=ctx)
+        logger.info(
+            "build.done type=%s target=%s meta_keys=%s",
+            cfg.type,
+            getattr(target, "__name__", "?"),
+            list(meta) or "-",
+        )
 
         # [6] meta_schema validation (if any)
         mschema = resolve_meta_schema(registry, target)
@@ -167,5 +177,6 @@ def build(
         return result
 
     except Exception as exc:
+        logger.warning("build.error type=%s exc=%s: %s", cfg.type, type(exc).__name__, exc)
         emit("on_error", cfg=cfg, exc=exc, ctx=ctx)
         raise
