@@ -146,6 +146,26 @@ def test_build_envelope_meta_propagates() -> None:
     assert cfg.meta == {"label": "hello"}
 
 
+def test_build_writes_meta_back_to_input_dict() -> None:
+    """When cfg is passed as a dict, the dict's meta key should be updated in place."""
+
+    class _MetaWriter:
+        @classmethod
+        def post_init(cls, instance, meta):
+            meta["sentinel"] = "written"
+
+    class _MetaWriterRegistry(TypeRegistry[object]):
+        @classmethod
+        def post_init(cls, instance, meta):
+            meta["from_post_init"] = True
+
+    _MetaWriterRegistry.register_artifact(_Adder)
+    cfg = {"type": "_Adder", "data": {"base": 1}, "meta": {}}
+    build(cfg)
+    assert cfg["meta"] == {"from_post_init": True}
+    _MetaWriterRegistry.clear_artifacts()
+
+
 def test_build_uses_noop_validator_when_requested() -> None:
     _SampleModelRegistry.register_artifact(_Adder)
     # Pass an unknown extra key; pydantic validator strips it (not in schema),
