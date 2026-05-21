@@ -63,8 +63,17 @@ def _resolved_hints(target: type | Callable[..., Any]) -> dict[str, Any]:
 
 
 def _is_json_native(tp: Any) -> bool:
-    origin = typing.get_origin(tp) or tp
-    return origin in _JSON_NATIVE or tp in _JSON_NATIVE
+    """True iff ``tp`` is a JSON-safe primitive, or a parametrized generic
+    over JSON-safe types. Conservative: any non-native generic param
+    contaminates the result.
+    """
+    origin = typing.get_origin(tp)
+    if origin is None:
+        return tp in _JSON_NATIVE
+    if origin in _JSON_NATIVE:
+        # Parametrized list/dict/tuple — every arg must also be safe.
+        return all(_is_json_native(a) for a in typing.get_args(tp))
+    return False
 
 
 def _config_type_for(tp: Any) -> Any:
