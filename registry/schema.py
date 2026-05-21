@@ -124,8 +124,12 @@ def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | N
     """Walk ``Annotated[T, Marker(...)]`` metadata; collect compute markers.
 
     Returns a Pydantic model with one field per marker (name -> return type),
-    or ``None`` if the target has no compute markers.
+    or ``None`` if the target has no compute markers. The model is configured
+    with ``extra="allow"`` so that hooks / meters / pre_call writes that don't
+    correspond to a marker survive ``model_dump()`` round-trip.
     """
+    from pydantic import ConfigDict
+
     hints = _resolved_hints(target)
     fields: dict[str, Any] = {}
     for hint in hints.values():
@@ -142,7 +146,11 @@ def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | N
     if not fields:
         return None
     schema_name = getattr(target, "__name__", "Anonymous")
-    return create_model(f"{schema_name}MetaSchema", **fields)
+    return create_model(
+        f"{schema_name}MetaSchema",
+        __config__=ConfigDict(extra="allow"),
+        **fields,
+    )
 
 
 def resolve_data_schema(registry: type, target: type | Callable[..., Any]) -> Type[BaseModel]:
