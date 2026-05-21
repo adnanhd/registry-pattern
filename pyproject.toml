@@ -48,10 +48,6 @@ dependencies = [
 yaml   = ["pyyaml>=6.0"]
 # OpenTelemetryReporter (spans + Histogram metrics)
 otel   = ["opentelemetry-api>=1.20"]
-torch = [
-    "torch>=2.0",
-    "torchvision>=0.15",
-]
 docs = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=2.0",
@@ -67,7 +63,7 @@ dev = [
     "pyyaml>=6.0",
 ]
 all = [
-    "registry-pattern[yaml,otel,torch,docs,dev]",
+    "registry-pattern[yaml,otel,docs,dev]",
 ]
 
 [project.urls]
