@@ -104,7 +104,7 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
 
         Args:
             strict: Enforce signature type checking.
-            repo: Dotted path for hierarchical resolve, e.g. ``"cofinn.steps"``.
+            repo: Dotted path for hierarchical resolve, e.g. ``"myapp.steps"``.
                 Defaults to ``cls.__name__``.
 
         For remote storage, assign ``cls._repository`` directly with a

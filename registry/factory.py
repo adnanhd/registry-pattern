@@ -1,7 +1,7 @@
 """Recursive factory for ``BuildCfg``-shaped envelopes.
 
 One source-agnostic entry point: ``build(cfg, ctx=...)``. The envelope can
-come from YAML, JSON, callpyback RPC, or a hand-rolled Python dict -- the
+come from YAML, JSON, an RPC payload, or a hand-rolled Python dict -- the
 factory doesn't care.
 
 Pipeline per envelope::
@@ -64,8 +64,8 @@ def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
 
     Returns ``(registry_class, artifact)``. When ``repo`` is provided, the
     search is restricted to registries whose ``repo`` path equals it OR has
-    it as a dotted prefix -- so ``repo="cofinn"`` matches both ``"cofinn"``
-    and ``"cofinn.networks"`` and ``"cofinn.losses"``.
+    it as a dotted prefix -- so ``repo="models"`` matches both ``"models"``
+    and ``"models.cnn"`` and ``"models.transformer"``.
 
     If multiple registries match, an exact-repo match wins; otherwise the
     call raises with a hint showing the candidate paths.
@@ -133,8 +133,8 @@ def build(
        where the first arg is the class/callable itself and ``raw_data`` is
        in the format the chosen ``validator`` medium expects. Available
        mediums: ``"python"`` (dict), ``"yaml"`` (str), ``"json"`` (str),
-       ``"argparse"`` (Namespace), plus the registry's ``"pydantic"``,
-       ``"jsonargparse"``, ``"noop"``.
+       ``"argparse"`` (Namespace), plus ``"pydantic"`` / ``"jsonargparse"`` /
+       ``"noop"`` from the validator registry.
 
     Both modes go through the same pipeline (validation, meters, reporters,
     post hooks, meta). Returns the constructed instance or function result.
