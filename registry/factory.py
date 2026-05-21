@@ -54,33 +54,45 @@ def _resolve_ref(s: str, scope: dict[str, Any]) -> Any:
     return obj() if call else obj
 
 
+def _repo_matches(reg_repo: str, query: str) -> bool:
+    """Hierarchical match: exact, or `query` is an ancestor of `reg_repo`."""
+    return reg_repo == query or reg_repo.startswith(query + ".")
+
+
 def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
     """Find the registry that holds ``type_name``.
 
-    Returns (registry_class, artifact). When ``repo`` is provided, it disambiguates
-    among multiple matches.
+    Returns ``(registry_class, artifact)``. When ``repo`` is provided, the
+    search is restricted to registries whose ``repo`` path equals it OR has
+    it as a dotted prefix -- so ``repo="cofinn"`` matches both ``"cofinn"``
+    and ``"cofinn.networks"`` and ``"cofinn.losses"``.
+
+    If multiple registries match, an exact-repo match wins; otherwise the
+    call raises with a hint showing the candidate paths.
     """
     matches: list[tuple[type, Any]] = []
-    for registries in (_ALL_TYPE_REGISTRIES, _ALL_FN_REGISTRIES):
-        for reg in registries.values():
-            try:
-                if reg.has_identifier(type_name):
-                    matches.append((reg, reg.get_artifact(type_name)))
-            except Exception:
-                continue
+    for repo_path, reg in {**_ALL_TYPE_REGISTRIES, **_ALL_FN_REGISTRIES}.items():
+        if repo is not None and not _repo_matches(repo_path, repo):
+            continue
+        try:
+            if reg.has_identifier(type_name):
+                matches.append((reg, reg.get_artifact(type_name)))
+        except Exception:
+            continue
     if not matches:
+        suffix = f" under repo='{repo}'" if repo else ""
         raise KeyError(
-            f"'{type_name}' not registered in any TypeRegistry/FunctionalRegistry"
+            f"'{type_name}' not registered in any TypeRegistry/FunctionalRegistry{suffix}"
         )
     if len(matches) == 1:
         return matches[0]
-    if repo:
-        filtered = [(r, a) for r, a in matches if r.__name__ == repo]
-        if len(filtered) == 1:
-            return filtered[0]
+    if repo is not None:
+        exact = [(r, a) for r, a in matches if r.repo == repo]
+        if len(exact) == 1:
+            return exact[0]
     raise KeyError(
-        f"'{type_name}' is ambiguous (found in "
-        f"{[r.__name__ for r, _ in matches]}); set `repo` on the envelope"
+        f"'{type_name}' is ambiguous (found in repos "
+        f"{[r.repo for r, _ in matches]}); narrow with repo=..."
     )
 
 
@@ -108,6 +120,7 @@ def build(
     *,
     validator: str = "pydantic",
     ctx: dict[str, Any] | None = None,
+    repo: str | None = None,
 ) -> Any:
     """Recursively construct from a normalized envelope OR explicit class+data.
 
@@ -133,12 +146,17 @@ def build(
         medium_fn = resolve_validator(validator)
         kwargs = medium_fn(target, data if data is not None else {})
         return build(
-            BuildCfg(type=target.__name__, data=kwargs),
+            BuildCfg(type=target.__name__, repo=repo or "default", data=kwargs),
             ctx=ctx,
             validator="noop",
         )
 
     cfg = cfg_or_target
+    # Caller can override the envelope's repo via the kwarg.
+    if repo is not None and isinstance(cfg, BuildCfg):
+        cfg = cfg.model_copy(update={"repo": repo})
+    elif repo is not None and isinstance(cfg, dict):
+        cfg = {**cfg, "repo": repo}
     # Preserve a reference to the original dict so meta can be written back.
     raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
