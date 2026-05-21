@@ -1,8 +1,4 @@
-r"""Thread-safe local storage for registries.
-
-For the HTTP-backed remote variant, see ``registry.remote_storage``
-(requires the ``http`` extra).
-"""
+r"""Thread-safe local storage for registries."""
 
 from __future__ import annotations
 

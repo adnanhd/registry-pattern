@@ -8,9 +8,8 @@ Core API:
 Optional features live in submodules and require extras:
     from registry.engines import ConfigFileEngine, SocketEngine
         # SocketEngine.rpc requires pip install 'registry-pattern[rpc]'
-        # SocketEngine.http and ConfigFileEngine.yaml require [http] and [yaml]
-    from registry.remote_storage import RemoteStorageProxy   # needs [http]
-    python -m registry server ...                            # needs [server]
+        # ConfigFileEngine.yaml requires [yaml]
+    from registry.reporters import OpenTelemetryReporter      # needs [otel]
 
 Usage::
 

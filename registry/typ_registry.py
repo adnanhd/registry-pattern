@@ -185,9 +185,9 @@ class TypeRegistry(
                 Defaults to ``cls.__name__``. Used by ``resolve(name, repo=...)``
                 for prefix-or-exact matching across the registry tree.
 
-        For remote storage, assign ``cls._repository`` directly with a
-        ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
-        ``http`` extra).
+        ``cls._repository`` is a ``ThreadSafeLocalStorage`` by default; assign
+        any ``MutableMapping`` to it after class creation if you need custom
+        backing (e.g. a JSON-only RPC adapter on top of an external service).
         """
         super().__init_subclass__(**kwargs)
         cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
