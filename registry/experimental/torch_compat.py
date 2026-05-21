@@ -47,15 +47,21 @@ __all__ = [
     # helpers
     "device_of",
     "hash_state_dict",
-    # validate markers
+    # validate markers (cross-arg / runtime invariants -- raise on mismatch)
     "SameDeviceAs",
     "BoundTo",
     "InputShapeMatches",
-    # compute markers
+    "VerifyChecksum",
+    "MatchesInputShape",
+    "MatchesOutputShape",
+    "MatchesTargetShape",
+    # compute markers (emit provenance / serialize into meta)
     "Checksum",
     "NumParams",
     "Device",
     "EffectiveLr",
+    "InputShape",
+    "OutputShape",
     # meters
     "TorchProfilerMeter",
     # reporters
@@ -133,6 +139,145 @@ class BoundTo(ValidateMarker):
         ref_ids = {id(p) for p in ref_obj.parameters()}
         if not (opt_ids & ref_ids):
             raise ValueError(f"optimizer not bound to {self.ref!r}")
+
+
+@dataclass(frozen=True)
+class VerifyChecksum(ValidateMarker):
+    """Validate that ``value``'s state_dict hash equals an expected sha256 prefix.
+
+    Conceptually paired with -- but distinct from -- the :class:`Checksum`
+    compute marker:
+
+    - ``VerifyChecksum("sha256:abc...")`` raises on mismatch (gatekeeper).
+    - ``Checksum("model_hash")`` writes the hash into meta (provenance emitter).
+
+    Use this when you have a pinned-weights contract (e.g. an IMAGENET1K_V2
+    artifact ships with a known sha256) and you want a hard guarantee that
+    the loaded weights match.
+    """
+
+    expected: str
+
+    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+        actual = hash_state_dict(value.state_dict())
+        if actual != self.expected:
+            raise ValueError(f"checksum mismatch: got {actual} != expected {self.expected}")
+
+
+def _shape_or_none(value: Any) -> tuple[int, ...] | None:
+    """``value.shape[1:]`` for tensors / (tensor, ...) tuples; else None."""
+    x = value[0] if isinstance(value, (tuple, list)) and value else value
+    if isinstance(x, torch.Tensor):
+        return tuple(x.shape[1:])
+    return None
+
+
+def _meta_shape(obj: Any, key: str) -> tuple[int, ...] | None:
+    """Look ``key`` up in ``obj.__meta__`` (if any). Returns a tuple or None."""
+    meta = getattr(obj, "__meta__", None) or {}
+    value = meta.get(key)
+    return tuple(value) if value is not None else None
+
+
+@dataclass(frozen=True)
+class MatchesInputShape(ValidateMarker):
+    """Batch shape (sans batch dim) must equal ``kwargs[ref].__meta__['input_shape']``.
+
+    Convention: shape-aware models declare ``input_shape`` in their meta (via
+    a registry's ``serialize_meta`` or ``post_init`` hook). This marker
+    enforces that whatever is annotated as a batch matches that contract.
+    """
+
+    ref: str
+
+    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+        ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
+        if ref_obj is None:
+            return
+        expected = _meta_shape(ref_obj, "input_shape")
+        actual = _shape_or_none(value)
+        if expected is None or actual is None:
+            return
+        if expected != actual:
+            raise ValueError(
+                f"input shape mismatch: {actual} != {self.ref}.input_shape {expected}"
+            )
+
+
+@dataclass(frozen=True)
+class MatchesOutputShape(ValidateMarker):
+    """``value``'s declared input_shape meta must equal ``kwargs[ref].__meta__['output_shape']``.
+
+    Useful for criteria / heads / decoders that consume a model's output.
+    """
+
+    ref: str
+
+    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+        ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
+        if ref_obj is None:
+            return
+        ref_output = _meta_shape(ref_obj, "output_shape")
+        self_input = _meta_shape(value, "input_shape")
+        if ref_output is None or self_input is None:
+            return
+        if ref_output != self_input:
+            raise ValueError(
+                f"output/input shape mismatch: {self.ref}.output_shape {ref_output} != "
+                f"this.input_shape {self_input}"
+            )
+
+
+@dataclass(frozen=True)
+class MatchesTargetShape(ValidateMarker):
+    """The target tensor in a (input, target) batch matches ``kwargs[ref].__meta__['target_shape']``.
+
+    The marker reads ``value[1]`` (the target) and compares to the criterion's
+    declared target_shape, typically populated by serialize_meta.
+    """
+
+    ref: str
+
+    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+        ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
+        if ref_obj is None:
+            return
+        expected = _meta_shape(ref_obj, "target_shape")
+        if expected is None:
+            return
+        target = value[1] if isinstance(value, (tuple, list)) and len(value) > 1 else None
+        if not isinstance(target, torch.Tensor):
+            return
+        actual = tuple(target.shape[1:])
+        if expected != actual:
+            raise ValueError(
+                f"target shape mismatch: {actual} != {self.ref}.target_shape {expected}"
+            )
+
+
+@dataclass(frozen=True)
+class InputShape(ComputeMarker):
+    """Write the value's input shape (skipping batch dim) to meta[name]."""
+
+    name: str
+
+    def compute(self, value: Any) -> tuple[int, ...] | None:
+        return _shape_or_none(value)
+
+
+@dataclass(frozen=True)
+class OutputShape(ComputeMarker):
+    """Write the value's output shape (skipping batch dim) to meta[name].
+
+    Only meaningful for callable modules whose forward returns a Tensor of
+    a deterministic shape; otherwise the caller writes ``output_shape`` via
+    a custom ``serialize_meta`` / ``post_init`` hook.
+    """
+
+    name: str
+
+    def compute(self, value: Any) -> tuple[int, ...] | None:
+        return _shape_or_none(value)
 
 
 @dataclass(frozen=True)

@@ -260,33 +260,77 @@ class SerializerRegistry(FunctionalRegistry):
     """String-keyed registry of serializer engines for ``serialize()``."""
 
 
-@SerializerRegistry.register_artifact
-def python(instance: Any) -> dict[str, Any]:
-    """Read constructor-arg attributes off the instance into a dict."""
+def _envelope_for(instance: Any, *, repo: str | None = None) -> dict[str, Any]:
+    """Build the ``{type, data, meta}`` envelope from a constructed instance.
+
+    Reads constructor-arg attributes for ``data``; invokes the registry's
+    ``serialize_meta(instance, meta)`` classmethod (if any) for ``meta``.
+    With Python inheritance + cooperative ``super()``, sub-registries' hooks
+    cascade up the chain naturally.
+
+    When the instance lives in multiple registries (same artifact registered
+    in several sub-trees), ``repo=`` disambiguates -- same semantics as
+    ``build(cfg, repo=...)``.
+    """
     import inspect
 
+    type_name = type(instance).__name__
     sig = inspect.signature(type(instance).__init__)
-    return {
+    data = {
         n: getattr(instance, n)
         for n in sig.parameters
         if n != "self" and hasattr(instance, n)
     }
 
+    meta: dict[str, Any] = {}
+    registry: type | None = None
+    candidates: list[type] = []
+    for repo_path, reg in _ALL_TYPE_REGISTRIES.items():
+        if repo is not None and not _repo_matches(repo_path, repo):
+            continue
+        try:
+            if reg.has_identifier(type_name) and reg.get_artifact(type_name) is type(instance):
+                candidates.append(reg)
+        except Exception:
+            continue
+    if len(candidates) == 1:
+        registry = candidates[0]
+    elif len(candidates) > 1 and repo is not None:
+        exact = [r for r in candidates if r.repo == repo]
+        if len(exact) == 1:
+            registry = exact[0]
+    if registry is not None:
+        hook = getattr(registry, "serialize_meta", None)
+        if callable(hook):
+            hook(instance, meta)
+    return {"type": type_name, "data": data, "meta": meta}
+
 
 @SerializerRegistry.register_artifact
-def yaml(instance: Any) -> str:
-    """YAML string from ``python()``."""
+def python(instance: Any, *, repo: str | None = None) -> dict[str, Any]:
+    """Envelope-shaped dict: ``{type, data, meta}``.
+
+    ``data`` mirrors the instance's constructor kwargs; ``meta`` collects
+    whatever the registry's ``serialize_meta`` classmethod writes (e.g.
+    a checksum). Symmetric with ``build(envelope)``.
+    """
+    return _envelope_for(instance, repo=repo)
+
+
+@SerializerRegistry.register_artifact
+def yaml(instance: Any, *, repo: str | None = None) -> str:
+    """YAML string of the envelope produced by :func:`python`."""
     import yaml as _yaml
 
-    return _yaml.safe_dump(python(instance))
+    return _yaml.safe_dump(_envelope_for(instance, repo=repo))
 
 
 @SerializerRegistry.register_artifact
-def json(instance: Any) -> str:
-    """JSON string from ``python()``."""
+def json(instance: Any, *, repo: str | None = None) -> str:
+    """JSON string of the envelope produced by :func:`python`."""
     import json as _json
 
-    return _json.dumps(python(instance))
+    return _json.dumps(_envelope_for(instance, repo=repo))
 
 
 def serialize(
@@ -294,16 +338,23 @@ def serialize(
     *,
     ctx: dict[str, Any] | None = None,  # noqa: ARG001 -- reserved for future nested serdes
     serializator: str = "python",
+    repo: str | None = None,
 ) -> Any:
-    """Serialize ``instance`` via the named serializer medium.
+    """Serialize ``instance`` into a ``BuildCfg``-shaped envelope.
 
-    Symmetric counterpart to ``build()``:
+    Symmetric counterpart to :func:`build`:
 
-    - ``serialize(obj, serializator="python")`` -> dict
-    - ``serialize(obj, serializator="yaml")``   -> yaml string
-    - ``serialize(obj, serializator="json")``   -> json string
+    - ``serialize(obj, serializator="python")`` -> ``{"type", "data", "meta"}`` dict
+    - ``serialize(obj, serializator="yaml")``   -> YAML string of that envelope
+    - ``serialize(obj, serializator="json")``   -> JSON string of that envelope
 
-    Register custom mediums via ``SerializerRegistry.register_artifact``.
+    The registry's ``serialize_meta(cls, instance, meta)`` classmethod (if
+    defined) fires once per build and populates the envelope's ``meta`` field.
+    Python inheritance + cooperative ``super().serialize_meta(...)`` lets
+    sub-registries extend their parent's meta emission.
+
+    ``repo=`` disambiguates when the artifact is registered in multiple
+    registries (same semantics as ``build(cfg, repo=...)``).
     """
     encoder = SerializerRegistry.get_artifact(serializator)
-    return encoder(instance)
+    return encoder(instance, repo=repo)

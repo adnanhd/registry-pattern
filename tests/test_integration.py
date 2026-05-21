@@ -310,11 +310,41 @@ def test_validate_alone_does_not_instantiate() -> None:
 
 
 def test_serialize_round_trip_through_python_medium() -> None:
-    """build then serialize back, expect the same kwargs dict."""
+    """build then serialize back, expect a BuildCfg-shaped envelope."""
     inst = build("_Net", {"kernel_size": 7, "channels": 32}, validator="python",
                  repo="myapp.models.cnn")
-    d = serialize(inst, serializator="python")
-    assert d == {"kernel_size": 7, "channels": 32}
+    env = serialize(inst, serializator="python", repo="myapp.models.cnn")
+    assert env["type"] == "_Net"
+    assert env["data"] == {"kernel_size": 7, "channels": 32}
+    assert isinstance(env["meta"], dict)
+
+
+def test_serialize_meta_hook_cascades_via_super() -> None:
+    """A `serialize_meta` classmethod on a parent registry fires for all
+    children via Python inheritance + cooperative super()."""
+
+    class _MetaModels(TypeRegistry[object], repo="meta_demo"):
+        @classmethod
+        def serialize_meta(cls, instance: Any, meta: dict[str, Any]) -> None:
+            meta["family"] = "meta_demo"
+            meta["channels"] = instance.channels
+
+    class _MetaCNN(_MetaModels, repo="meta_demo.cnn"):
+        @classmethod
+        def serialize_meta(cls, instance: Any, meta: dict[str, Any]) -> None:
+            super().serialize_meta(instance, meta)
+            meta["axis"] = "cnn"
+
+    class _Inst:
+        def __init__(self, channels: int = 8) -> None:
+            self.channels = channels
+
+    _MetaCNN.register_artifact(_Inst)
+    inst = _MetaCNN.get_artifact("_Inst")(channels=11)
+    env = serialize(inst, serializator="python", repo="meta_demo.cnn")
+    assert env["data"] == {"channels": 11}
+    # Parent + child both contributed:
+    assert env["meta"] == {"family": "meta_demo", "channels": 11, "axis": "cnn"}
 
 
 def test_yaml_medium_end_to_end() -> None:
