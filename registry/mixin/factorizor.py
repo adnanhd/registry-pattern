@@ -105,38 +105,12 @@ class ContainerMixin(
     # Repo Configuration
     # -------------------------------------------------------------------------
 
-    @classmethod
-    def configure_repos(cls, repos: Dict[str, type]) -> None:
-        """Configure the multi-repo mapping.
-
-        Args:
-            repos: Mapping of repo names to registry classes.
-        """
-        cls._repos = dict(repos)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Configured repos: %s", list(repos.keys()))
-
-    @classmethod
-    def get_repo(cls, name: str) -> type:
-        """Get a registry class by repo name.
-
-        Args:
-            name: The repo name.
-
-        Returns:
-            The registry class.
-
-        Raises:
-            ValidationError: If repo not found.
-        """
-        if name not in cls._repos:
-            available = list(cls._repos.keys()) or ["<none>"]
-            raise ValidationError(
-                f"Unknown repo '{name}'",
-                [f"Available repos: {', '.join(available)}"],
-                {"repo": name, "available_repos": available},
-            )
-        return cls._repos[name]
+    # Note: `configure_repos` and `get_repo` were the legacy multi-repo wiring
+    # API and have been removed. Use ``class MyRegistry(TypeRegistry[T],
+    # repo="my.path"): ...`` for auto-discovery, then ``registry.build(cfg)``
+    # or ``registry.resolve(name, repo=...)``. If you really need the legacy
+    # ``ContainerMixin.build_cfg`` flow, set ``ContainerMixin._repos = {...}``
+    # directly.
 
     # -------------------------------------------------------------------------
     # Context Management
@@ -302,7 +276,15 @@ class ContainerMixin(
             # Use self as registry if no repos configured
             registry = cls
         else:
-            registry = cls.get_repo(repo_name)
+            available = sorted(cls._repos) or ["<none>"]
+            raise ValidationError(
+                f"Unknown repo '{repo_name}'",
+                [f"Available repos: {', '.join(available)}",
+                 'For auto-discovery use `registry.build(cfg)` instead -- '
+                 'it consults dotted `repo` paths declared via `class '
+                 'X(TypeRegistry[T], repo="my.path"): ...`.'],
+                {"repo": repo_name, "available_repos": available},
+            )
 
         # 2. Get artifact from registry
         artifact = registry.get_artifact(cfg.type)

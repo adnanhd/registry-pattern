@@ -83,7 +83,7 @@ class UtilsRegistry(FunctionalRegistry):
 
 
 # Configure all repos
-ContainerMixin.configure_repos(
+ContainerMixin._repos.update(
     {
         "models": ModelRegistry,
         "transforms": TransformRegistry,

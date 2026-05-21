@@ -69,7 +69,7 @@ def setup_repos():
         registry.clear_artifacts()
 
     ContainerMixin.clear_context()
-    ContainerMixin.configure_repos(
+    ContainerMixin._repos.update(
         {
             "level1": Level1Registry,
             "level2": Level2Registry,

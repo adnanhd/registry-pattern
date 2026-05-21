@@ -54,7 +54,7 @@ class SimpleModel:
 
 
 # Configure the container
-ContainerMixin.configure_repos({"models": ModelRegistry, "default": ModelRegistry})
+ContainerMixin._repos.update({"models": ModelRegistry, "default": ModelRegistry})
 
 # Build from configuration
 cfg = BuildCfg(
@@ -280,7 +280,7 @@ def resize(size: int):
     return {"type": "Resize", "size": size}
 
 
-ContainerMixin.configure_repos(
+ContainerMixin._repos.update(
     {
         "models": ModelRegistry,
         "transforms": TransformRegistry,

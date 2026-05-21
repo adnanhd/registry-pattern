@@ -79,7 +79,7 @@ Documentation = "https://registry-pattern.readthedocs.io/"
 Issues = "https://github.com/adnanhd/registry-pattern/issues"
 
 [tool.setuptools]
-packages = ["registry", "registry.mixin", "registry.extra"]
+packages = ["registry", "registry.mixin"]
 
 [tool.setuptools.package-data]
 registry = ["py.typed"]
