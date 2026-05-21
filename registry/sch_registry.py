@@ -1,4 +1,4 @@
-r"""Callable/Class → Pydantic config scheme registry.
+r"""Callable/Class -> Pydantic config scheme registry.
 
 This registry accepts either a function or a class as the artifact. On
 registration it synthesizes a Pydantic `BaseModel` from the callable

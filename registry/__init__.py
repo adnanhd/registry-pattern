@@ -32,19 +32,27 @@ from ._version import __version__, get_debug_info, get_version_info, print_versi
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .factory import build, resolve
 from .fnc_registry import FunctionalRegistry
-from .observers import (
-    CPUObserver,
-    FactoryObserver,
-    HTTPDashboardObserver,
-    HeapObserver,
-    IOObserver,
-    JournalObserver,
-    LifetimeObserver,
-    MemoryObserver,
-    NetworkObserver,
-    RecursionObserver,
-    attach,
-    detach,
+from .meters import (
+    CPUMeter,
+    FactoryMeter,
+    HeapMeter,
+    IOMeter,
+    LifetimeMeter,
+    MemoryMeter,
+    NetworkMeter,
+    RecursionMeter,
+    attach_meter,
+    detach_meter,
+    meters,
+)
+from .reporters import (
+    FactoryReporter,
+    HTTPDashboardReporter,
+    JournalReporter,
+    OpenTelemetryReporter,
+    attach_reporter,
+    detach_reporter,
+    reporters,
 )
 from .mixin import ContainerMixin, RegistryFactorizorMixin
 from .sch_registry import SchemeRegistry
@@ -79,19 +87,26 @@ __all__ = [
     # Factory
     "build",
     "resolve",
-    # Observers
-    "FactoryObserver",
-    "JournalObserver",
-    "HTTPDashboardObserver",
-    "LifetimeObserver",
-    "CPUObserver",
-    "MemoryObserver",
-    "IOObserver",
-    "NetworkObserver",
-    "HeapObserver",
-    "RecursionObserver",
-    "attach",
-    "detach",
+    # Meters (measure -> meta)
+    "FactoryMeter",
+    "LifetimeMeter",
+    "CPUMeter",
+    "MemoryMeter",
+    "IOMeter",
+    "NetworkMeter",
+    "HeapMeter",
+    "RecursionMeter",
+    "attach_meter",
+    "detach_meter",
+    "meters",
+    # Reporters (ship event externally)
+    "FactoryReporter",
+    "JournalReporter",
+    "HTTPDashboardReporter",
+    "OpenTelemetryReporter",
+    "attach_reporter",
+    "detach_reporter",
+    "reporters",
     # Type Guard
     "Buildable",
     "BuildableValidator",

@@ -63,7 +63,7 @@ class CriterionRegistry(TypeRegistry[nn.Module]): ...
 class StepRegistry(FunctionalRegistry): ...
 
 
-# stdlib + torch classes — register by reference
+# stdlib + torch classes -- register by reference
 OptimizerRegistry.register_artifact(torch.optim.Adam)
 LoaderRegistry.register_artifact(DataLoader)
 CriterionRegistry.register_artifact(nn.CrossEntropyLoss)
@@ -98,7 +98,7 @@ class MLP(nn.Module):
 
 
 # =============================================================================
-# Training function — Annotated drives both validation and meta provenance
+# Training function -- Annotated drives both validation and meta provenance
 # =============================================================================
 
 
@@ -146,12 +146,12 @@ def main() -> dict[str, float]:
     cfg: dict[str, Any] = {
         "type": "train_one_epoch",
         "data": {
-            # leaf envelopes — built recursively. Each can use $-refs to siblings.
+            # leaf envelopes -- built recursively. Each can use $-refs to siblings.
             "model": {"type": "MLP", "data": {"hidden": 256}},
             "loader": {
                 "type": "DataLoader",
                 "data": {
-                    "dataset": "$dataset",     # ← injected from ctx
+                    "dataset": "$dataset",     # <- injected from ctx
                     "batch_size": 64,
                     "shuffle": True,
                     "num_workers": 2,
@@ -160,7 +160,7 @@ def main() -> dict[str, float]:
             "optimizer": {
                 "type": "Adam",
                 "data": {
-                    "params": "$model.parameters()",   # ← sibling-ref: model is already built
+                    "params": "$model.parameters()",   # <- sibling-ref: model is already built
                     "lr": 1e-3,
                 },
             },
@@ -171,7 +171,7 @@ def main() -> dict[str, float]:
         "meta": {},
     }
 
-    # Recursive build → calls train_one_epoch at the root and returns its dict.
+    # Recursive build -> calls train_one_epoch at the root and returns its dict.
     result: dict[str, float] = build(cfg, ctx={"dataset": dataset})
 
     # Provenance the markers + post_init left on the envelope's meta:
