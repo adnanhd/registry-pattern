@@ -95,6 +95,8 @@ def build(
     Returns:
         The constructed instance (for class targets) or the function's return value.
     """
+    # Preserve a reference to the original dict so meta can be written back.
+    raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
     registry, target = resolve(cfg.type, cfg.repo if cfg.repo != "default" else None)
@@ -138,9 +140,14 @@ def build(
     if mschema is not None and meta:
         meta = mschema.model_validate(meta).model_dump()
 
-    # Write meta back to the envelope and attach to the result.
+    # Write meta back to the envelope (BuildCfg) AND to the original dict if any.
     cfg.meta.clear()
     cfg.meta.update(meta)
+    if raw_dict is not None:
+        raw_dict.setdefault("meta", {})
+        if isinstance(raw_dict["meta"], dict):
+            raw_dict["meta"].clear()
+            raw_dict["meta"].update(meta)
     try:
         setattr(result, "__meta__", meta)
     except Exception:
