@@ -21,9 +21,11 @@ validated, observable, hierarchical, and stdlib-only at the core.
 - **Tree-shaped sub-registrars**: sub-classes inherit `post_init` / `pre_call`
   hooks via Python inheritance; `resolve(name, repo="prefix")` does prefix-
   or-exact matching across the registry tree.
-- **Annotated markers**: `Annotated[T, SameDeviceAs("device"),
-  Checksum("hash"), ...]` -- validate markers fire pre-invocation, compute
-  markers populate the envelope's meta dict.
+- **Annotated marker contract**: the library ships duck-typed Protocols
+  (`ValidateMarker`, `ComputeMarker`) -- no concrete markers. Define your
+  own `Annotated[T, MyMarker(...)]`; validate markers fire pre-invocation,
+  compute markers populate the envelope's meta dict. See
+  `examples/02_factory_pipeline.py` for torch-flavoured markers.
 - **Observability split**:
   - *Meters* (`LifetimeMeter`, `CPUMeter`, `MemoryMeter`, `IOMeter`,
     `NetworkMeter`, `HeapMeter`, `RecursionMeter`) write measurements into
@@ -137,7 +139,11 @@ build("ResNet50", {...}, repo="my.models")              # ambiguous: pick a sub
 ```python
 from typing import Annotated
 from registry import FunctionalRegistry, build
-from registry.markers import SameDeviceAs, BoundTo, Checksum, EffectiveLr
+# SameDeviceAs / BoundTo / Checksum / EffectiveLr are downstream markers --
+# copy them from examples/02_factory_pipeline.py or define your own. The
+# library ships only the Protocol contract (ValidateMarker / ComputeMarker)
+# in registry.markers; concrete markers live in YOUR project.
+from .markers import SameDeviceAs, BoundTo, Checksum, EffectiveLr
 
 
 class StepRegistry(FunctionalRegistry, repo="my.steps"):
@@ -146,18 +152,19 @@ class StepRegistry(FunctionalRegistry, repo="my.steps"):
 
 @StepRegistry.register_artifact
 def train_one_step(
-    model:     Annotated[nn.Module,             SameDeviceAs("device"),
-                                                Checksum("model_checksum")],
-    batch:     Annotated[tuple,                 SameDeviceAs("device")],
-    optimizer: Annotated[torch.optim.Optimizer, BoundTo("model"),
-                                                EffectiveLr("effective_lr")],
+    model: Annotated[nn.Module, SameDeviceAs("device"), Checksum("model_checksum")],
+    batch: Annotated[tuple, SameDeviceAs("device")],
+    optimizer: Annotated[
+        torch.optim.Optimizer, BoundTo("model"), EffectiveLr("effective_lr"),
+    ],
     criterion: nn.Module,
-    device:    str,
+    device: str,
 ) -> float:
     x, y = batch
     optimizer.zero_grad()
     loss = criterion(model(x), y)
-    loss.backward(); optimizer.step()
+    loss.backward()
+    optimizer.step()
     return loss.item()
 ```
 

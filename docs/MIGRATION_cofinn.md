@@ -163,7 +163,10 @@ cross-arg validation + provenance)
 
 ```python
 from typing import Annotated
-from registry.markers import SameDeviceAs, BoundTo, Checksum, EffectiveLr
+# torch-specific markers live in YOUR project (or copy them from
+# examples/02_factory_pipeline.py); the library duck-types on
+# `.validate(value, kwargs, ctx)` and `.compute(value)`.
+from myproject.markers import SameDeviceAs, BoundTo, Checksum, EffectiveLr
 
 @Steps.register_artifact
 def train_one_epoch(
