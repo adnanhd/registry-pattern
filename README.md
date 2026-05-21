@@ -22,10 +22,11 @@ validated, observable, hierarchical, and stdlib-only at the core.
   hooks via Python inheritance; `resolve(name, repo="prefix")` does prefix-
   or-exact matching across the registry tree.
 - **Annotated marker contract**: the library ships duck-typed Protocols
-  (`ValidateMarker`, `ComputeMarker`) -- no concrete markers. Define your
-  own `Annotated[T, MyMarker(...)]`; validate markers fire pre-invocation,
-  compute markers populate the envelope's meta dict. See
-  `examples/02_factory_pipeline.py` for torch-flavoured markers.
+  (`ValidateMarker`, `ComputeMarker`) in `registry.markers`. Concrete
+  torch-flavoured markers (`SameDeviceAs`, `BoundTo`, `Checksum`, ...) live
+  in `registry.experimental.torch_compat` together with `TorchProfilerMeter`
+  and `TensorBoardReporter`. Validate markers fire pre-invocation, compute
+  markers populate the envelope's meta dict.
 - **Observability split**:
   - *Meters* (`LifetimeMeter`, `CPUMeter`, `MemoryMeter`, `IOMeter`,
     `NetworkMeter`, `HeapMeter`, `RecursionMeter`) write measurements into
@@ -47,7 +48,8 @@ Core depends only on `pydantic` and `typing-extensions`. Optional extras:
 ```bash
 pip install 'registry-pattern[yaml]'   # ConfigFileEngine.yaml loader
 pip install 'registry-pattern[otel]'   # OpenTelemetryReporter
-pip install 'registry-pattern[all]'    # both above + torch / docs / dev
+pip install 'registry-pattern[torch]'  # registry.experimental.torch_compat
+pip install 'registry-pattern[all]'    # everything above + docs / dev
 ```
 
 ## Quick start
@@ -98,7 +100,10 @@ json = serialize(model, serializator="json")     # -> json string
 ### Tree-shaped sub-registries
 
 ```python
-from registry import TypeRegistry
+import torchvision.models as tvm
+from torch import nn
+from registry import TypeRegistry, build
+from registry.experimental.torch_compat import hash_state_dict
 
 
 class Models(TypeRegistry[nn.Module], repo="my.models"):
@@ -119,18 +124,33 @@ class Pretrained(Models, repo="my.models.pretrained"):
     @classmethod
     def post_init(cls, instance, meta):
         super().post_init(instance, meta)
-        meta["checksum"] = _hash_state_dict(instance.state_dict())
+        # post_init runs AFTER target.__init__, which loaded the weights
+        # via torchvision's `weights=` API. The checksum reflects the
+        # actually-loaded state_dict, not a freshly-initialized one.
+        meta["checksum"] = hash_state_dict(instance.state_dict())
 
 
-# Same class in multiple sub-registries -- different disciplines
+# Same class in multiple sub-registries -- different disciplines.
 @CNNModels.register_artifact
 @Pretrained.register_artifact
-class ResNet50(nn.Module): ...
+class ResNet50(nn.Module):
+    """Wraps torchvision.resnet50. Weight loading happens inside __init__,
+    before post_init runs -- so Pretrained.post_init can verify or record
+    the loaded weights' checksum.
+    """
+
+    def __init__(self, pretrained: bool = True) -> None:
+        super().__init__()
+        weights = tvm.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
+        self.net = tvm.resnet50(weights=weights)
+
+    def forward(self, x):
+        return self.net(x)
 
 
-build("ResNet50", {...}, repo="my.models.cnn")          # CNN check runs
-build("ResNet50", {...}, repo="my.models.pretrained")   # checksum runs
-build("ResNet50", {...}, repo="my.models")              # ambiguous: pick a sub
+build("ResNet50", {"pretrained": True}, repo="my.models.cnn")          # CNN check runs
+build("ResNet50", {"pretrained": True}, repo="my.models.pretrained")   # checksum runs
+build("ResNet50", {"pretrained": True}, repo="my.models")              # ambiguous: pick a sub
 ```
 
 ### Annotated markers: declarative cross-arg checks and meta provenance
