@@ -35,7 +35,6 @@ from registry import (
     serialize,
 )
 
-
 # =============================================================================
 # Tree of sub-registrars (the interesting bit)
 # =============================================================================
@@ -78,8 +77,8 @@ class PretrainedMeta(BaseModel):
 
     model_config = ConfigDict(extra="allow")
     family_chain: list[str]
-    checksum:     str
-    verified:     bool
+    checksum: str
+    verified: bool
 
 
 class Pretrained(Models, repo="zoo.models.pretrained"):
@@ -152,24 +151,27 @@ class TrainingPipelines(Pipelines, repo="zoo.pipelines.training"):
 
 class _ResNet50:
     """One class, three registrations, three disciplines applied."""
+
     _expected_hash = "sha256:resnet50-pinned"
     _broken = False
 
-    def __init__(self, kernel_size: int = 7, channels: int = 64,
-                 pretrained: bool = True) -> None:
+    def __init__(
+        self, kernel_size: int = 7, channels: int = 64, pretrained: bool = True
+    ) -> None:
         self.kernel_size = kernel_size
         self.channels = channels
         self.pretrained = pretrained
 
 
-CNNModels.register_artifact(_ResNet50)         # only CNN check
-Pretrained.register_artifact(_ResNet50)        # only hash check + meta_schema
-ImagenetCNN.register_artifact(_ResNet50)       # both + dataset key
+CNNModels.register_artifact(_ResNet50)  # only CNN check
+Pretrained.register_artifact(_ResNet50)  # only hash check + meta_schema
+ImagenetCNN.register_artifact(_ResNet50)  # both + dataset key
 
 
 # A non-CNN, non-pretrained model lives only in Models.
 class _Mystery:
-    def __init__(self, width: int = 8): self.width = width
+    def __init__(self, width: int = 8):
+        self.width = width
 
 
 Models.register_artifact(_Mystery)
@@ -178,7 +180,9 @@ Models.register_artifact(_Mystery)
 # A transformer lives only in TransformerModels.
 class _TinyTransformer:
     n_heads = 4
-    def __init__(self, layers: int = 2): self.layers = layers
+
+    def __init__(self, layers: int = 2):
+        self.layers = layers
 
 
 TransformerModels.register_artifact(_TinyTransformer)
@@ -258,13 +262,21 @@ def demo_failure_modes() -> None:
     try:
         build({"type": "_Mystery", "data": {}}, repo="zoo.models.cnn")
     except Exception as e:
-        print("Mystery -> models.cnn      ->", type(e).__name__, str(e).splitlines()[0][:80])
+        print(
+            "Mystery -> models.cnn      ->",
+            type(e).__name__,
+            str(e).splitlines()[0][:80],
+        )
 
     # Pretrained registry rejects something without _expected_hash
     try:
         build({"type": "_Mystery", "data": {}}, repo="zoo.models.pretrained")
     except Exception as e:
-        print("Mystery -> .pretrained     ->", type(e).__name__, str(e).splitlines()[0][:80])
+        print(
+            "Mystery -> .pretrained     ->",
+            type(e).__name__,
+            str(e).splitlines()[0][:80],
+        )
 
 
 def demo_function_tree_with_ref_and_cross_axis() -> None:
@@ -277,11 +289,13 @@ def demo_function_tree_with_ref_and_cross_axis() -> None:
             # Inner envelope crosses to a sibling tree (model-axis); $ref pulls
             # the built instance's kernel_size out for batch_size.
             "model": {
-                "type": "_ResNet50", "repo": "zoo.models.cnn.imagenet",
-                "data": {"kernel_size": 7}, "meta": {},
+                "type": "_ResNet50",
+                "repo": "zoo.models.cnn.imagenet",
+                "data": {"kernel_size": 7},
+                "meta": {},
             },
             "lr": 1e-3,
-            "batch_size": "$model.kernel_size",   # cross-sibling ref
+            "batch_size": "$model.kernel_size",  # cross-sibling ref
         },
         "meta": {},
     }
@@ -312,8 +326,12 @@ def demo_every_build_entry() -> None:
 def demo_serialize_round_trip() -> None:
     section("[7] Serialize round-trips a built tree-node back to a dict")
 
-    m = build(_ResNet50, {"kernel_size": 11, "channels": 128, "pretrained": False},
-              validator="python", repo="zoo.models.cnn")
+    m = build(
+        _ResNet50,
+        {"kernel_size": 11, "channels": 128, "pretrained": False},
+        validator="python",
+        repo="zoo.models.cnn",
+    )
     out = serialize(m, serializator="python")
     print("dump        ->", out)
     yaml = serialize(m, serializator="yaml")

@@ -86,7 +86,11 @@ def device_of(value: Any) -> Any:
             if group["params"]:
                 return group["params"][0].device
         return torch.device("cpu")
-    if isinstance(value, (tuple, list)) and value and isinstance(value[0], torch.Tensor):
+    if (
+        isinstance(value, (tuple, list))
+        and value
+        and isinstance(value[0], torch.Tensor)
+    ):
         return value[0].device
     return value
 
@@ -161,7 +165,9 @@ class VerifyChecksum(ValidateMarker):
     def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
         actual = hash_state_dict(value.state_dict())
         if actual != self.expected:
-            raise ValueError(f"checksum mismatch: got {actual} != expected {self.expected}")
+            raise ValueError(
+                f"checksum mismatch: got {actual} != expected {self.expected}"
+            )
 
 
 def _shape_or_none(value: Any) -> tuple[int, ...] | None:
@@ -245,7 +251,9 @@ class MatchesTargetShape(ValidateMarker):
         expected = _meta_shape(ref_obj, "target_shape")
         if expected is None:
             return
-        target = value[1] if isinstance(value, (tuple, list)) and len(value) > 1 else None
+        target = (
+            value[1] if isinstance(value, (tuple, list)) and len(value) > 1 else None
+        )
         if not isinstance(target, torch.Tensor):
             return
         actual = tuple(target.shape[1:])
@@ -293,7 +301,9 @@ class InputShapeMatches(ValidateMarker):
         model = kwargs.get(self.ref, ctx.get(self.ref))
         if model is None:
             raise ValueError(f"InputShapeMatches: {self.ref!r} not found")
-        first_linear = next((m for m in model.modules() if isinstance(m, nn.Linear)), None)
+        first_linear = next(
+            (m for m in model.modules() if isinstance(m, nn.Linear)), None
+        )
         if first_linear is None:
             return
         actual = x.flatten(1).shape[1]
@@ -368,7 +378,9 @@ class TorchProfilerMeter(FactoryMeter):
         self._record_shapes: bool = record_shapes
         self._stack: list[Any] = []
 
-    def on_build_start(self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]) -> None:
+    def on_build_start(
+        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
+    ) -> None:
         activities = [ProfilerActivity.CPU]
         if torch.cuda.is_available():
             activities.append(ProfilerActivity.CUDA)
@@ -376,23 +388,31 @@ class TorchProfilerMeter(FactoryMeter):
         prof.__enter__()
         self._stack.append(prof)
 
-    def on_built(self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def on_built(
+        self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]
+    ) -> None:
         if not self._stack:
             return
         prof = self._stack.pop()
         prof.__exit__(None, None, None)
 
         events = prof.key_averages()
-        meta["torch_profile_self_cpu_time_total_us"] = sum(e.self_cpu_time_total for e in events)
+        meta["torch_profile_self_cpu_time_total_us"] = sum(
+            e.self_cpu_time_total for e in events
+        )
         meta["torch_profile_self_cuda_time_total_us"] = sum(
             getattr(e, "self_cuda_time_total", 0) for e in events
         )
-        top = sorted(events, key=lambda e: e.self_cpu_time_total, reverse=True)[: self._top_n]
+        top = sorted(events, key=lambda e: e.self_cpu_time_total, reverse=True)[
+            : self._top_n
+        ]
         meta["torch_profile_top_ops"] = [
             {"op": e.key, "self_cpu_us": e.self_cpu_time_total} for e in top
         ]
 
-    def on_error(self, *, cfg: Any, exc: BaseException, ctx: dict[str, Any], meta: dict[str, Any]) -> None:
+    def on_error(
+        self, *, cfg: Any, exc: BaseException, ctx: dict[str, Any], meta: dict[str, Any]
+    ) -> None:
         if not self._stack:
             return
         prof = self._stack.pop()
@@ -423,7 +443,9 @@ class TensorBoardReporter(FactoryReporter):
         self._step: int = 0
         self._lock = threading.Lock()
 
-    def on_built(self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def on_built(
+        self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]
+    ) -> None:
         target_name = getattr(target, "__name__", str(target))
         with self._lock:
             for k, v in meta.items():

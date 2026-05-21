@@ -50,7 +50,9 @@ class _RecorderReporter(FactoryReporter):
         self.events.append(("validated", {"target": target.__name__}))
 
     def on_built(self, *, target, result, meta, ctx):
-        self.events.append(("built", {"target": target.__name__, "meta_keys": list(meta)}))
+        self.events.append(
+            ("built", {"target": target.__name__, "meta_keys": list(meta)})
+        )
 
     def on_error(self, *, cfg, exc, ctx, meta):
         self.events.append(("error", {"type": cfg.type}))

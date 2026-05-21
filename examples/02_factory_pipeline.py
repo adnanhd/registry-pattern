@@ -37,7 +37,6 @@ from registry.experimental.torch_compat import (
     SameDeviceAs,
 )
 
-
 # =============================================================================
 # Registries
 # =============================================================================
@@ -151,7 +150,7 @@ def main() -> dict[str, float]:
             "loader": {
                 "type": "DataLoader",
                 "data": {
-                    "dataset": "$dataset",     # <- injected from ctx
+                    "dataset": "$dataset",  # <- injected from ctx
                     "batch_size": 64,
                     "shuffle": True,
                     "num_workers": 2,
@@ -160,7 +159,7 @@ def main() -> dict[str, float]:
             "optimizer": {
                 "type": "Adam",
                 "data": {
-                    "params": "$model.parameters()",   # <- sibling-ref: model is already built
+                    "params": "$model.parameters()",  # <- sibling-ref: model is already built
                     "lr": 1e-3,
                 },
             },

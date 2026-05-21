@@ -169,8 +169,14 @@ def test_all_meters_compose() -> None:
     cfg: dict[str, Any] = {"type": "_meter_ok", "data": {"x": 2}, "meta": {}}
     out = build(cfg)
     assert out == 4
-    assert {"lifetime_seconds", "cpu_user_seconds", "rss_max_kb",
-            "io_read_bytes", "net_rx_bytes", "heap_current_bytes"} <= set(cfg["meta"])
+    assert {
+        "lifetime_seconds",
+        "cpu_user_seconds",
+        "rss_max_kb",
+        "io_read_bytes",
+        "net_rx_bytes",
+        "heap_current_bytes",
+    } <= set(cfg["meta"])
 
 
 def test_meter_exceptions_do_not_break_build() -> None:

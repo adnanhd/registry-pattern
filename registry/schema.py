@@ -108,7 +108,10 @@ def derive_config_schema(target: type | Callable[..., Any]) -> Type[BaseModel]:
     hints = _resolved_hints(target)
     fields: dict[str, Any] = {}
     for name, p in sig.parameters.items():
-        if name == "self" or p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+        if name == "self" or p.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             continue
         annotation = hints.get(name, p.annotation)
         if annotation is inspect.Parameter.empty:
@@ -153,7 +156,9 @@ def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | N
     )
 
 
-def resolve_data_schema(registry: type, target: type | Callable[..., Any]) -> Type[BaseModel]:
+def resolve_data_schema(
+    registry: type, target: type | Callable[..., Any]
+) -> Type[BaseModel]:
     """Explicit ``registry.data_schema`` wins; otherwise derive from signature."""
     explicit = getattr(registry, "data_schema", None)
     if explicit is not None:
@@ -161,7 +166,9 @@ def resolve_data_schema(registry: type, target: type | Callable[..., Any]) -> Ty
     return derive_config_schema(target)
 
 
-def resolve_meta_schema(registry: type, target: type | Callable[..., Any]) -> Type[BaseModel] | None:
+def resolve_meta_schema(
+    registry: type, target: type | Callable[..., Any]
+) -> Type[BaseModel] | None:
     """Explicit ``registry.meta_schema`` wins; otherwise derive from markers."""
     explicit = getattr(registry, "meta_schema", None)
     if explicit is not None:

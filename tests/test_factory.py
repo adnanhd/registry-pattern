@@ -77,7 +77,10 @@ def test_build_resolves_dollar_ref_from_ctx() -> None:
         return thing
 
     sentinel = object()
-    out = build({"type": "takes_thing", "data": {"thing": "$external"}}, ctx={"external": sentinel})
+    out = build(
+        {"type": "takes_thing", "data": {"thing": "$external"}},
+        ctx={"external": sentinel},
+    )
     assert out is sentinel
 
 

@@ -230,7 +230,9 @@ def build(
     raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
-    meta: dict[str, Any] = dict(cfg.meta)  # available to meters from the very first stage
+    meta: dict[str, Any] = dict(
+        cfg.meta
+    )  # available to meters from the very first stage
 
     logger.info("build.start type=%s repo=%s", cfg.type, cfg.repo)
     # Pipeline contract at every stage: METERS first (they write to meta),
@@ -239,7 +241,9 @@ def build(
     emit_reporter("on_build_start", cfg=cfg, ctx=ctx, meta=meta)
 
     try:
-        registry, target = resolve(cfg.type, cfg.repo if cfg.repo != "default" else None)
+        registry, target = resolve(
+            cfg.type, cfg.repo if cfg.repo != "default" else None
+        )
         validator_fn = resolve_validator(validator)
 
         # [1] recurse + $ref; later siblings can reference earlier ones
@@ -310,7 +314,9 @@ def build(
         return result
 
     except Exception as exc:
-        logger.warning("build.error type=%s exc=%s: %s", cfg.type, type(exc).__name__, exc)
+        logger.warning(
+            "build.error type=%s exc=%s: %s", cfg.type, type(exc).__name__, exc
+        )
         emit_meter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
         emit_reporter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
         raise
@@ -354,7 +360,9 @@ def _envelope_for(instance: Any, *, repo: str | None = None) -> dict[str, Any]:
         if repo is not None and not _repo_matches(repo_path, repo):
             continue
         try:
-            if reg.has_identifier(type_name) and reg.get_artifact(type_name) is type(instance):
+            if reg.has_identifier(type_name) and reg.get_artifact(type_name) is type(
+                instance
+            ):
                 candidates.append(reg)
         except Exception:
             continue
@@ -401,7 +409,9 @@ def json(instance: Any, *, repo: str | None = None) -> str:
 def serialize(
     instance: Any,
     *,
-    ctx: dict[str, Any] | None = None,  # noqa: ARG001 -- reserved for future nested serdes
+    ctx: (
+        dict[str, Any] | None
+    ) = None,  # noqa: ARG001 -- reserved for future nested serdes
     serializator: str = "python",
     repo: str | None = None,
 ) -> Any:

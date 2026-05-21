@@ -244,6 +244,7 @@ class TestBuildableWithMeta:
         assert meta.get("version") == "1.0"
         assert meta.get("author") == "test"
 
+
 class TestBuildableTypeCoercion:
     """Tests for type coercion through Buildable."""
 
@@ -293,6 +294,7 @@ class TestBuildableWithMultipleRepos:
 
 class TestBuildableContext:
     """Tests for Buildable with context injection."""
+
 
 class TestBuildableErrorHandling:
     """Tests for error handling in Buildable."""

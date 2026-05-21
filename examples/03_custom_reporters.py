@@ -19,7 +19,6 @@ from typing import Any
 
 from registry import FactoryReporter, FunctionalRegistry, attach_reporter, build
 
-
 # =============================================================================
 # WandB reporter -- one run per top-level build, meta fields become metrics
 # =============================================================================
@@ -62,7 +61,9 @@ class WandbReporter(FactoryReporter):
 
     def on_built(self, *, target, result, meta, ctx) -> None:
         if self._run is not None:
-            metrics = {k: v for k, v in meta.items() if isinstance(v, (int, float, bool))}
+            metrics = {
+                k: v for k, v in meta.items() if isinstance(v, (int, float, bool))
+            }
             if metrics:
                 self._wandb.log(metrics)
         self._depth -= 1

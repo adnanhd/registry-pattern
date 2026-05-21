@@ -23,6 +23,7 @@ def test_pydantic_validator_rejects_wrong_type() -> None:
     fn = ValidatorRegistry.get_artifact("pydantic")
     # Pydantic should reject a non-int for an int field (strict mode in our derived schema).
     import pytest
+
     with pytest.raises(Exception):
         fn(_Sample, {"name": "x", "count": []})
 

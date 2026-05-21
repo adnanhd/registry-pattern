@@ -53,7 +53,9 @@ class FactoryMeter:
 
     name: str = "factory_meter"
 
-    def on_build_start(self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]) -> None:
+    def on_build_start(
+        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
+    ) -> None:
         """Pre-recursion / pre-validation. Good place to record baselines."""
 
     def on_validated(
@@ -140,7 +142,9 @@ class _StackedMeter(FactoryMeter):
     def _sample(self) -> tuple[Any, ...]:
         raise NotImplementedError
 
-    def _write(self, meta: dict[str, Any], before: tuple[Any, ...], after: tuple[Any, ...]) -> None:
+    def _write(
+        self, meta: dict[str, Any], before: tuple[Any, ...], after: tuple[Any, ...]
+    ) -> None:
         raise NotImplementedError
 
     def on_build_start(self, *, cfg, ctx, meta) -> None:
@@ -219,8 +223,12 @@ class IOMeter(_StackedMeter):
 
     def _sample(self) -> tuple[int, int, int, int]:
         s = self._read_proc_io()
-        return (s.get("read_bytes", 0), s.get("write_bytes", 0),
-                s.get("rchar", 0), s.get("wchar", 0))
+        return (
+            s.get("read_bytes", 0),
+            s.get("write_bytes", 0),
+            s.get("rchar", 0),
+            s.get("wchar", 0),
+        )
 
     def _write(self, meta, before, after) -> None:
         meta["io_read_bytes"] = after[0] - before[0]

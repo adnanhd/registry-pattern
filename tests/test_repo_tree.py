@@ -90,7 +90,10 @@ def test_build_with_repo_skips_strict_when_broader() -> None:
 def test_build_kwarg_overrides_envelope_repo() -> None:
     # Envelope says "models" but the kwarg promotes to the stricter sub-repo.
     cfg: dict[str, Any] = {
-        "type": "_ResNet", "repo": "models", "data": {"layers": 18}, "meta": {},
+        "type": "_ResNet",
+        "repo": "models",
+        "data": {"layers": 18},
+        "meta": {},
     }
     build(cfg, repo="models.imagenet_pretrained")
     assert cfg["meta"]["pretrained_validated"] is True
@@ -98,7 +101,9 @@ def test_build_kwarg_overrides_envelope_repo() -> None:
 
 def test_build_explicit_class_with_repo() -> None:
     cfg_dict: dict[str, Any] = {}
-    obj = build(_ResNet, {"layers": 34}, validator="python", repo="models.imagenet_pretrained")
+    obj = build(
+        _ResNet, {"layers": 34}, validator="python", repo="models.imagenet_pretrained"
+    )
     assert obj.layers == 34
     # meta is attached to instance
     assert obj.__meta__["pretrained_validated"] is True

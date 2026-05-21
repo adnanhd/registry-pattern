@@ -40,7 +40,9 @@ class FactoryReporter:
 
     name: str = "factory_reporter"
 
-    def on_build_start(self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]) -> None: ...
+    def on_build_start(
+        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
+    ) -> None: ...
 
     def on_validated(
         self,
@@ -183,7 +185,9 @@ class HTTPDashboardReporter(FactoryReporter):
 
     name: str = "http_dashboard"
 
-    def __init__(self, port: int = 8765, max_events: int = 200, host: str = "127.0.0.1") -> None:
+    def __init__(
+        self, port: int = 8765, max_events: int = 200, host: str = "127.0.0.1"
+    ) -> None:
         self._events: list[dict[str, Any]] = []
         self._max_events: int = max_events
         self._lock: threading.Lock = threading.Lock()
@@ -268,7 +272,10 @@ class OpenTelemetryReporter(FactoryReporter):
         meter_name: str = "registry.factory",
         span_name_prefix: str = "registry.build",
     ) -> None:
-        from opentelemetry import metrics, trace  # raises ImportError if [otel] not installed
+        from opentelemetry import (  # raises ImportError if [otel] not installed
+            metrics,
+            trace,
+        )
 
         self._tracer = trace.get_tracer(tracer_name)
         self._meter = metrics.get_meter(meter_name)

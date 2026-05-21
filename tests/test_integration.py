@@ -37,7 +37,6 @@ from registry import (
 )
 from registry.meters import FactoryMeter
 
-
 # =============================================================================
 # Tree of registrars: Models -> {CNNModels, Pretrained -> ImagenetPretrained}
 # =============================================================================
@@ -68,9 +67,9 @@ class PretrainedMeta(BaseModel):
     """Explicit meta_schema: every Pretrained build must populate these."""
 
     model_config = ConfigDict(extra="allow")
-    family_seen:   str
-    checksum:      str
-    verified:      bool
+    family_seen: str
+    checksum: str
+    verified: bool
 
 
 class Pretrained(Models, repo="myapp.models.pretrained"):
@@ -88,7 +87,9 @@ class Pretrained(Models, repo="myapp.models.pretrained"):
         meta["verified"] = True
 
 
-class ImagenetPretrained(Pretrained, CNNModels, repo="myapp.models.pretrained.imagenet"):
+class ImagenetPretrained(
+    Pretrained, CNNModels, repo="myapp.models.pretrained.imagenet"
+):
     """Pretrained CNN trained on ImageNet: cumulative checks from BOTH parents."""
 
     @classmethod
@@ -106,6 +107,7 @@ class ImagenetPretrained(Pretrained, CNNModels, repo="myapp.models.pretrained.im
 @dataclass(frozen=True)
 class MustBe:
     """validate marker: value must equal expected."""
+
     expected: Any
 
     def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
@@ -116,6 +118,7 @@ class MustBe:
 @dataclass(frozen=True)
 class Doubled:
     """compute marker: writes 2*value into meta[name]."""
+
     name: str
 
     def compute(self, value: float) -> float:
@@ -125,6 +128,7 @@ class Doubled:
 @dataclass(frozen=True)
 class Recorded:
     """compute marker: writes str(value) into meta[name]."""
+
     name: str
 
     def compute(self, value: Any) -> str:
@@ -159,6 +163,7 @@ class TrainingSteps(Steps, repo="myapp.steps.training"):
 
 class _Net:
     """Plain Python stand-in for nn.Module."""
+
     _weights_hash = "sha256:net-baseline-001"
     _broken = False
 
@@ -184,7 +189,7 @@ CNNModels.register_artifact(_BrokenNet)
 
 @TrainingSteps.register_artifact
 def train_step(
-    lr:       Annotated[float, MustBe(0.001), Recorded("learning_rate")],
+    lr: Annotated[float, MustBe(0.001), Recorded("learning_rate")],
     momentum: Annotated[float, Doubled("momentum_doubled")] = 0.9,
 ) -> dict[str, float]:
     """Plain function. lr is doubly-marked (validate + compute); momentum has compute only."""
@@ -207,16 +212,20 @@ def test_repo_paths_populated() -> None:
 
 def test_cnn_build_runs_inherited_then_local_post_init() -> None:
     cfg: dict[str, Any] = {
-        "type": "_Net", "data": {"kernel_size": 5}, "meta": {},
+        "type": "_Net",
+        "data": {"kernel_size": 5},
+        "meta": {},
     }
     build(cfg, repo="myapp.models.cnn")
-    assert cfg["meta"]["family_seen"] == "models"     # Models.post_init
-    assert cfg["meta"]["family_cnn"] is True           # CNNModels.post_init
+    assert cfg["meta"]["family_seen"] == "models"  # Models.post_init
+    assert cfg["meta"]["family_cnn"] is True  # CNNModels.post_init
 
 
 def test_pretrained_build_enforces_meta_schema() -> None:
     cfg: dict[str, Any] = {
-        "type": "_Net", "data": {"kernel_size": 5}, "meta": {},
+        "type": "_Net",
+        "data": {"kernel_size": 5},
+        "meta": {},
     }
     build(cfg, repo="myapp.models.pretrained")
     # meta_schema enforced -> all required keys present
@@ -228,7 +237,9 @@ def test_pretrained_build_enforces_meta_schema() -> None:
 def test_pretrained_build_fails_when_post_init_doesnt_supply_required_meta() -> None:
     """_NetMissingHash has _weights_hash=None -> post_init raises BEFORE meta_schema."""
     cfg: dict[str, Any] = {
-        "type": "_NetMissingHash", "data": {"kernel_size": 5}, "meta": {},
+        "type": "_NetMissingHash",
+        "data": {"kernel_size": 5},
+        "meta": {},
     }
     with pytest.raises(ValueError, match="lacks _weights_hash"):
         build(cfg, repo="myapp.models.pretrained")
@@ -237,14 +248,16 @@ def test_pretrained_build_fails_when_post_init_doesnt_supply_required_meta() -> 
 def test_imagenet_build_runs_full_inheritance_chain() -> None:
     """Both Pretrained AND CNNModels checks fire via cooperative super()."""
     cfg: dict[str, Any] = {
-        "type": "_Net", "data": {"kernel_size": 3}, "meta": {},
+        "type": "_Net",
+        "data": {"kernel_size": 3},
+        "meta": {},
     }
     build(cfg, repo="myapp.models.pretrained.imagenet")
     # All four post_init levels left their mark
-    assert cfg["meta"]["family_seen"] == "models"     # Models
-    assert cfg["meta"]["family_cnn"] is True           # CNNModels (via MRO)
-    assert cfg["meta"]["checksum"]                     # Pretrained
-    assert cfg["meta"]["dataset"] == "imagenet"        # ImagenetPretrained
+    assert cfg["meta"]["family_seen"] == "models"  # Models
+    assert cfg["meta"]["family_cnn"] is True  # CNNModels (via MRO)
+    assert cfg["meta"]["checksum"]  # Pretrained
+    assert cfg["meta"]["dataset"] == "imagenet"  # ImagenetPretrained
 
 
 def test_resolve_tree_prefix_finds_specific_subregistry() -> None:
@@ -279,10 +292,14 @@ def test_annotated_validate_marker_fires_before_invocation() -> None:
 
 
 def test_annotated_compute_writes_meta() -> None:
-    cfg: dict[str, Any] = {"type": "train_step", "data": {"lr": 0.001, "momentum": 0.9}, "meta": {}}
+    cfg: dict[str, Any] = {
+        "type": "train_step",
+        "data": {"lr": 0.001, "momentum": 0.9},
+        "meta": {},
+    }
     build(cfg)
-    assert cfg["meta"]["learning_rate"] == "0.001"     # Recorded
-    assert cfg["meta"]["momentum_doubled"] == 1.8      # Doubled
+    assert cfg["meta"]["learning_rate"] == "0.001"  # Recorded
+    assert cfg["meta"]["momentum_doubled"] == 1.8  # Doubled
 
 
 def test_subregistry_pre_call_hook_fires() -> None:
@@ -311,8 +328,12 @@ def test_validate_alone_does_not_instantiate() -> None:
 
 def test_serialize_round_trip_through_python_medium() -> None:
     """build then serialize back, expect a BuildCfg-shaped envelope."""
-    inst = build("_Net", {"kernel_size": 7, "channels": 32}, validator="python",
-                 repo="myapp.models.cnn")
+    inst = build(
+        "_Net",
+        {"kernel_size": 7, "channels": 32},
+        validator="python",
+        repo="myapp.models.cnn",
+    )
     env = serialize(inst, serializator="python", repo="myapp.models.cnn")
     assert env["type"] == "_Net"
     assert env["data"] == {"kernel_size": 7, "channels": 32}
@@ -348,8 +369,12 @@ def test_serialize_meta_hook_cascades_via_super() -> None:
 
 
 def test_yaml_medium_end_to_end() -> None:
-    inst = build("_Net", "kernel_size: 5\nchannels: 8\n", validator="yaml",
-                 repo="myapp.models.cnn")
+    inst = build(
+        "_Net",
+        "kernel_size: 5\nchannels: 8\n",
+        validator="yaml",
+        repo="myapp.models.cnn",
+    )
     assert (inst.kernel_size, inst.channels) == (5, 8)
 
 
@@ -382,16 +407,21 @@ def test_nested_envelope_across_subregistries_with_meta_propagation() -> None:
     sees its own meta (markers + pre_call); the inner envelope (cfg["data"]["net"])
     has its own meta filled by Pretrained.post_init.
     """
+
     @TrainingSteps.register_artifact
-    def use_net(net: Any, lr: Annotated[float, MustBe(0.001), Recorded("learning_rate")]) -> dict:
+    def use_net(
+        net: Any, lr: Annotated[float, MustBe(0.001), Recorded("learning_rate")]
+    ) -> dict:
         return {"net_kernel": net.kernel_size, "lr": lr}
 
     cfg: dict[str, Any] = {
         "type": "use_net",
         "data": {
             "net": {
-                "type": "_Net", "repo": "myapp.models.pretrained",
-                "data": {"kernel_size": 7}, "meta": {},
+                "type": "_Net",
+                "repo": "myapp.models.pretrained",
+                "data": {"kernel_size": 7},
+                "meta": {},
             },
             "lr": 0.001,
         },
@@ -408,12 +438,13 @@ def test_nested_envelope_across_subregistries_with_meta_propagation() -> None:
 
     # Outer envelope's meta -- markers + pre_call hook
     outer_meta = cfg["meta"]
-    assert outer_meta["lr_validated"] is True             # pre_call
-    assert outer_meta["learning_rate"] == "0.001"          # Recorded marker
+    assert outer_meta["lr_validated"] is True  # pre_call
+    assert outer_meta["learning_rate"] == "0.001"  # Recorded marker
 
 
 def test_dollar_ref_resolves_built_inner_into_outer_kwargs() -> None:
     """$ref pulls a built sibling's attribute into another sibling's data."""
+
     @Steps.register_artifact
     def take_kernel(kernel: int) -> int:
         return kernel * 10
@@ -422,8 +453,12 @@ def test_dollar_ref_resolves_built_inner_into_outer_kwargs() -> None:
         "type": "take_kernel",
         "data": {
             # _Net is registered in 3 repos -- pick one explicitly
-            "net": {"type": "_Net", "repo": "myapp.models.cnn",
-                    "data": {"kernel_size": 9}, "meta": {}},
+            "net": {
+                "type": "_Net",
+                "repo": "myapp.models.cnn",
+                "data": {"kernel_size": 9},
+                "meta": {},
+            },
             "kernel": "$net.kernel_size",
         },
         "meta": {},
@@ -502,15 +537,21 @@ def _leaf(value: int = 0) -> int:
 def test_three_level_deep_build_mixed_registrars() -> None:
     """L1 (TypeRegistry) -> L2 (FunctionalRegistry) -> L3 (TypeRegistry leaf)."""
     cfg: dict[str, Any] = {
-        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "type": "_NodeA",
+        "repo": "depth.a",
+        "meta": {},
         "data": {
             "label": "root",
             "child": {
-                "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                "type": "_wrap_c",
+                "repo": "depth.c",
+                "meta": {},
                 "data": {
                     "factor": 7,
                     "child": {
-                        "type": "_NodeD", "repo": "depth.d", "meta": {},
+                        "type": "_NodeD",
+                        "repo": "depth.d",
+                        "meta": {},
                         "data": {"child": "terminal"},
                     },
                 },
@@ -533,18 +574,26 @@ def test_three_level_deep_build_mixed_registrars() -> None:
 def test_four_level_deep_build_distinct_registrars() -> None:
     """A -> B -> C -> E (leaf), four distinct registries."""
     cfg: dict[str, Any] = {
-        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "type": "_NodeA",
+        "repo": "depth.a",
+        "meta": {},
         "data": {
             "child": {
-                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "type": "_NodeB",
+                "repo": "depth.b",
+                "meta": {},
                 "data": {
                     "n": 2,
                     "child": {
-                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "type": "_wrap_c",
+                        "repo": "depth.c",
+                        "meta": {},
                         "data": {
                             "factor": 3,
                             "child": {
-                                "type": "_leaf", "repo": "depth.e", "meta": {},
+                                "type": "_leaf",
+                                "repo": "depth.e",
+                                "meta": {},
                                 "data": {"value": 99},
                             },
                         },
@@ -557,35 +606,50 @@ def test_four_level_deep_build_distinct_registrars() -> None:
 
     assert out.child.n == 2
     assert out.child.child["factor"] == 3
-    assert out.child.child["wrapped"] == 99   # leaf function returned the int
+    assert out.child.child["wrapped"] == 99  # leaf function returned the int
 
     # Verify each level's post_init fired against its OWN envelope's meta
     meta_a = cfg["meta"]
     meta_b = cfg["data"]["child"]["meta"]
     meta_c = cfg["data"]["child"]["data"]["child"]["meta"]
     meta_e = cfg["data"]["child"]["data"]["child"]["data"]["child"]["meta"]
-    assert (meta_a["lvl"], meta_b["lvl"], meta_c["lvl"], meta_e["lvl"]) == ("a", "b", "c", "e")
+    assert (meta_a["lvl"], meta_b["lvl"], meta_c["lvl"], meta_e["lvl"]) == (
+        "a",
+        "b",
+        "c",
+        "e",
+    )
 
 
 def test_five_level_deep_build_all_registrars() -> None:
     """A -> B -> C -> D -> E, every level different registrar; FunctionalRegistry
     nodes interleaved with TypeRegistry nodes."""
     cfg: dict[str, Any] = {
-        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "type": "_NodeA",
+        "repo": "depth.a",
+        "meta": {},
         "data": {
             "child": {
-                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "type": "_NodeB",
+                "repo": "depth.b",
+                "meta": {},
                 "data": {
                     "n": 1,
                     "child": {
-                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "type": "_wrap_c",
+                        "repo": "depth.c",
+                        "meta": {},
                         "data": {
                             "factor": 5,
                             "child": {
-                                "type": "_NodeD", "repo": "depth.d", "meta": {},
+                                "type": "_NodeD",
+                                "repo": "depth.d",
+                                "meta": {},
                                 "data": {
                                     "child": {
-                                        "type": "_leaf", "repo": "depth.e", "meta": {},
+                                        "type": "_leaf",
+                                        "repo": "depth.e",
+                                        "meta": {},
                                         "data": {"value": 42},
                                     },
                                 },
@@ -636,7 +700,9 @@ def test_ref_resolves_file_url_via_config_engine(tmp_path: Any) -> None:
     p.write_text(json.dumps({"a": 1, "b": "two"}))
 
     cfg: dict[str, Any] = {
-        "type": "_FileSink", "repo": "depth.a", "meta": {},
+        "type": "_FileSink",
+        "repo": "depth.a",
+        "meta": {},
         "data": {"label": "loaded", "payload": f"$file://{p}"},
     }
     out = build(cfg)
@@ -655,10 +721,14 @@ def test_ref_resolves_file_url_for_yaml(tmp_path: Any) -> None:
     p = tmp_path / "ext.yaml"
     p.write_text("k1: 100\nk2: hello\n")
 
-    out = build({
-        "type": "_YamlSink", "repo": "depth.a", "meta": {},
-        "data": {"payload": f"$file://{p}"},
-    })
+    out = build(
+        {
+            "type": "_YamlSink",
+            "repo": "depth.a",
+            "meta": {},
+            "data": {"payload": f"$file://{p}"},
+        }
+    )
     assert out.payload == {"k1": 100, "k2": "hello"}
 
 
@@ -673,30 +743,42 @@ def test_ref_register_custom_scheme() -> None:
         def __init__(self, payload: dict[str, Any]) -> None:
             self.payload = payload
 
-    out = build({
-        "type": "_StaticSink", "repo": "depth.a", "meta": {},
-        "data": {"payload": "$static://abc/def"},
-    })
+    out = build(
+        {
+            "type": "_StaticSink",
+            "repo": "depth.a",
+            "meta": {},
+            "data": {"payload": "$static://abc/def"},
+        }
+    )
     assert out.payload == {"injected": "static://abc/def"}
 
 
 def test_deep_build_ref_pulls_value_from_outer_sibling() -> None:
     """At depth 4, a sibling uses ``$ref`` to read from a peer at the same level."""
     cfg: dict[str, Any] = {
-        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "type": "_NodeA",
+        "repo": "depth.a",
+        "meta": {},
         "data": {
             "label": "outer",
             "child": {
-                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "type": "_NodeB",
+                "repo": "depth.b",
+                "meta": {},
                 "data": {
                     "n": 13,
                     "child": {
-                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "type": "_wrap_c",
+                        "repo": "depth.c",
+                        "meta": {},
                         "data": {
                             # $ref reads from this envelope's sibling scope
                             "factor": "$n",
                             "child": {
-                                "type": "_NodeD", "repo": "depth.d", "meta": {},
+                                "type": "_NodeD",
+                                "repo": "depth.d",
+                                "meta": {},
                                 "data": {"child": "leaf"},
                             },
                         },
@@ -706,4 +788,4 @@ def test_deep_build_ref_pulls_value_from_outer_sibling() -> None:
         },
     }
     out = build(cfg)
-    assert out.child.child["factor"] == 13   # $n -> 13 (from _NodeB sibling)
+    assert out.child.child["factor"] == 13  # $n -> 13 (from _NodeB sibling)

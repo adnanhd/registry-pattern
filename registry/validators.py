@@ -40,7 +40,9 @@ def pydantic(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[st
 
 
 @ValidatorRegistry.register_artifact
-def jsonargparse(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, Any]:
+def jsonargparse(
+    target: type | Callable[..., Any], data: dict[str, Any]
+) -> dict[str, Any]:
     """Validate via jsonargparse's parser. Requires the ``jsonargparse`` extra."""
     import jsonargparse as ja
 
@@ -85,7 +87,9 @@ def json(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
 @ValidatorRegistry.register_artifact
 def argparse(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
     """argparse.Namespace input; ``vars(ns)`` then python-validate."""
-    decoded = vars(data) if hasattr(data, "__dict__") and not isinstance(data, dict) else data
+    decoded = (
+        vars(data) if hasattr(data, "__dict__") and not isinstance(data, dict) else data
+    )
     return python(target, decoded)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import typing as _typing
 from abc import ABC
 from types import ModuleType
 from typing import (
@@ -24,8 +25,6 @@ from typing import (
 
 from pydantic import BaseModel
 
-import typing as _typing
-
 from .mixin.validator import MutableValidatorMixin
 from .storage import ThreadSafeLocalStorage
 
@@ -43,6 +42,8 @@ def _base_type_of(cls: type) -> Any:
         if args:
             return args[0]
     return Any
+
+
 from .utils import (
     ConformanceError,
     InheritanceError,

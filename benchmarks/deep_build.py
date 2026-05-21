@@ -18,7 +18,6 @@ from typing import Any
 
 from registry import TypeRegistry, build
 
-
 # ---------------------------------------------------------------------------
 # Setup -- one TypeRegistry per depth level
 # ---------------------------------------------------------------------------
@@ -40,7 +39,7 @@ def _make_registry(level: int) -> type:
     name = f"_DepthReg{level}"
     return type(
         name,
-        (TypeRegistry,),                                # __class_getitem__ later
+        (TypeRegistry,),  # __class_getitem__ later
         {},
         repo=f"bench.depth.l{level}",
     )
@@ -51,14 +50,17 @@ _registries: list[type] = []
 for i in range(MAX_DEPTH):
     # Subscript Generic to bind Any
     reg = TypeRegistry[Any].__class_getitem__(Any) if False else None  # placeholder
+
     # Simple approach: define via real subclass syntax (kwargs supported)
     class _R(TypeRegistry[Any], repo=f"bench.depth.l{i}"):
         pass
+
     _R.__name__ = f"_DepthReg{i}"
 
     # Per-level class, registered into this registry
     class _NodeI(_Node):
         pass
+
     _NodeI.__name__ = f"Node{i}"
     _NodeI.__qualname__ = f"Node{i}"
 
