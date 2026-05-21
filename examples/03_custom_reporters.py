@@ -83,31 +83,13 @@ class WandbReporter(FactoryReporter):
 # =============================================================================
 
 
-class TensorBoardReporter(FactoryReporter):
-    """Writes each numeric meta field as a TensorBoard scalar.
-
-    Step number auto-increments per build call. A single SummaryWriter is
-    shared across the process; pass log_dir to control where events go.
-    """
-
-    name: str = "tensorboard"
-
-    def __init__(self, log_dir: str = "runs") -> None:
-        from torch.utils.tensorboard import SummaryWriter
-
-        self._writer = SummaryWriter(log_dir=log_dir)
-        self._step: int = 0
-
-    def on_built(self, *, target, result, meta, ctx) -> None:
-        target_name: str = getattr(target, "__name__", str(target))
-        for k, v in meta.items():
-            if isinstance(v, (int, float, bool)):
-                self._writer.add_scalar(f"{target_name}/{k}", float(v), self._step)
-        self._step += 1
+# (TensorBoardReporter lives in registry.experimental.torch_compat -- see
+# the [torch] extra. This file focuses on WandB as a downstream extension
+# example since wandb is not torch-specific.)
 
 
 # =============================================================================
-# Demo wiring -- run if you have wandb/tensorboard installed
+# Demo wiring -- run if you have wandb / tensorboard installed
 # =============================================================================
 
 
@@ -119,18 +101,21 @@ def main() -> None:
     def fake_step(epoch: int) -> dict[str, float]:
         return {"loss": 1.0 / (epoch + 1), "acc": 0.5 + 0.05 * epoch}
 
-    # Pick one based on what's installed:
+    # WandB: custom extension defined inline above.
     try:
         attach_reporter(WandbReporter(project="registry-demo"))
         print("wandb reporter attached")
     except ImportError:
         print("wandb not installed; skipping WandbReporter")
 
+    # TensorBoard: lives in the library, just import + attach.
     try:
+        from registry.experimental.torch_compat import TensorBoardReporter
+
         attach_reporter(TensorBoardReporter(log_dir="runs/demo"))
         print("tensorboard reporter attached")
     except ImportError:
-        print("tensorboard not installed; skipping TensorBoardReporter")
+        print("torch / tensorboard not installed; skipping TensorBoardReporter")
 
     # Loop is the consumer's; reporters fire on every build.
     for epoch in range(3):

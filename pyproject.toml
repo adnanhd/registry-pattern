@@ -48,6 +48,8 @@ dependencies = [
 yaml   = ["pyyaml>=6.0"]
 # OpenTelemetryReporter (spans + Histogram metrics)
 otel   = ["opentelemetry-api>=1.20"]
+# registry.experimental.torch_compat (markers, TorchProfilerMeter, TensorBoardReporter)
+torch  = ["torch>=2.0", "tensorboard>=2.0"]
 docs = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=2.0",
@@ -63,7 +65,7 @@ dev = [
     "pyyaml>=6.0",
 ]
 all = [
-    "registry-pattern[yaml,otel,docs,dev]",
+    "registry-pattern[yaml,otel,torch,docs,dev]",
 ]
 
 [project.urls]
@@ -73,7 +75,7 @@ Documentation = "https://registry-pattern.readthedocs.io/"
 Issues = "https://github.com/adnanhd/registry-pattern/issues"
 
 [tool.setuptools]
-packages = ["registry", "registry.mixin"]
+packages = ["registry", "registry.mixin", "registry.experimental"]
 
 [tool.setuptools.package-data]
 registry = ["py.typed"]
