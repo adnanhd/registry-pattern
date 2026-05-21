@@ -189,13 +189,14 @@ class TypeRegistry(
         cls._strict = strict
         cls._abstract = abstract
         _ALL_TYPE_REGISTRIES[cls.__name__] = cls
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s)",
-                get_type_name(cls),
-                strict,
-                abstract,
-            )
+        _base = _base_type_of(cls)
+        logger.info(
+            "registry.created name=%s base=%s strict=%s abstract=%s",
+            get_type_name(cls),
+            getattr(_base, "__name__", _base),
+            strict,
+            abstract,
+        )
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> Type[Cls]:

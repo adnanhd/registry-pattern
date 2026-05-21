@@ -19,8 +19,11 @@ Notes on timing:
     the expired count may be inaccurate; it does not affect eviction behavior.
 """
 
+import logging
 import time
 from threading import RLock
+
+logger = logging.getLogger(__name__)
 from typing import (
     Any,
     Dict,
@@ -411,6 +414,11 @@ class MutableValidatorMixin(
             validated_key = cls._internalize_identifier(identifier)
             validated_item = cls._internalize_artifact(artifact)
             cls._set_artifact(validated_key, validated_item)
+            logger.info(
+                "registry.registered registry=%s name=%s",
+                cls.__name__,
+                validated_key,
+            )
             return artifact
         except (ValidationError, ConformanceError, InheritanceError):
             raise

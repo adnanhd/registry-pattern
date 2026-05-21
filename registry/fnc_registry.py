@@ -111,12 +111,11 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
         cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
         cls._strict = strict
         _ALL_FN_REGISTRIES[cls.__name__] = cls
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "Initialized FunctionalRegistry subclass %s (strict=%s)",
-                cls.__name__,
-                strict,
-            )
+        logger.info(
+            "registry.created name=%s kind=FunctionalRegistry strict=%s",
+            cls.__name__,
+            strict,
+        )
 
     @classmethod
     def _internalize_artifact(cls, value: Any) -> Callable[P, R]:
