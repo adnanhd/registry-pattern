@@ -107,9 +107,9 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
             repo: Dotted path for hierarchical resolve, e.g. ``"myapp.steps"``.
                 Defaults to ``cls.__name__``.
 
-        For remote storage, assign ``cls._repository`` directly with a
-        ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
-        ``http`` extra).
+        ``cls._repository`` is a ``ThreadSafeLocalStorage`` by default; assign
+        any ``MutableMapping`` to it after class creation if you need custom
+        backing.
         """
         super().__init_subclass__(**kwargs)
         cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
