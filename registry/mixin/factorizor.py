@@ -89,6 +89,10 @@ class ContainerMixin(
     _ctx: ClassVar[Dict[str, Any]] = {}
     _schemetry: ClassVar[Dict[str, Type[BaseModel]]] = {}
 
+    # PR-3: strict-by-default. Subclasses opt out by setting False on the class.
+    _strict_params: ClassVar[bool] = True   # raise if Pydantic schema rejects data
+    _strict_unused: ClassVar[bool] = True   # raise if any data key not in builder signature
+
     @classmethod
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
@@ -156,13 +160,20 @@ class ContainerMixin(
     def _extract_params_model(cls, artifact: Any) -> Type[BaseModel]:
         """Extract a Pydantic params model from artifact signature.
 
-        Args:
-            artifact: Class or callable to extract signature from.
-
-        Returns:
-            A dynamically created Pydantic model.
+        Resolves string annotations (PEP 563 / ``from __future__ import
+        annotations``) via ``typing.get_type_hints`` so forward refs like
+        ``List[Foo]`` become real generic aliases that Pydantic accepts.
         """
+        import typing as _typing
+
         name, sig, params = get_callable_signature(artifact)
+
+        # Resolve string annotations to real types (handles `from __future__ import annotations`).
+        target_for_hints = artifact.__init__ if inspect.isclass(artifact) else artifact
+        try:
+            hints = _typing.get_type_hints(target_for_hints, include_extras=False)
+        except Exception:
+            hints = {}
 
         fields: Dict[str, Any] = {}
         for param in params:
@@ -172,9 +183,9 @@ class ContainerMixin(
             if param.name == "ctx":
                 continue
 
-            annotation = (
-                param.annotation if param.annotation is not Parameter.empty else Any
-            )
+            annotation = hints.get(param.name, param.annotation)
+            if annotation is Parameter.empty:
+                annotation = Any
             default = param.default if param.default is not Parameter.empty else ...
             fields[param.name] = (annotation, default)
 
@@ -331,9 +342,17 @@ class ContainerMixin(
                     if hasattr(validated, k)
                 }
             except Exception as e:
+                # Read the strict flag off the LOOKED-UP registry (not ContainerMixin).
+                if getattr(registry, "_strict_params", cls._strict_params):
+                    raise ValidationError(
+                        f"Schema validation failed for repo='{repo_name}' type='{cfg.type}'",
+                        [f"Original: {e}",
+                         "Set ClassVar `_strict_params = False` on the registry to suppress."],
+                        {"repo": repo_name, "type": cfg.type},
+                    ) from e
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("Schema validation failed for %s: %s", cfg.type, e)
-                # Fall back to raw data
+                # Fall back to raw data (legacy permissive mode)
 
         # 4. Recursively build nested configs
         data = {k: cls.build_value(v) for k, v in validated_data.items()}
@@ -377,9 +396,19 @@ class ContainerMixin(
         else:
             pass_kwargs = data
 
-        # 6. Update meta with unused data
+        # 6. Update meta with unused data (or raise under strict mode)
         meta = dict(cfg.meta)
         if unused_data:
+            # Read the strict flag off the LOOKED-UP registry (not ContainerMixin).
+            if getattr(registry, "_strict_unused", cls._strict_unused):
+                raise ValidationError(
+                    f"Unknown fields for repo='{repo_name}' type='{cfg.type}': "
+                    f"{sorted(unused_data)}",
+                    [f"Allowed fields: {sorted(allowed) if sig is not None else 'unknown'}",
+                     "Set ClassVar `_strict_unused = False` on the registry to "
+                     "permit extras (they go to meta._unused_data)."],
+                    {"repo": repo_name, "type": cfg.type, "unknown": sorted(unused_data)},
+                )
             meta.setdefault("_unused_data", {}).update(unused_data)
 
         # 7. Instantiate

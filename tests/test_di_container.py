@@ -301,7 +301,8 @@ class TestMetaAttachment:
         assert obj.__meta__["version"] == "1.0"
 
     def test_meta_preserved_with_extras(self, fresh_type_registry, container_cleanup):
-        """Test that original meta is preserved when extras are added."""
+        """Test that original meta is preserved when extras are added (legacy permissive mode)."""
+        fresh_type_registry._strict_unused = False  # opt out of PR-3 strict default
 
         class Params(BaseModel):
             x: int

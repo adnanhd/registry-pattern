@@ -162,7 +162,8 @@ class TestExtrasHandling:
     """Tests for handling of extra/unknown fields."""
 
     def test_extras_go_to_meta(self, fresh_type_registry, container_cleanup):
-        """Test that unknown fields go to meta._unused_data."""
+        """Test that unknown fields go to meta._unused_data (legacy permissive mode)."""
+        fresh_type_registry._strict_unused = False  # opt out of PR-3 strict default
 
         class KnownParams(BaseModel):
             x: int

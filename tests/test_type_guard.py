@@ -23,7 +23,8 @@ from registry import Buildable, BuildCfg, ContainerMixin, TypeRegistry
 class ComponentRegistry(TypeRegistry[object]):
     """Registry for test components."""
 
-    pass
+    # Some tests exercise the legacy `_unused_data` capture; opt out of strict mode.
+    _strict_unused = False
 
 
 class ServiceRegistry(TypeRegistry[object]):
