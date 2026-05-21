@@ -4,7 +4,7 @@ A validator's contract::
 
     validator(target, data: dict) -> dict     # raises on invalid
 
-Three engines ship by default — ``pydantic`` (uses ``derive_config_schema``),
+Three engines ship by default -- ``pydantic`` (uses ``derive_config_schema``),
 ``jsonargparse`` (uses jsonargparse's parser), and ``noop`` (passthrough).
 Pick by string name at ``build(cfg, validator=...)`` time.
 """
@@ -54,7 +54,7 @@ def jsonargparse(target: type | Callable[..., Any], data: dict[str, Any]) -> dic
 
 @ValidatorRegistry.register_artifact
 def noop(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, Any]:
-    """Passthrough — no validation, no coercion."""
+    """Passthrough -- no validation, no coercion."""
     return dict(data)
 
 

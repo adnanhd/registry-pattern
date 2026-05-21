@@ -1,7 +1,7 @@
 """Recursive factory for ``BuildCfg``-shaped envelopes.
 
 One source-agnostic entry point: ``build(cfg, ctx=...)``. The envelope can
-come from YAML, JSON, callpyback RPC, or a hand-rolled Python dict — the
+come from YAML, JSON, callpyback RPC, or a hand-rolled Python dict -- the
 factory doesn't care.
 
 Pipeline per envelope::
@@ -9,7 +9,7 @@ Pipeline per envelope::
     [1] recurse on nested envelopes; resolve ``$ref`` strings against sibling scope
     [2] validate config layer (validator engine, e.g. pydantic)
     [3] optional ``registry.pre_call`` hook + ``Annotated.validate`` markers
-    [4] ``target(**kwargs)`` — instantiate or invoke
+    [4] ``target(**kwargs)`` -- instantiate or invoke
     [5] optional ``registry.post_init`` hook + ``Annotated.compute`` markers
     [6] optional ``registry.post_call`` hook + meta_schema validation
 
@@ -25,7 +25,8 @@ from typing import Any, Callable
 
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .fnc_registry import _ALL_FN_REGISTRIES, FunctionalRegistry
-from .observers import emit
+from .meters import emit_meter
+from .reporters import emit_reporter
 from .schema import process_compute, process_validate, resolve_meta_schema
 from .typ_registry import _ALL_TYPE_REGISTRIES, TypeRegistry
 from .validators import resolve_validator
@@ -103,9 +104,13 @@ def build(
     raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
+    meta: dict[str, Any] = dict(cfg.meta)  # available to meters from the very first stage
 
     logger.info("build.start type=%s repo=%s", cfg.type, cfg.repo)
-    emit("on_build_start", cfg=cfg, ctx=ctx)
+    # Pipeline contract at every stage: METERS first (they write to meta),
+    # then REPORTERS (they read the final meta and ship externally).
+    emit_meter("on_build_start", cfg=cfg, ctx=ctx, meta=meta)
+    emit_reporter("on_build_start", cfg=cfg, ctx=ctx, meta=meta)
 
     try:
         registry, target = resolve(cfg.type, cfg.repo if cfg.repo != "default" else None)
@@ -126,13 +131,13 @@ def build(
         kwargs: dict[str, Any] = validator_fn(target, data)
 
         # [3] runtime-layer pre-validation
-        meta: dict[str, Any] = dict(cfg.meta)
         pre = getattr(registry, "pre_call", None)
         if callable(pre):
             pre(target, kwargs, ctx, meta)
         process_validate(target, kwargs, ctx)
 
-        emit("on_validated", target=target, kwargs=kwargs, ctx=ctx)
+        emit_meter("on_validated", target=target, kwargs=kwargs, ctx=ctx, meta=meta)
+        emit_reporter("on_validated", target=target, kwargs=kwargs, ctx=ctx, meta=meta)
 
         # [4] invoke
         result: Any = target(**kwargs)
@@ -146,9 +151,11 @@ def build(
         if callable(tree):
             tree(result, meta, ctx)
 
-        # Observers fire BEFORE writeback so they can mutate meta (e.g. resource
-        # observers writing rss/cpu/io counters).
-        emit("on_built", target=target, result=result, meta=meta, ctx=ctx)
+        # Meters write THEIR measurements (lifetime delta, CPU, IO, ...) here.
+        emit_meter("on_built", target=target, result=result, meta=meta, ctx=ctx)
+        # Reporters see the now-fully-populated meta and ship it.
+        emit_reporter("on_built", target=target, result=result, meta=meta, ctx=ctx)
+
         logger.info(
             "build.done type=%s target=%s meta_keys=%s",
             cfg.type,
@@ -178,5 +185,6 @@ def build(
 
     except Exception as exc:
         logger.warning("build.error type=%s exc=%s: %s", cfg.type, type(exc).__name__, exc)
-        emit("on_error", cfg=cfg, exc=exc, ctx=ctx)
+        emit_meter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
+        emit_reporter("on_error", cfg=cfg, exc=exc, ctx=ctx, meta=meta)
         raise

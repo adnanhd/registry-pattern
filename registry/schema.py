@@ -37,7 +37,7 @@ _JSON_NATIVE: tuple[type, ...] = (int, float, str, bool, type(None), list, dict,
 
 
 def _unwrap_annotated(tp: Any) -> Any:
-    """``Annotated[T, ...]`` → ``T``; otherwise passthrough."""
+    """``Annotated[T, ...]`` -> ``T``; otherwise passthrough."""
     if hasattr(tp, "__metadata__"):
         return typing.get_args(tp)[0]
     return tp
@@ -71,7 +71,7 @@ def _is_json_native(tp: Any) -> bool:
     if origin is None:
         return tp in _JSON_NATIVE
     if origin in _JSON_NATIVE:
-        # Parametrized list/dict/tuple — every arg must also be safe.
+        # Parametrized list/dict/tuple -- every arg must also be safe.
         return all(_is_json_native(a) for a in typing.get_args(tp))
     return False
 

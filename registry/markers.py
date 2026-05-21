@@ -2,9 +2,9 @@
 
 Two protocols:
 
-- ``validate(value, kwargs, ctx) -> None`` — runtime cross-arg validation.
+- ``validate(value, kwargs, ctx) -> None`` -- runtime cross-arg validation.
   Fires after kwargs are assembled, before the target is called/instantiated.
-- ``compute(value) -> Any`` — populates the ``meta`` dict with a value derived
+- ``compute(value) -> Any`` -- populates the ``meta`` dict with a value derived
   from the built instance. Fires after the target is called.
 
 Both protocols are duck-typed: a marker can implement either or both.
@@ -17,7 +17,7 @@ Example::
         device: str,
     ) -> dict[str, float]: ...
 
-torch is imported lazily — markers stay importable without it; only the
+torch is imported lazily -- markers stay importable without it; only the
 torch-specific helpers raise when used without torch installed.
 """
 
