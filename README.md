@@ -1,19 +1,38 @@
 # Registry Pattern
 
 [![Build Status](https://github.com/adnanhd/registry-pattern/actions/workflows/build.yml/badge.svg)](https://github.com/adnanhd/registry-pattern/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/adnanhd/registry-pattern/badge.svg)](https://coveralls.io/github/adnanhd/registry-pattern)
+[![codecov](https://codecov.io/gh/adnanhd/registry-pattern/branch/main/graph/badge.svg)](https://codecov.io/gh/adnanhd/registry-pattern)
 
-A Python library implementing the **Registry Pattern**, **Factory Pattern**, and **Dependency Injection Container** with Pydantic integration for configuration-driven object construction.
+A Python library for name-based class/function registries plus a recursive
+factory that builds object graphs from JSON-friendly envelopes. Pydantic-
+validated, observable, hierarchical, and stdlib-only at the core.
 
-## Features
+## What it gives you
 
-- **Registry Pattern**: Central storage for classes and functions by name
-- **Factory Pattern**: Configuration-driven instantiation with Pydantic validation
-- **DI Container**: Recursive object graph construction with context injection
-- **Type Coercion**: Automatic string-to-type conversion via Pydantic
-- **Extras Handling**: Unknown config fields captured in `meta._unused_data`
-- **Multi-Repository**: Namespace-based artifact organization
-- **Deeply Nested Configs**: Support for arbitrarily nested `BuildCfg` envelopes
+- **Registries**: `TypeRegistry[T]` and `FunctionalRegistry` -- declare a
+  registry with a dotted `repo` path; classes / functions register themselves
+  with `@MyReg.register_artifact`.
+- **Factory**: a single recursive `registry.build(cfg, ...)` that consumes a
+  `BuildCfg`-shaped envelope (or a class / a string), validates the kwargs
+  against the target's Pydantic schema, recurses on nested envelopes,
+  resolves `$ref` strings against sibling and ctx scope, invokes the target,
+  and runs registry hooks. Symmetric `registry.serialize(instance, ...)`
+  for the outbound side.
+- **Tree-shaped sub-registrars**: sub-classes inherit `post_init` / `pre_call`
+  hooks via Python inheritance; `resolve(name, repo="prefix")` does prefix-
+  or-exact matching across the registry tree.
+- **Annotated markers**: `Annotated[T, SameDeviceAs("device"),
+  Checksum("hash"), ...]` -- validate markers fire pre-invocation, compute
+  markers populate the envelope's meta dict.
+- **Observability split**:
+  - *Meters* (`LifetimeMeter`, `CPUMeter`, `MemoryMeter`, `IOMeter`,
+    `NetworkMeter`, `HeapMeter`, `RecursionMeter`) write measurements into
+    the envelope's meta.
+  - *Reporters* (`JournalReporter`, `HTTPDashboardReporter`,
+    `OpenTelemetryReporter`) ship events to external sinks.
+  - Pipeline contract: meters fire BEFORE reporters at every stage.
+- **stdlib logging**: `logging.basicConfig(level=INFO)` is enough to see
+  every registry creation, artifact registration, and build event.
 
 ## Installation
 
@@ -21,296 +40,242 @@ A Python library implementing the **Registry Pattern**, **Factory Pattern**, and
 pip install registry-pattern
 ```
 
-Or install from source:
+Core depends only on `pydantic` and `typing-extensions`. Optional extras:
 
 ```bash
-git clone https://github.com/adnanhd/registry-pattern.git
-cd registry-pattern
-pip install -e .
+pip install 'registry-pattern[yaml]'   # ConfigFileEngine.yaml
+pip install 'registry-pattern[rpc]'    # SocketEngine.rpc
+pip install 'registry-pattern[otel]'   # OpenTelemetryReporter
+pip install 'registry-pattern[all]'    # everything above
 ```
 
-## Quick Start
+## Quick start
 
-### Registry Pattern
+### Register a class, build it from a dict
 
 ```python
-from registry import TypeRegistry, FunctionalRegistry
+import torch.nn as nn
+from registry import TypeRegistry, build
 
-# Create a registry for model classes
-class ModelRegistry(TypeRegistry[object]):
+
+class ModelRegistry(TypeRegistry[nn.Module]):
     pass
 
-# Register with decorator
+
 @ModelRegistry.register_artifact
-class MyModel:
-    def __init__(self, hidden_size: int):
-        self.hidden_size = hidden_size
-
-# Retrieve and instantiate
-model_cls = ModelRegistry.get_artifact("MyModel")
-model = model_cls(hidden_size=256)
-```
-
-### Factory Pattern with Pydantic
-
-```python
-from pydantic import BaseModel, Field
-from registry import TypeRegistry, BuildCfg, ContainerMixin
-
-class ModelRegistry(TypeRegistry[object]):
-    pass
-
-class ModelParams(BaseModel):
-    hidden_size: int = Field(ge=1, le=4096)
-    dropout: float = Field(ge=0, le=1, default=0.1)
-
-@ModelRegistry.register_artifact(params_model=ModelParams)
-class ValidatedModel:
-    def __init__(self, hidden_size: int, dropout: float = 0.1):
-        self.hidden_size = hidden_size
-        self.dropout = dropout
-
-# Configure and build
-ContainerMixin.configure_repos({"models": ModelRegistry, "default": ModelRegistry})
-
-cfg = BuildCfg(
-    type="ValidatedModel",
-    repo="models",
-    data={"hidden_size": "512", "dropout": "0.2"},  # Strings are coerced
-    meta={"experiment": "test"}
-)
-
-model = ContainerMixin.build_cfg(cfg)
-# model.hidden_size == 512 (int, not str)
-```
-
-### DI Container with Nested Configs
-
-```python
-from registry import TypeRegistry, BuildCfg, ContainerMixin
-
-class OptimizerRegistry(TypeRegistry[object]):
-    pass
-
-class TrainerRegistry(TypeRegistry[object]):
-    pass
-
-@OptimizerRegistry.register_artifact
-class Adam:
-    def __init__(self, lr: float = 0.001):
-        self.lr = lr
-
-@TrainerRegistry.register_artifact
-class Trainer:
-    def __init__(self, model: object, optimizer: object, ctx: dict = None):
-        self.model = model
-        self.optimizer = optimizer
-        self.ctx = ctx or {}
-
-ContainerMixin.configure_repos({
-    "optimizers": OptimizerRegistry,
-    "trainers": TrainerRegistry,
-    "default": TrainerRegistry,
-})
-
-# Nested configuration - optimizer is built recursively
-cfg = BuildCfg(
-    type="Trainer",
-    repo="trainers",
-    data={
-        "model": some_model,
-        "optimizer": BuildCfg(
-            type="Adam",
-            repo="optimizers",
-            data={"lr": 0.0001}
+class MLP(nn.Module):
+    def __init__(self, in_features: int = 784, hidden: int = 128,
+                 out_features: int = 10) -> None:
+        super().__init__()
+        self.in_features = in_features
+        self.hidden = hidden
+        self.out_features = out_features
+        self.net = nn.Sequential(
+            nn.Linear(in_features, hidden), nn.ReLU(),
+            nn.Linear(hidden, out_features),
         )
-    }
-)
 
-trainer = ContainerMixin.build_cfg(cfg)
-# trainer.optimizer is a fully constructed Adam instance
+
+# Build from an envelope
+model = build({"type": "MLP", "data": {"hidden": 256}})
+
+# Or directly from the class + a medium
+model = build(MLP, {"hidden": 256}, validator="python")
+model = build(MLP, "hidden: 256\n", validator="yaml")
 ```
 
-### Context Injection
+### Round-trip through `serialize`
 
 ```python
-# Build named objects that can be referenced later
-ContainerMixin.build_named("encoder", encoder_cfg)
-ContainerMixin.build_named("decoder", decoder_cfg)
+from registry import serialize
 
-# Objects with `ctx` parameter receive the shared context
-@TrainerRegistry.register_artifact
-class MultiModelTrainer:
-    def __init__(self, main_model: object, ctx: dict = None):
-        self.main_model = main_model
-        self.encoder = ctx.get("encoder")  # Access named objects
-        self.decoder = ctx.get("decoder")
+data = serialize(model, serializator="python")   # -> {"in_features": 784, ...}
+yaml = serialize(model, serializator="yaml")     # -> yaml string
+json = serialize(model, serializator="json")     # -> json string
 ```
 
-## BuildCfg Envelope Schema
+### Tree-shaped sub-registries
 
 ```python
-BuildCfg(
-    type="ClassName",           # Required: artifact name in registry
-    repo="namespace",           # Optional: registry namespace (default: "default")
-    data={"param": "value"},    # Optional: constructor arguments
-    meta={"tag": "info"}        # Optional: metadata attached to built object
-)
+from registry import TypeRegistry
+
+
+class Models(TypeRegistry[nn.Module], repo="my.models"):
+    @classmethod
+    def post_init(cls, instance, meta):
+        meta["family"] = "models"
+
+
+class CNNModels(Models, repo="my.models.cnn"):
+    @classmethod
+    def post_init(cls, instance, meta):
+        super().post_init(instance, meta)            # parent first
+        if not any(isinstance(m, nn.Conv2d) for m in instance.modules()):
+            raise ValueError("not a CNN")
+
+
+class Pretrained(Models, repo="my.models.pretrained"):
+    @classmethod
+    def post_init(cls, instance, meta):
+        super().post_init(instance, meta)
+        meta["checksum"] = _hash_state_dict(instance.state_dict())
+
+
+# Same class in multiple sub-registries -- different disciplines
+@CNNModels.register_artifact
+@Pretrained.register_artifact
+class ResNet50(nn.Module): ...
+
+
+build("ResNet50", {...}, repo="my.models.cnn")          # CNN check runs
+build("ResNet50", {...}, repo="my.models.pretrained")   # checksum runs
+build("ResNet50", {...}, repo="my.models")              # ambiguous: pick a sub
 ```
 
-- **type**: Name of the registered class/function
-- **repo**: Registry namespace to look up the artifact
-- **data**: Arguments passed to the constructor (validated via `params_model`)
-- **meta**: Metadata attached to the built object as `__meta__` attribute
-
-Unknown fields in `data` are moved to `meta._unused_data`.
-
-## Buildable Type Guard
-
-The `Buildable[T]` type annotation enables Pydantic models to accept either:
-- An already-constructed instance of type `T`
-- A `BuildCfg` (or dict) that gets built into an instance of `T`
+### Annotated markers: declarative cross-arg checks and meta provenance
 
 ```python
-from pydantic import BaseModel
-from registry import Buildable, TypeRegistry, ContainerMixin
+from typing import Annotated
+from registry import FunctionalRegistry, build
+from registry.markers import SameDeviceAs, BoundTo, Checksum, EffectiveLr
 
-class ModelRegistry(TypeRegistry[object]):
+
+class StepRegistry(FunctionalRegistry, repo="my.steps"):
     pass
 
-@ModelRegistry.register_artifact
-class MyModel:
-    def __init__(self, size: int):
-        self.size = size
 
-ContainerMixin.configure_repos({"models": ModelRegistry, "default": ModelRegistry})
-
-class TrainerConfig(BaseModel):
-    model: Buildable[MyModel]  # Accepts MyModel instance OR BuildCfg
-
-# Works with direct instance
-config1 = TrainerConfig(model=MyModel(size=10))
-
-# Works with BuildCfg dict - automatically built
-config2 = TrainerConfig(model={
-    "type": "MyModel",
-    "data": {"size": 20}
-})
-assert isinstance(config2.model, MyModel)
-assert config2.model.size == 20
+@StepRegistry.register_artifact
+def train_one_step(
+    model:     Annotated[nn.Module,             SameDeviceAs("device"),
+                                                Checksum("model_checksum")],
+    batch:     Annotated[tuple,                 SameDeviceAs("device")],
+    optimizer: Annotated[torch.optim.Optimizer, BoundTo("model"),
+                                                EffectiveLr("effective_lr")],
+    criterion: nn.Module,
+    device:    str,
+) -> float:
+    x, y = batch
+    optimizer.zero_grad()
+    loss = criterion(model(x), y)
+    loss.backward(); optimizer.step()
+    return loss.item()
 ```
+
+Each marker is checked / computed before / after the function call; the
+envelope's meta ends up with `model_checksum`, `effective_lr`, etc.
+
+### Observability: localhost dashboard + journald
+
+```python
+import logging
+from registry import attach_meter, attach_reporter, build
+from registry import LifetimeMeter, CPUMeter, MemoryMeter
+from registry import JournalReporter, HTTPDashboardReporter
+
+logging.basicConfig(level=logging.INFO)             # stdlib log shows everything
+
+attach_meter(LifetimeMeter())
+attach_meter(CPUMeter())
+attach_meter(MemoryMeter())
+
+attach_reporter(JournalReporter(ident="my-trainer"))      # journalctl -t my-trainer
+dash = attach_reporter(HTTPDashboardReporter(port=8765))  # curl localhost:8765
+
+build(...)   # meters fire -> meta populated -> reporters ship the populated meta
+```
+
+For OpenTelemetry, install `registry-pattern[otel]` and
+`attach_reporter(OpenTelemetryReporter())`. Each build becomes a span with the
+envelope's meta as attributes; lifetime goes into a `registry.build.duration`
+Histogram.
+
+## End-user one-liners
+
+A class with `from_X` / `to_X` methods becomes one-line wrappers around the
+factory primitives:
+
+```python
+@MyReg.register_artifact
+class MyConfig:
+    def __init__(self, lr: float = 1e-3, epochs: int = 10): ...
+
+    @classmethod
+    def from_yaml(cls, text):  return build(cls, text, validator="yaml")
+    @classmethod
+    def from_args(cls, args):  return build(cls, args, validator="argparse")
+    @classmethod
+    def from_dict(cls, data):  return build(cls, data, validator="python")
+
+    def to_yaml(self):         return serialize(self, serializator="yaml")
+    def to_dict(self):         return serialize(self, serializator="python")
+```
+
+No bespoke `add_args` / `from_args` / `to_config` triplets per class.
+
+## API at a glance
+
+```python
+from registry import (
+    # Registries
+    TypeRegistry, FunctionalRegistry, BuildCfg, Buildable,
+
+    # Factory + serialize
+    build, resolve, validate, serialize,
+
+    # Meters (measure -> meta)
+    FactoryMeter, attach_meter, detach_meter, meters,
+    LifetimeMeter, CPUMeter, MemoryMeter, IOMeter, NetworkMeter,
+    HeapMeter, RecursionMeter,
+
+    # Reporters (ship event externally)
+    FactoryReporter, attach_reporter, detach_reporter, reporters,
+    JournalReporter, HTTPDashboardReporter, OpenTelemetryReporter,
+
+    # Container (mostly legacy)
+    ContainerMixin,
+
+    # Exceptions
+    ValidationError, RegistryError, CoercionError,
+    ConformanceError, InheritanceError,
+)
+```
+
+Custom markers, validator mediums, and serializer mediums register from the
+relevant submodule (`registry.markers`, `registry.validators`,
+`registry.factory.SerializerRegistry`).
 
 ## Examples
 
-See the `examples/` directory for complete examples:
+The `examples/` directory walks through the major patterns:
 
-- `01_registry_basics.py` - Registry pattern fundamentals
-- `02_factory_pattern.py` - Factory pattern with Pydantic validation
-- `03_di_container.py` - DI container with nested object graphs
-- `04_pytorch_mnist.py` - PyTorch ResNet18 training on MNIST
-- `05_full_experiment_config.py` - Complete ML experiment from config
+- `01_registry_basics.py`        -- bare registries
+- `02_factory_pattern.py`        -- Pydantic validation + envelopes
+- `03_di_container.py`           -- legacy `ContainerMixin.build_cfg`
+- `04_pytorch_mnist.py`          -- end-to-end MNIST with PyTorch
+- `05_full_experiment_config.py` -- full experiment from a YAML
+- `06_factory_pipeline.py`       -- the new pipeline end-to-end
+- `07_custom_reporters.py`       -- WandB / TensorBoard reporter extensions
+- `08_cofinn_pattern.py`         -- one-liner from_X / to_X methods
 
-Run an example:
-
-```bash
-PYTHONPATH=. python examples/01_registry_basics.py
-```
-
-## API Reference
-
-### TypeRegistry
-
-```python
-class MyRegistry(TypeRegistry[BaseClass]):
-    pass
-
-# Registration
-@MyRegistry.register_artifact
-@MyRegistry.register_artifact(params_model=MyParams)
-class MyClass: ...
-
-# Retrieval
-cls = MyRegistry.get_artifact("MyClass")
-exists = MyRegistry.has_identifier("MyClass")
-names = list(MyRegistry.iter_identifiers())
-
-# Management
-MyRegistry.unregister_identifier("MyClass")
-MyRegistry.clear_artifacts()
-```
-
-### FunctionalRegistry
-
-```python
-class FuncRegistry(FunctionalRegistry):
-    pass
-
-@FuncRegistry.register_artifact
-def my_function(x: int) -> int:
-    return x * 2
-
-fn = FuncRegistry.get_artifact("my_function")
-```
-
-### ContainerMixin
-
-```python
-# Configure repositories
-ContainerMixin.configure_repos({
-    "models": ModelRegistry,
-    "optimizers": OptimizerRegistry,
-    "default": ModelRegistry,
-})
-
-# Build from config
-obj = ContainerMixin.build_cfg(cfg)
-
-# Build and store in context
-obj = ContainerMixin.build_named("key", cfg)
-
-# Access/clear context
-ContainerMixin._ctx["shared_data"] = value
-ContainerMixin.clear_context()
-```
-
-## Testing
+## CLI
 
 ```bash
-# Run all tests
-PYTHONPATH=. pytest tests/ -v
-
-# Run specific test file
-PYTHONPATH=. pytest tests/test_nested_envelopes.py -v
+python -m registry --version              # version
+python -m registry info                   # full env diagnostics
+python -m registry build cfg.yaml [--dry-run] [-o out.json] [-v]
+python -m registry run   cfg.yaml [--entry main] [-v]
 ```
 
-## Continuous Integration
-
-This project uses GitHub Actions for CI:
-
-- **Tests**: `pytest` with coverage
-- **Type Checking**: `pyright`
-- **Code Formatting**: `black`
-- **Linting**: `flake8`
-
-### Running Checks Locally
+## Development
 
 ```bash
-# Install dev dependencies
-pip install pytest black flake8 pyright
-
-# Run tests
+pip install -e '.[dev]'
 pytest -vv --cov
-
-# Type checking
-pyright
-
-# Code formatting
+pyright registry/
 black --check .
-
-# Linting
-flake8 .
+ruff check registry/ tests/
 ```
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT. See `LICENSE`.
