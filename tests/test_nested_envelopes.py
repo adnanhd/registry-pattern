@@ -20,34 +20,38 @@ from registry import BuildCfg, ContainerMixin, TypeRegistry
 # =============================================================================
 
 
+# Some tests in this file exercise the legacy `_unused_data` capture; opt out of
+# the PR-3 strict default so unknown keys flow into meta._unused_data instead
+# of raising.
+
 class Level1Registry(TypeRegistry[object]):
     """Registry for level 1 components."""
 
-    pass
+    _strict_unused = False
 
 
 class Level2Registry(TypeRegistry[object]):
     """Registry for level 2 components."""
 
-    pass
+    _strict_unused = False
 
 
 class Level3Registry(TypeRegistry[object]):
     """Registry for level 3 components."""
 
-    pass
+    _strict_unused = False
 
 
 class Level4Registry(TypeRegistry[object]):
     """Registry for level 4 components."""
 
-    pass
+    _strict_unused = False
 
 
 class Level5Registry(TypeRegistry[object]):
     """Registry for level 5 components."""
 
-    pass
+    _strict_unused = False
 
 
 # Configure repos
