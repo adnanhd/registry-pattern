@@ -83,16 +83,20 @@ class BuildCfg(BaseModel):
 def is_build_cfg(value: Any) -> bool:
     """Check if a value looks like a BuildCfg dict.
 
+    Requires both "type" (str) and "data" (dict) keys to avoid colliding with
+    constructor params that happen to be named "type".
+
     Args:
         value: Any value to check.
 
     Returns:
-        True if value is a dict with a "type" key (string).
+        True if value is a BuildCfg instance, or a dict with both "type" (str)
+        and "data" (dict) keys.
     """
     if isinstance(value, BuildCfg):
         return True
     if isinstance(value, dict):
-        return isinstance(value.get("type"), str)
+        return isinstance(value.get("type"), str) and isinstance(value.get("data"), dict)
     return False
 
 
