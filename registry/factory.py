@@ -142,6 +142,10 @@ def build(
         if callable(tree):
             tree(result, meta, ctx)
 
+        # Observers fire BEFORE writeback so they can mutate meta (e.g. resource
+        # observers writing rss/cpu/io counters).
+        emit("on_built", target=target, result=result, meta=meta, ctx=ctx)
+
         # [6] meta_schema validation (if any)
         mschema = resolve_meta_schema(registry, target)
         if mschema is not None and meta:
@@ -160,7 +164,6 @@ def build(
         except Exception:
             pass
 
-        emit("on_built", target=target, result=result, meta=meta, ctx=ctx)
         return result
 
     except Exception as exc:

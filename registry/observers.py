@@ -20,14 +20,24 @@ from __future__ import annotations
 
 import http.server
 import json
+import resource
 import syslog
 import threading
+import time
+import tracemalloc
 from typing import Any, Callable
 
 __all__ = [
     "FactoryObserver",
     "JournalObserver",
     "HTTPDashboardObserver",
+    "LifetimeObserver",
+    "CPUObserver",
+    "MemoryObserver",
+    "IOObserver",
+    "NetworkObserver",
+    "HeapObserver",
+    "RecursionObserver",
     "attach",
     "detach",
     "observers",
@@ -239,3 +249,199 @@ class HTTPDashboardObserver(FactoryObserver):
             error_type=type(exc).__name__,
             error=str(exc),
         )
+
+
+# ---------------------------------------------------------------------------
+# Resource-consumption observers (per envelope, stack-based for nested builds)
+# ---------------------------------------------------------------------------
+
+
+class _StackedObserver(FactoryObserver):
+    """Base for observers that need a baseline at on_build_start and a delta at on_built.
+
+    Subclasses implement ``_sample()`` (returns a tuple of numeric counters)
+    and ``_write(meta, before, after)`` (writes deltas / absolutes into meta).
+    Handles nested builds via an internal stack.
+    """
+
+    def __init__(self) -> None:
+        self._stack: list[tuple[Any, ...]] = []
+
+    def _sample(self) -> tuple[Any, ...]:
+        raise NotImplementedError
+
+    def _write(self, meta: dict[str, Any], before: tuple[Any, ...], after: tuple[Any, ...]) -> None:
+        raise NotImplementedError
+
+    def on_build_start(self, *, cfg, ctx) -> None:
+        self._stack.append(self._sample())
+
+    def on_built(self, *, target, result, meta, ctx) -> None:
+        if not self._stack:
+            return
+        before = self._stack.pop()
+        self._write(meta, before, self._sample())
+
+    def on_error(self, *, cfg, exc, ctx) -> None:
+        if self._stack:
+            self._stack.pop()
+
+
+class LifetimeObserver(_StackedObserver):
+    """Wall-clock seconds the build (and its recursion) took."""
+
+    name: str = "lifetime"
+
+    def _sample(self) -> tuple[float]:
+        return (time.perf_counter(),)
+
+    def _write(self, meta, before, after) -> None:
+        meta["lifetime_seconds"] = after[0] - before[0]
+
+
+class CPUObserver(_StackedObserver):
+    """User + system CPU seconds consumed during the build (process-wide)."""
+
+    name: str = "cpu"
+
+    def _sample(self) -> tuple[float, float]:
+        r = resource.getrusage(resource.RUSAGE_SELF)
+        return (r.ru_utime, r.ru_stime)
+
+    def _write(self, meta, before, after) -> None:
+        meta["cpu_user_seconds"] = after[0] - before[0]
+        meta["cpu_system_seconds"] = after[1] - before[1]
+
+
+class MemoryObserver(_StackedObserver):
+    """Max resident set size (KB on Linux) and delta vs. build start."""
+
+    name: str = "memory"
+
+    def _sample(self) -> tuple[int]:
+        # ru_maxrss is KB on Linux, bytes on macOS. We assume Linux here.
+        return (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,)
+
+    def _write(self, meta, before, after) -> None:
+        meta["rss_max_kb"] = after[0]
+        meta["rss_delta_kb"] = after[0] - before[0]
+
+
+class IOObserver(_StackedObserver):
+    """Disk IO bytes via ``/proc/self/io`` (Linux). Falls back to zeros elsewhere.
+
+    Tracks both ``rchar``/``wchar`` (bytes read/written through the syscall
+    interface, including from the page cache) and ``read_bytes``/``write_bytes``
+    (bytes that actually reached the storage layer).
+    """
+
+    name: str = "io"
+
+    @staticmethod
+    def _read_proc_io() -> dict[str, int]:
+        try:
+            with open("/proc/self/io") as f:
+                out: dict[str, int] = {}
+                for line in f:
+                    k, _, v = line.partition(": ")
+                    out[k.strip()] = int(v.strip())
+                return out
+        except OSError:
+            return {}
+
+    def _sample(self) -> tuple[int, int, int, int]:
+        s = self._read_proc_io()
+        return (s.get("read_bytes", 0), s.get("write_bytes", 0),
+                s.get("rchar", 0), s.get("wchar", 0))
+
+    def _write(self, meta, before, after) -> None:
+        meta["io_read_bytes"] = after[0] - before[0]
+        meta["io_write_bytes"] = after[1] - before[1]
+        meta["io_rchar_bytes"] = after[2] - before[2]
+        meta["io_wchar_bytes"] = after[3] - before[3]
+
+
+class NetworkObserver(_StackedObserver):
+    """Network bytes received/sent across all interfaces via ``/proc/self/net/dev``.
+
+    Counters are per-namespace, summed across all interfaces (including ``lo``).
+    Subtract ``lo`` separately if you only care about external traffic.
+    """
+
+    name: str = "network"
+
+    @staticmethod
+    def _read_proc_net_dev() -> tuple[int, int]:
+        rx_total = 0
+        tx_total = 0
+        try:
+            with open("/proc/self/net/dev") as f:
+                lines = f.readlines()[2:]  # skip 2 header lines
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 10:
+                    continue
+                rx_total += int(parts[1])
+                tx_total += int(parts[9])
+        except (OSError, ValueError):
+            pass
+        return (rx_total, tx_total)
+
+    def _sample(self) -> tuple[int, int]:
+        return self._read_proc_net_dev()
+
+    def _write(self, meta, before, after) -> None:
+        meta["net_rx_bytes"] = after[0] - before[0]
+        meta["net_tx_bytes"] = after[1] - before[1]
+
+
+class HeapObserver(_StackedObserver):
+    """Python heap via ``tracemalloc``. Starts tracemalloc if not already on."""
+
+    name: str = "heap"
+
+    def __init__(self) -> None:
+        super().__init__()
+        if not tracemalloc.is_tracing():
+            tracemalloc.start()
+
+    def _sample(self) -> tuple[int, int]:
+        return tracemalloc.get_traced_memory()
+
+    def _write(self, meta, before, after) -> None:
+        meta["heap_current_bytes"] = after[0]
+        meta["heap_delta_bytes"] = after[0] - before[0]
+        meta["heap_peak_bytes"] = after[1]
+
+
+class RecursionObserver(FactoryObserver):
+    """Tracks how deep the factory recursion went for each top-level build.
+
+    Writes ``build_depth`` (the depth of THIS envelope, 1 = top-level) and
+    ``build_max_depth`` (deepest level seen so far in the current top-level
+    build) into meta on every envelope.
+    """
+
+    name: str = "recursion"
+
+    def __init__(self) -> None:
+        self._depth: int = 0
+        self._max_depth: int = 0
+
+    def on_build_start(self, *, cfg, ctx) -> None:
+        self._depth += 1
+        if self._depth > self._max_depth:
+            self._max_depth = self._depth
+
+    def on_built(self, *, target, result, meta, ctx) -> None:
+        meta["build_depth"] = self._depth
+        meta["build_max_depth"] = self._max_depth
+        self._depth -= 1
+        if self._depth == 0:
+            self._max_depth = 0
+
+    def on_error(self, *, cfg, exc, ctx) -> None:
+        if self._depth > 0:
+            self._depth -= 1
+        if self._depth == 0:
+            self._max_depth = 0
