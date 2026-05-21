@@ -24,6 +24,7 @@ from typing import Any, Callable
 
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .fnc_registry import _ALL_FN_REGISTRIES, FunctionalRegistry
+from .observers import emit
 from .schema import process_compute, process_validate, resolve_meta_schema
 from .typ_registry import _ALL_TYPE_REGISTRIES, TypeRegistry
 from .validators import resolve_validator
@@ -99,58 +100,69 @@ def build(
     raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
-    registry, target = resolve(cfg.type, cfg.repo if cfg.repo != "default" else None)
-    validator_fn = resolve_validator(validator)
 
-    # [1] recurse + $ref; later siblings can reference earlier ones
-    data: dict[str, Any] = {}
-    for k, v in cfg.data.items():
-        scope = {**ctx, **data}
-        if is_build_cfg(v):
-            data[k] = build(v, validator=validator, ctx=scope)
-        elif isinstance(v, str) and v.startswith("$"):
-            data[k] = _resolve_ref(v, scope)
-        else:
-            data[k] = v
+    emit("on_build_start", cfg=cfg, ctx=ctx)
 
-    # [2] config-layer validation
-    kwargs: dict[str, Any] = validator_fn(target, data)
-
-    # [3] runtime-layer pre-validation
-    meta: dict[str, Any] = dict(cfg.meta)
-    pre = getattr(registry, "pre_call", None)
-    if callable(pre):
-        pre(target, kwargs, ctx, meta)
-    process_validate(target, kwargs, ctx)
-
-    # [4] invoke
-    result: Any = target(**kwargs)
-
-    # [5] meta-layer computation
-    post = getattr(registry, "post_init", None)
-    if callable(post):
-        post(result, meta)
-    process_compute(target, kwargs, meta)
-    tree = getattr(registry, "post_call", None)
-    if callable(tree):
-        tree(result, meta, ctx)
-
-    # [6] meta_schema validation (if any)
-    mschema = resolve_meta_schema(registry, target)
-    if mschema is not None and meta:
-        meta = mschema.model_validate(meta).model_dump()
-
-    # Write meta back to the envelope (BuildCfg) AND to the original dict if any.
-    cfg.meta.clear()
-    cfg.meta.update(meta)
-    if raw_dict is not None:
-        raw_dict.setdefault("meta", {})
-        if isinstance(raw_dict["meta"], dict):
-            raw_dict["meta"].clear()
-            raw_dict["meta"].update(meta)
     try:
-        setattr(result, "__meta__", meta)
-    except Exception:
-        pass
+        registry, target = resolve(cfg.type, cfg.repo if cfg.repo != "default" else None)
+        validator_fn = resolve_validator(validator)
 
-    return result
+        # [1] recurse + $ref; later siblings can reference earlier ones
+        data: dict[str, Any] = {}
+        for k, v in cfg.data.items():
+            scope = {**ctx, **data}
+            if is_build_cfg(v):
+                data[k] = build(v, validator=validator, ctx=scope)
+            elif isinstance(v, str) and v.startswith("$"):
+                data[k] = _resolve_ref(v, scope)
+            else:
+                data[k] = v
+
+        # [2] config-layer validation
+        kwargs: dict[str, Any] = validator_fn(target, data)
+
+        # [3] runtime-layer pre-validation
+        meta: dict[str, Any] = dict(cfg.meta)
+        pre = getattr(registry, "pre_call", None)
+        if callable(pre):
+            pre(target, kwargs, ctx, meta)
+        process_validate(target, kwargs, ctx)
+
+        emit("on_validated", target=target, kwargs=kwargs, ctx=ctx)
+
+        # [4] invoke
+        result: Any = target(**kwargs)
+
+        # [5] meta-layer computation
+        post = getattr(registry, "post_init", None)
+        if callable(post):
+            post(result, meta)
+        process_compute(target, kwargs, meta)
+        tree = getattr(registry, "post_call", None)
+        if callable(tree):
+            tree(result, meta, ctx)
+
+        # [6] meta_schema validation (if any)
+        mschema = resolve_meta_schema(registry, target)
+        if mschema is not None and meta:
+            meta = mschema.model_validate(meta).model_dump()
+
+        # Write meta back to the envelope (BuildCfg) AND to the original dict if any.
+        cfg.meta.clear()
+        cfg.meta.update(meta)
+        if raw_dict is not None:
+            raw_dict.setdefault("meta", {})
+            if isinstance(raw_dict["meta"], dict):
+                raw_dict["meta"].clear()
+                raw_dict["meta"].update(meta)
+        try:
+            setattr(result, "__meta__", meta)
+        except Exception:
+            pass
+
+        emit("on_built", target=target, result=result, meta=meta, ctx=ctx)
+        return result
+
+    except Exception as exc:
+        emit("on_error", cfg=cfg, exc=exc, ctx=ctx)
+        raise
