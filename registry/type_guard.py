@@ -49,6 +49,24 @@ T = TypeVar("T")
 _PARAMETERIZED_CACHE: dict[type, type] = {}
 
 
+def _runtime_type(expected_type: Type) -> Type:
+    """Return a type usable as the second arg to ``isinstance``.
+
+    ``isinstance(x, dict[str, int])`` raises ``TypeError`` -- parameterized
+    generics are not valid runtime classes. Unwrap to the origin
+    (``dict[str, int]`` -> ``dict``) so the runtime check still works; the
+    parameter information was already consumed by Pydantic at validation
+    time.
+    """
+    origin = get_origin(expected_type)
+    return origin if origin is not None else expected_type
+
+
+def _type_name(expected_type: Type) -> str:
+    """Display name for ``expected_type`` that survives parameterized generics."""
+    return getattr(expected_type, "__name__", None) or str(expected_type)
+
+
 class BuildableValidator(Generic[T]):
     """Validator that accepts either an instance of T or a BuildCfg that builds to T.
 
@@ -71,8 +89,11 @@ class BuildableValidator(Generic[T]):
         Raises:
             ValueError: If the value cannot be converted to type T.
         """
+        runtime_type = _runtime_type(self.expected_type)
+        type_label = _type_name(self.expected_type)
+
         # Case 1: Already an instance of the expected type
-        if isinstance(value, self.expected_type):
+        if isinstance(value, runtime_type):
             return value
 
         # Case 2: BuildCfg or dict that looks like BuildCfg
@@ -82,31 +103,33 @@ class BuildableValidator(Generic[T]):
                 result = factory.build(cfg)
             except Exception as e:
                 raise ValueError(
-                    f"Failed to build {self.expected_type.__name__} from config: {e}"
+                    f"Failed to build {type_label} from config: {e}"
                 ) from e
 
-            if not isinstance(result, self.expected_type):
+            if not isinstance(result, runtime_type):
                 raise ValueError(
                     f"Built object is {type(result).__name__}, "
-                    f"expected {self.expected_type.__name__}"
+                    f"expected {type_label}"
                 )
 
             return result
 
         # Case 3: Invalid type
         raise ValueError(
-            f"Expected {self.expected_type.__name__} instance or BuildCfg, "
+            f"Expected {type_label} instance or BuildCfg, "
             f"got {type(value).__name__}"
         )
 
 
 def _create_validator_function(expected_type: Type) -> Any:
     """Create a validation function for the given expected type."""
+    runtime_type = _runtime_type(expected_type)
+    type_label = _type_name(expected_type)
 
     def validate_buildable(value: Any) -> Any:
         """Validate and build if necessary."""
         # Already an instance of expected type
-        if expected_type is not object and isinstance(value, expected_type):
+        if expected_type is not object and isinstance(value, runtime_type):
             return value
 
         # BuildCfg or dict config
@@ -118,11 +141,11 @@ def _create_validator_function(expected_type: Type) -> Any:
                 raise ValueError(f"Failed to build from config: {e}") from e
 
             # Type check (optional for object type)
-            if expected_type is not object and not isinstance(result, expected_type):
+            if expected_type is not object and not isinstance(result, runtime_type):
                 logger.warning(
                     "Built object type %s doesn't match expected %s",
                     type(result).__name__,
-                    expected_type.__name__,
+                    type_label,
                 )
 
             return result
@@ -132,7 +155,7 @@ def _create_validator_function(expected_type: Type) -> Any:
             return value
 
         raise ValueError(
-            f"Expected {expected_type.__name__} instance or BuildCfg dict, "
+            f"Expected {type_label} instance or BuildCfg dict, "
             f"got {type(value).__name__}"
         )
 
