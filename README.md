@@ -45,10 +45,9 @@ pip install registry-pattern
 Core depends only on `pydantic` and `typing-extensions`. Optional extras:
 
 ```bash
-pip install 'registry-pattern[yaml]'   # ConfigFileEngine.yaml
-pip install 'registry-pattern[rpc]'    # SocketEngine.rpc
+pip install 'registry-pattern[yaml]'   # ConfigFileEngine.yaml loader
 pip install 'registry-pattern[otel]'   # OpenTelemetryReporter
-pip install 'registry-pattern[all]'    # everything above
+pip install 'registry-pattern[all]'    # both above + torch / docs / dev
 ```
 
 ## Quick start

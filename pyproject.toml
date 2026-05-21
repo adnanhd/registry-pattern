@@ -44,9 +44,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Use `from registry.engines import ConfigFileEngine` after installing the relevant extra.
+# ConfigFileEngine.yaml loader
 yaml   = ["pyyaml>=6.0"]
-rpc    = ["rpyc>=6.0"]
 # OpenTelemetryReporter (spans + Histogram metrics)
 otel   = ["opentelemetry-api>=1.20"]
 torch = [
@@ -66,10 +65,9 @@ dev = [
     "pyright>=1.1",
     "ruff>=0.1.0",
     "pyyaml>=6.0",
-    "rpyc>=6.0",
 ]
 all = [
-    "registry-pattern[yaml,rpc,otel,torch,docs,dev]",
+    "registry-pattern[yaml,otel,torch,docs,dev]",
 ]
 
 [project.urls]
