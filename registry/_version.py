@@ -33,7 +33,7 @@ from typing import Any, Dict, Optional
 
 # Version components
 VERSION_MAJOR = 0
-VERSION_MINOR = 4
+VERSION_MINOR = 5
 VERSION_PATCH = 0
 VERSION_SUFFIX = ""  # e.g., "alpha", "beta", "rc1"
 

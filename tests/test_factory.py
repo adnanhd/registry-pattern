@@ -9,7 +9,7 @@ import pytest
 from registry import BuildCfg, FunctionalRegistry, TypeRegistry, build, resolve
 
 
-class _SampleModelRegistry(TypeRegistry[object]):
+class _SampleModelRegistry(TypeRegistry[Any]):
     pass
 
 
@@ -124,7 +124,7 @@ def test_resolve_raises_on_missing() -> None:
 
 
 def test_resolve_disambiguates_with_repo() -> None:
-    class _AltModelRegistry(TypeRegistry[object]):
+    class _AltModelRegistry(TypeRegistry[Any]):
         pass
 
     _SampleModelRegistry.register_artifact(_Adder)
@@ -154,7 +154,7 @@ def test_build_writes_meta_back_to_input_dict() -> None:
         def post_init(cls, instance, meta):
             meta["sentinel"] = "written"
 
-    class _MetaWriterRegistry(TypeRegistry[object]):
+    class _MetaWriterRegistry(TypeRegistry[Any]):
         @classmethod
         def post_init(cls, instance, meta):
             meta["from_post_init"] = True

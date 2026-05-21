@@ -38,9 +38,74 @@ __all__ = ["build", "resolve", "validate", "serialize"]
 
 _REF_RE = re.compile(r"^\$([A-Za-z_][\w.]*)(\(\))?$")
 
+# External-source schemes. Each handler maps a stripped URL (after the
+# leading ``$``) to a Python value -- typically a parsed dict.
+_REF_SCHEMES: dict[str, Any] = {}
+
+
+def register_ref_scheme(prefix: str, handler: Any) -> None:
+    """Register a handler for ``$<prefix>://...`` references.
+
+    The handler receives the full URL string (e.g. ``"https://api/cfg.json"``)
+    and returns the resolved value. Used to extend ``$ref`` beyond local
+    sibling/ctx lookup -- e.g. file / HTTP fetch.
+    """
+    _REF_SCHEMES[prefix] = handler
+
+
+def _resolve_file_ref(url: str) -> Any:
+    """``$file:///path/to/cfg.{yaml,json,toml,xml}`` -> parsed dict via ConfigFileEngine."""
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    from .engines import ConfigFileEngine
+
+    parsed = urlparse(url)
+    path = Path(parsed.path)
+    ext = path.suffix.lstrip(".")
+    if not ext:
+        raise ValueError(f"$ref {url!r}: cannot infer file type (missing extension)")
+    loader = ConfigFileEngine.get_artifact(ext)
+    return loader(path)
+
+
+def _resolve_http_ref(url: str) -> Any:
+    """``$https://...`` / ``$http://...`` -> HTTP GET, JSON-decode the body."""
+    import json
+    from urllib.request import Request, urlopen
+
+    req = Request(url, headers={"Accept": "application/json"})
+    with urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+register_ref_scheme("file", _resolve_file_ref)
+register_ref_scheme("http", _resolve_http_ref)
+register_ref_scheme("https", _resolve_http_ref)
+
 
 def _resolve_ref(s: str, scope: dict[str, Any]) -> Any:
-    """``$name`` / ``$name.attr`` / ``$name.method()`` against ``scope``."""
+    """Resolve a ``$ref`` string.
+
+    Supports:
+      - ``$name``, ``$name.attr``, ``$name.method()`` -- local lookup against
+        ``scope`` (siblings + ctx).
+      - ``$file:///path/to/cfg.yaml`` -- file load via ``ConfigFileEngine``.
+      - ``$http(s)://host/path`` -- HTTP GET + JSON decode.
+
+    Extend via :func:`register_ref_scheme`.
+    """
+    # External scheme: ``$scheme://...``
+    if s.startswith("$"):
+        bare = s[1:]
+        scheme_sep = bare.find("://")
+        if scheme_sep > 0:
+            scheme = bare[:scheme_sep]
+            handler = _REF_SCHEMES.get(scheme)
+            if handler is not None:
+                return handler(bare)
+
+    # Local scope lookup
     m = _REF_RE.match(s)
     if not m:
         return s

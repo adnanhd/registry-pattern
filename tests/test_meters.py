@@ -21,7 +21,7 @@ from registry.meters import (
 )
 
 
-class _MeterTestModelReg(TypeRegistry[object]):
+class _MeterTestModelReg(TypeRegistry[Any]):
     pass
 
 

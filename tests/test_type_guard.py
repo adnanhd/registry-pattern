@@ -7,55 +7,38 @@ to accept either an instance of T or a BuildCfg that gets built into T.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import pytest
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
-from registry import Buildable, BuildCfg, ContainerMixin, TypeRegistry
+from registry import Buildable, BuildCfg, TypeRegistry
 
 # =============================================================================
 # Test Registries and Components
 # =============================================================================
 
 
-class ComponentRegistry(TypeRegistry[object]):
-    """Registry for test components."""
-
-    # Some tests exercise the legacy `_unused_data` capture; opt out of strict mode.
-    _strict_unused = False
+class ComponentRegistry(TypeRegistry[Any], repo="components"):
+    pass
 
 
-class ServiceRegistry(TypeRegistry[object]):
-    """Registry for test services."""
-
+class ServiceRegistry(TypeRegistry[Any], repo="services"):
     pass
 
 
 @pytest.fixture(autouse=True)
 def setup_registries():
-    """Setup registries before each test."""
+    """Register a fresh set of test components for each test."""
     ComponentRegistry.clear_artifacts()
     ServiceRegistry.clear_artifacts()
-    ContainerMixin.clear_context()
-    ContainerMixin._repos.update(
-        {
-            "components": ComponentRegistry,
-            "services": ServiceRegistry,
-            "default": ComponentRegistry,
-        }
-    )
 
-    # Register test components
     @ComponentRegistry.register_artifact
     class SimpleComponent:
         def __init__(self, value: int, name: str = "default"):
             self.value = value
             self.name = name
-
-        def __repr__(self):
-            return f"SimpleComponent({self.value}, {self.name!r})"
 
     @ComponentRegistry.register_artifact
     class NestedComponent:
@@ -63,21 +46,13 @@ def setup_registries():
             self.child = child
             self.multiplier = multiplier
 
-        def __repr__(self):
-            return f"NestedComponent(child={self.child}, mult={self.multiplier})"
-
     @ServiceRegistry.register_artifact
     class SimpleService:
         def __init__(self, endpoint: str, timeout: int = 30):
             self.endpoint = endpoint
             self.timeout = timeout
 
-        def __repr__(self):
-            return f"SimpleService({self.endpoint!r})"
-
     yield
-
-    ContainerMixin.clear_context()
 
 
 # =============================================================================
@@ -269,24 +244,6 @@ class TestBuildableWithMeta:
         assert meta.get("version") == "1.0"
         assert meta.get("author") == "test"
 
-    def test_extras_go_to_meta(self):
-        """Unknown fields in data go to meta._unused_data."""
-
-        class Config(BaseModel):
-            component: Buildable[object]
-
-        config = Config(
-            component={
-                "type": "SimpleComponent",
-                "data": {"value": 10, "unknown_field": "should_be_in_meta"},
-            }
-        )
-
-        meta = getattr(config.component, "__meta__", {})
-        unused = meta.get("_unused_data", {})
-        assert unused.get("unknown_field") == "should_be_in_meta"
-
-
 class TestBuildableTypeCoercion:
     """Tests for type coercion through Buildable."""
 
@@ -336,30 +293,6 @@ class TestBuildableWithMultipleRepos:
 
 class TestBuildableContext:
     """Tests for Buildable with context injection."""
-
-    def test_context_available_during_build(self):
-        """Context is available when building via Buildable."""
-
-        # Register a context-aware component
-        @ComponentRegistry.register_artifact
-        class ContextAwareComponent:
-            def __init__(self, label: str, ctx: dict = None):
-                self.label = label
-                self.ctx = ctx or {}
-
-        # Pre-populate context
-        ContainerMixin._ctx["shared"] = {"key": "value"}
-
-        class Config(BaseModel):
-            component: Buildable[object]
-
-        config = Config(
-            component={"type": "ContextAwareComponent", "data": {"label": "test"}}
-        )
-
-        assert config.component.label == "test"
-        assert config.component.ctx.get("shared") == {"key": "value"}
-
 
 class TestBuildableErrorHandling:
     """Tests for error handling in Buildable."""

@@ -1,31 +1,27 @@
-r"""Registry Pattern - DI Container / IoC Framework.
+r"""Registry Pattern -- recursive factory + name-based registries.
 
 Core API:
-    TypeRegistry, FunctionalRegistry
-    BuildCfg, ContainerMixin, Buildable
+    TypeRegistry, FunctionalRegistry, BuildCfg, Buildable
     build, resolve, validate, serialize
     ValidationError, RegistryError, CoercionError, ConformanceError, InheritanceError
 
-Optional features live in submodules and require extras:
-    from registry.engines import ConfigFileEngine, SocketEngine
-        # SocketEngine.rpc requires pip install 'registry-pattern[rpc]'
-        # ConfigFileEngine.yaml requires [yaml]
-    from registry.reporters import OpenTelemetryReporter      # needs [otel]
+Optional submodules:
+    from registry.engines import ConfigFileEngine                # [yaml] for YAML
+    from registry.reporters import OpenTelemetryReporter         # [otel]
+    from registry.experimental.torch_compat import ...           # [torch]
 
 Usage::
 
-    from registry import TypeRegistry, BuildCfg, ContainerMixin
+    from registry import TypeRegistry, build
 
-    class ModelRegistry(TypeRegistry[nn.Module], ContainerMixin):
+    class ModelRegistry(TypeRegistry[nn.Module], repo="models"):
         pass
 
     @ModelRegistry.register_artifact
-    class ResNet18:
+    class ResNet18(nn.Module):
         def __init__(self, num_classes: int = 10): ...
 
-    ContainerMixin.configure_repos({"models": ModelRegistry})
-    cfg = BuildCfg(type="ResNet18", repo="models", data={"num_classes": 10})
-    model = ContainerMixin.build_cfg(cfg)
+    model = build({"type": "ResNet18", "data": {"num_classes": 10}})
 """
 
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
@@ -54,7 +50,6 @@ from .reporters import (
     detach_reporter,
     reporters,
 )
-from .mixin import ContainerMixin, RegistryFactorizorMixin
 from .typ_registry import TypeRegistry
 from .type_guard import Buildable, BuildableValidator
 from .utils import (
@@ -75,10 +70,8 @@ __all__ = [
     # SerializerRegistry -- live in their submodules; import from there if needed.)
     "TypeRegistry",
     "FunctionalRegistry",
-    # DI Container
+    # Envelope
     "BuildCfg",
-    "ContainerMixin",
-    "RegistryFactorizorMixin",
     "is_build_cfg",
     "normalize_cfg",
     # Factory

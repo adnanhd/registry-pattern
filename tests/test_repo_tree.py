@@ -7,11 +7,11 @@ import pytest
 from registry import TypeRegistry, build, resolve
 
 
-class Models(TypeRegistry[object], repo="models"):
+class Models(TypeRegistry[Any], repo="models"):
     pass
 
 
-class ImagenetPretrained(TypeRegistry[object], repo="models.imagenet_pretrained"):
+class ImagenetPretrained(TypeRegistry[Any], repo="models.imagenet_pretrained"):
     """Stricter sub-registrar: registered classes get a hash check."""
 
     @classmethod
@@ -20,7 +20,7 @@ class ImagenetPretrained(TypeRegistry[object], repo="models.imagenet_pretrained"
         meta["pretrained_validated"] = True
 
 
-class Losses(TypeRegistry[object], repo="losses"):
+class Losses(TypeRegistry[Any], repo="losses"):
     pass
 
 
