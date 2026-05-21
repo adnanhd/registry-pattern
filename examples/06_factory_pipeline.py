@@ -165,7 +165,8 @@ def main() -> dict[str, float]:
                 },
             },
             "criterion": {"type": "CrossEntropyLoss", "data": {}},
-            "device": "cuda" if torch.cuda.is_available() else "cpu",
+            # cuda.is_available() is unreliable on +cpu wheels; default to cpu here.
+            "device": "cpu",
         },
         "meta": {},
     }
