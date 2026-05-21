@@ -25,7 +25,7 @@ from typing import (
 from pydantic import BaseModel
 from typing_extensions import ParamSpec, get_args
 
-from .mixin import ContainerMixin
+from .mixin.validator import MutableValidatorMixin
 from .storage import ThreadSafeLocalStorage
 
 # Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
@@ -65,14 +65,12 @@ def _validate_function(func: Any) -> Callable[..., Any]:
     )
 
 
-class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
+class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     """Registry for functions, with optional strict signature validation.
 
     Supports:
-      - Registration with optional explicit params_model
-      - Auto-extraction of params_model from function signature
+      - Registration of functions by name
       - Strict mode for signature type checking
-      - Multi-repo DI container via ContainerMixin
     """
 
     _repository: MutableMapping[Hashable, Callable[P, R]]

@@ -54,8 +54,6 @@ pip install 'registry-pattern[all]'    # everything above + docs / dev
 
 ## Quick start
 
-### Register a class, build it from a dict
-
 ```python
 import torch.nn as nn
 from registry import TypeRegistry, build
@@ -67,24 +65,23 @@ class ModelRegistry(TypeRegistry[nn.Module]):
 
 @ModelRegistry.register_artifact
 class MLP(nn.Module):
-    def __init__(self, in_features: int = 784, hidden: int = 128,
-                 out_features: int = 10) -> None:
+    def __init__(self, hidden: int = 128) -> None:
         super().__init__()
-        self.in_features = in_features
         self.hidden = hidden
-        self.out_features = out_features
-        self.net = nn.Sequential(
-            nn.Linear(in_features, hidden), nn.ReLU(),
-            nn.Linear(hidden, out_features),
-        )
 
 
-# Build from an envelope
 model = build({"type": "MLP", "data": {"hidden": 256}})
+assert isinstance(model, MLP) and model.hidden == 256
+```
 
-# Or directly from the class + a medium
-model = build(MLP, {"hidden": 256}, validator="python")
-model = build(MLP, "hidden: 256\n", validator="yaml")
+That's it for the smallest path. Everything below is opt-in.
+
+### Other ways to build
+
+```python
+build(MLP, {"hidden": 256}, validator="python")     # class + kwargs dict
+build(MLP, "hidden: 256\n", validator="yaml")       # class + raw YAML
+build("MLP", {"hidden": 256})                       # string name + kwargs
 ```
 
 ### Round-trip through `serialize`

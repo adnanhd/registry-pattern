@@ -17,6 +17,8 @@ This example demonstrates:
 
 from __future__ import annotations
 
+from typing import Any
+
 from registry import FunctionalRegistry, TypeRegistry
 
 # =============================================================================
@@ -29,7 +31,7 @@ print("=" * 60)
 
 
 # Create a registry for model classes
-class ModelRegistry(TypeRegistry[object]):
+class ModelRegistry(TypeRegistry[Any]):
     """Registry for ML model classes."""
 
     pass

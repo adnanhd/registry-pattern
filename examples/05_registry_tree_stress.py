@@ -41,7 +41,7 @@ from registry import (
 # =============================================================================
 
 
-class Models(TypeRegistry[object], repo="zoo.models"):
+class Models(TypeRegistry[Any], repo="zoo.models"):
     """Top of the tree -- the only invariant: parameter sanity."""
 
     @classmethod

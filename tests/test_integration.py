@@ -43,7 +43,7 @@ from registry.meters import FactoryMeter
 # =============================================================================
 
 
-class Models(TypeRegistry[object], repo="myapp.models"):
+class Models(TypeRegistry[Any], repo="myapp.models"):
     """Top-level model family: every registered class must survive a NaN-equivalent check."""
 
     @classmethod
@@ -323,7 +323,7 @@ def test_serialize_meta_hook_cascades_via_super() -> None:
     """A `serialize_meta` classmethod on a parent registry fires for all
     children via Python inheritance + cooperative super()."""
 
-    class _MetaModels(TypeRegistry[object], repo="meta_demo"):
+    class _MetaModels(TypeRegistry[Any], repo="meta_demo"):
         @classmethod
         def serialize_meta(cls, instance: Any, meta: dict[str, Any]) -> None:
             meta["family"] = "meta_demo"
@@ -439,13 +439,13 @@ def test_dollar_ref_resolves_built_inner_into_outer_kwargs() -> None:
 # =============================================================================
 
 
-class _LvlA(TypeRegistry[object], repo="depth.a"):
+class _LvlA(TypeRegistry[Any], repo="depth.a"):
     @classmethod
     def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
         meta["lvl"] = "a"
 
 
-class _LvlB(TypeRegistry[object], repo="depth.b"):
+class _LvlB(TypeRegistry[Any], repo="depth.b"):
     @classmethod
     def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
         meta["lvl"] = "b"
@@ -457,7 +457,7 @@ class _LvlC(FunctionalRegistry, repo="depth.c"):
         meta["lvl"] = "c"
 
 
-class _LvlD(TypeRegistry[object], repo="depth.d"):
+class _LvlD(TypeRegistry[Any], repo="depth.d"):
     @classmethod
     def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
         meta["lvl"] = "d"
@@ -620,6 +620,64 @@ def test_five_level_deep_build_all_registrars() -> None:
         node = next_node
 
     assert levels == ["a", "b", "c", "d", "e"]
+
+
+def test_ref_resolves_file_url_via_config_engine(tmp_path: Any) -> None:
+    """``$file:///path/cfg.json`` -> ConfigFileEngine.json -> dict."""
+    import json
+
+    @_LvlA.register_artifact
+    class _FileSink:
+        def __init__(self, payload: dict[str, Any], label: str = "x") -> None:
+            self.payload = payload
+            self.label = label
+
+    p = tmp_path / "external.json"
+    p.write_text(json.dumps({"a": 1, "b": "two"}))
+
+    cfg: dict[str, Any] = {
+        "type": "_FileSink", "repo": "depth.a", "meta": {},
+        "data": {"label": "loaded", "payload": f"$file://{p}"},
+    }
+    out = build(cfg)
+    assert out.payload == {"a": 1, "b": "two"}
+    assert out.label == "loaded"
+
+
+def test_ref_resolves_file_url_for_yaml(tmp_path: Any) -> None:
+    """``$file:///cfg.yaml`` works through the yaml ConfigFileEngine loader."""
+
+    @_LvlA.register_artifact
+    class _YamlSink:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
+    p = tmp_path / "ext.yaml"
+    p.write_text("k1: 100\nk2: hello\n")
+
+    out = build({
+        "type": "_YamlSink", "repo": "depth.a", "meta": {},
+        "data": {"payload": f"$file://{p}"},
+    })
+    assert out.payload == {"k1": 100, "k2": "hello"}
+
+
+def test_ref_register_custom_scheme() -> None:
+    """Downstream code can register its own ``$scheme://`` handler."""
+    from registry.factory import register_ref_scheme
+
+    register_ref_scheme("static", lambda url: {"injected": url})
+
+    @_LvlA.register_artifact
+    class _StaticSink:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
+    out = build({
+        "type": "_StaticSink", "repo": "depth.a", "meta": {},
+        "data": {"payload": "$static://abc/def"},
+    })
+    assert out.payload == {"injected": "static://abc/def"}
 
 
 def test_deep_build_ref_pulls_value_from_outer_sibling() -> None:

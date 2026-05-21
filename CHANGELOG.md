@@ -4,7 +4,7 @@ All notable changes to `registry-pattern` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] -- 2026-05-21
 
 ### Added
 - Recursive factory `registry.build(cfg, ...)` -- envelope-shaped or
@@ -53,18 +53,38 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   multiple repos with different post_init -- e.g. `ResNet50` in both
   `models.cnn` and `models.pretrained` with the latter enforcing a
   weight-hash check.
+- `serialize_meta(cls, instance, meta)` registry classmethod hook --
+  runs during `serialize()`, cooperative `super()` cascades parent
+  registries' emissions into children. `Models.serialize_meta` emits
+  checksum once, every sub-registry inherits it.
+- `serialize()` now returns a `BuildCfg`-shaped envelope
+  (`{type, data, meta}`) for symmetry with `build()`. Round-trip
+  pattern: `build(yaml.safe_load(obj.to_yaml()))`.
+- `registry.markers` ships duck-typed Protocols (`ValidateMarker`,
+  `ComputeMarker`, `Marker`) -- no concrete markers in core; subclass
+  the Protocol for static-type-checker support, or just duck-type.
+- `registry.experimental.torch_compat` module bundles torch-flavoured
+  extensions: 7 validate markers (`SameDeviceAs`, `BoundTo`,
+  `InputShapeMatches`, `VerifyChecksum`, `MatchesInputShape`,
+  `MatchesOutputShape`, `MatchesTargetShape`), 5 compute markers
+  (`Checksum`, `NumParams`, `Device`, `EffectiveLr`, `InputShape`,
+  `OutputShape`), `TorchProfilerMeter` (CUDA+CPU op breakdowns into
+  meta), `TensorBoardReporter` (numeric meta fields as scalars).
+- External `$ref` schemes: `$file:///path/to/cfg.{json,yaml,toml,xml}`
+  loads via `ConfigFileEngine`; `$http(s)://...` HTTP-GETs and
+  JSON-decodes. `register_ref_scheme(prefix, handler)` extends this.
+- `benchmarks/deep_build.py` -- envelope-depth scaling (1 / 5 / 10 /
+  25 / 50 / 100 levels; linear, ~0.5 ms/level).
 
 ### Changed
-- `is_build_cfg(value)` now requires BOTH `type` (str) AND `data` (dict)
-  keys. Previously only `type` was checked, allowing collisions with
-  constructor params named `type`.
+- `BuildCfg.data` is now a required field (no `default_factory`) so the
+  envelope check unambiguously rejects a plain `{"type": "x"}` dict.
+- `is_build_cfg(value)` routes through `BuildCfg.model_validate` --
+  no more hand-written `isinstance + "type" in + "data" in` membership
+  check.
+
 - `TypeRegistry[T](abstract=True)` now checks `issubclass(artifact, T)`
   against the generic parameter, not against the registry class itself.
-- `ContainerMixin.build_cfg` strict-by-default: schema validation
-  failures raise instead of silently falling back to raw data; unknown
-  kwarg keys raise instead of going to `meta._unused_data`. Opt out
-  per-registry via `_strict_params = False` / `_strict_unused = False`
-  ClassVars.
 - Python floor bumped 3.8 -> 3.10 to match what CI tests.
 
 ### Removed
@@ -76,15 +96,21 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `SchemeRegistry` (`registry/sch_registry.py`) -- superseded by
   `ValidatorRegistry` + auto-derived config schema.
 - `ConfigRegistry` and `ObjectRegistry` (`registry/extra/`) -- unused.
-- `ContainerMixin.configure_repos` and `ContainerMixin.get_repo`.
-  Declare registries with `class X(TypeRegistry[T], repo="path"): ...`
-  and use `registry.build` / `registry.resolve` instead. If you really
-  need the legacy `build_cfg` flow, set `ContainerMixin._repos = {...}`
-  directly.
+- **`ContainerMixin` entirely** -- the class, `build_cfg`, `build_named`,
+  `build_value`, `clear_context`, `get_context`, `configure_repos`,
+  `get_repo`, `_extract_params_model`, `_schemetry`, `_ctx`, `_repos`,
+  `_strict_params`, `_strict_unused`. The build pipeline lives at
+  module level in `registry.factory.build`; the registry mixin chain
+  drops to `MutableValidatorMixin`. `registry/mixin/factorizor.py`
+  deleted.
+- Legacy test files: `tests/test_factory_pattern.py`,
+  `tests/test_di_container.py`, `tests/test_nested_envelopes.py` --
+  all exercised the removed `ContainerMixin.build_cfg` flow.
+- `SocketEngine` (rpc / http handlers in `registry/engines.py`).
 - `logic_namespace` kwarg on `TypeRegistry` / `FunctionalRegistry`
   `__init_subclass__`. Use `repo=` instead.
-- `[server]` and `[http]` optional dependency extras. `flask` and
-  `requests` are no longer referenced by any code path.
+- `[server]`, `[http]`, `[rpc]` optional dependency extras. `flask`,
+  `requests`, `rpyc` no longer referenced by any code path.
 - `ConfigFileEngine` and `SocketEngine` are no longer re-exported from
   `registry`; import from `registry.engines`.
 

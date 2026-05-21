@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 import typing as _typing
 
-from .mixin import ContainerMixin
+from .mixin.validator import MutableValidatorMixin
 from .storage import ThreadSafeLocalStorage
 
 # Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
@@ -145,17 +145,15 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
 
 
 class TypeRegistry(
-    ContainerMixin[Hashable, Type[Cls]],
+    MutableValidatorMixin[Hashable, Type[Cls]],
     ABC,
     Generic[Cls],
 ):
     """Registry for classes, with optional inheritance/protocol enforcement.
 
     Supports:
-      - Registration with optional explicit params_model
-      - Auto-extraction of params_model from __init__ signature
+      - Registration of classes by name
       - Strict mode for protocol/inheritance checking
-      - Multi-repo DI container via ContainerMixin
     """
 
     _repository: MutableMapping[Hashable, Type[Cls]]

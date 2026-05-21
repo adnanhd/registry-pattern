@@ -24,7 +24,7 @@ import yaml as yaml_lib
 from registry import TypeRegistry, build, serialize
 
 
-class NetworkRegistry(TypeRegistry[object]):
+class NetworkRegistry(TypeRegistry[Any]):
     pass
 
 

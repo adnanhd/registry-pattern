@@ -33,8 +33,8 @@ from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, core_schema
 
+from . import factory
 from .container import BuildCfg, is_build_cfg, normalize_cfg
-from .mixin.factorizor import ContainerMixin
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +77,14 @@ class BuildableValidator(Generic[T]):
 
         # Case 2: BuildCfg or dict that looks like BuildCfg
         if isinstance(value, BuildCfg) or is_build_cfg(value):
-            # Normalize to BuildCfg
             cfg = normalize_cfg(value) if isinstance(value, dict) else value
-
-            # Build the object
             try:
-                result = ContainerMixin.build_cfg(cfg)
+                result = factory.build(cfg)
             except Exception as e:
                 raise ValueError(
                     f"Failed to build {self.expected_type.__name__} from config: {e}"
                 ) from e
 
-            # Validate the result type
             if not isinstance(result, self.expected_type):
                 raise ValueError(
                     f"Built object is {type(result).__name__}, "
@@ -116,9 +112,8 @@ def _create_validator_function(expected_type: Type) -> Any:
         # BuildCfg or dict config
         if isinstance(value, BuildCfg) or is_build_cfg(value):
             cfg = normalize_cfg(value) if isinstance(value, dict) else value
-
             try:
-                result = ContainerMixin.build_cfg(cfg)
+                result = factory.build(cfg)
             except Exception as e:
                 raise ValueError(f"Failed to build from config: {e}") from e
 
@@ -179,7 +174,7 @@ class Buildable(Generic[T]):
 
     The Buildable type will:
     1. Pass through values that are already instances of the expected type
-    2. Build values that are BuildCfg or dict configs using ContainerMixin.build_cfg()
+    2. Build values that are BuildCfg or dict configs using ``registry.build()``
     3. Validate that built values match the expected type
 
     Example:
@@ -187,8 +182,6 @@ class Buildable(Generic[T]):
         class MyModel:
             def __init__(self, size: int):
                 self.size = size
-
-        ContainerMixin.configure_repos({"models": ModelRegistry})
 
         class Config(BaseModel):
             model: Buildable[MyModel]

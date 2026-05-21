@@ -34,7 +34,7 @@ from typing import Any, Dict
 from ._version import __version__, print_version_info
 from .container import is_build_cfg, normalize_cfg
 from .engines import ConfigFileEngine
-from .mixin import ContainerMixin
+from .factory import build
 
 
 def cmd_info(args: argparse.Namespace) -> int:
@@ -120,7 +120,7 @@ def cmd_build(args: argparse.Namespace) -> int:
                 )
                 continue
 
-            obj = ContainerMixin.build_cfg(cfg)
+            obj = build(cfg)
             results[name] = obj
 
             if args.verbose:
@@ -179,12 +179,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.verbose:
         print(f"Loaded config from: {filepath}")
 
-    ContainerMixin.clear_context()
+    ctx: Dict[str, Any] = {}
 
     if is_build_cfg(config):
         try:
-            obj = ContainerMixin.build_cfg(normalize_cfg(config))
-            ContainerMixin._ctx["main"] = obj
+            ctx["main"] = build(normalize_cfg(config), ctx=ctx)
         except Exception as e:
             print(f"Error building config: {e}", file=sys.stderr)
             return 1
@@ -192,14 +191,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         for key, value in config.items():
             if is_build_cfg(value):
                 try:
-                    obj = ContainerMixin.build_named(key, value)
+                    ctx[key] = build(value, ctx=ctx)
                     if args.verbose:
-                        print(f"Built '{key}': {type(obj).__name__}")
+                        print(f"Built '{key}': {type(ctx[key]).__name__}")
                 except Exception as e:
                     print(f"Error building '{key}': {e}", file=sys.stderr)
                     return 1
-
-    ctx = ContainerMixin.get_context()
 
     entry = args.entry or "main"
     if entry not in ctx:
