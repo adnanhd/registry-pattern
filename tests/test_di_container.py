@@ -268,7 +268,7 @@ class TestBuildCfgHelpers:
 
     def test_buildcfg_with_unused_data(self):
         """Test BuildCfg.with_unused_data method."""
-        cfg = BuildCfg(type="test", meta={"existing": "value"})
+        cfg = BuildCfg(type="test", data={}, meta={"existing": "value"})
         new_cfg = cfg.with_unused_data({"extra1": 1, "extra2": 2})
 
         assert cfg.meta == {"existing": "value"}  # original unchanged

@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Type, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,10 @@ class BuildCfg(BaseModel):
 
     type: str
     repo: str = "default"
-    data: Dict[str, Any] = Field(default_factory=dict)
+    # ``data`` is required (no default) so that the envelope can be detected
+    # unambiguously -- a plain dict like ``{"type": "x"}`` (e.g. a class with
+    # a `type` constructor param) does not accidentally match the schema.
+    data: Dict[str, Any]
     meta: Dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -81,23 +84,20 @@ class BuildCfg(BaseModel):
 
 
 def is_build_cfg(value: Any) -> bool:
-    """Check if a value looks like a BuildCfg dict.
+    """Check whether ``value`` parses as a BuildCfg envelope.
 
-    Requires both "type" (str) and "data" (dict) keys to avoid colliding with
-    constructor params that happen to be named "type".
-
-    Args:
-        value: Any value to check.
-
-    Returns:
-        True if value is a BuildCfg instance, or a dict with both "type" (str)
-        and "data" (dict) keys.
+    Routes through ``BuildCfg.model_validate`` -- never duck-types. A bare
+    dict like ``{"type": "x"}`` fails because ``data`` is required by
+    BuildCfg's schema; that's the intentional safeguard against confusing a
+    class with a ``type`` constructor param with an envelope.
     """
     if isinstance(value, BuildCfg):
         return True
-    if isinstance(value, dict):
-        return isinstance(value.get("type"), str) and isinstance(value.get("data"), dict)
-    return False
+    try:
+        BuildCfg.model_validate(value)
+        return True
+    except (ValidationError, TypeError):
+        return False
 
 
 def normalize_cfg(

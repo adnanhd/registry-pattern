@@ -92,52 +92,71 @@ model = build(MLP, "hidden: 256\n", validator="yaml")
 ```python
 from registry import serialize
 
-data = serialize(model, serializator="python")   # -> {"in_features": 784, ...}
-yaml = serialize(model, serializator="yaml")     # -> yaml string
-json = serialize(model, serializator="json")     # -> json string
+env = serialize(model, serializator="python")
+# -> {"type": "MLP", "data": {"in_features": 784, ...}, "meta": {"checksum": ...}}
+yaml = serialize(model, serializator="yaml")     # YAML of the envelope
+json = serialize(model, serializator="json")     # JSON of the envelope
 ```
 
 ### Tree-shaped sub-registries
 
+Two separate hooks across the tree:
+
+- **`post_init(cls, instance, meta)`** -- *validation* during build. Raises on mismatch. Runs after `target.__init__`.
+- **`serialize_meta(cls, instance, meta)`** -- *emission* during `serialize()`. Writes provenance into the envelope's `meta`. Cooperative `super()` cascades up the chain.
+
 ```python
 import torchvision.models as tvm
 from torch import nn
-from registry import TypeRegistry, build
+from registry import TypeRegistry, build, serialize
 from registry.experimental.torch_compat import hash_state_dict
 
 
 class Models(TypeRegistry[nn.Module], repo="my.models"):
+    """Every registered model emits its checksum on serialize."""
+
     @classmethod
-    def post_init(cls, instance, meta):
+    def serialize_meta(cls, instance, meta):
         meta["family"] = "models"
+        meta["checksum"] = hash_state_dict(instance.state_dict())
 
 
 class CNNModels(Models, repo="my.models.cnn"):
     @classmethod
     def post_init(cls, instance, meta):
-        super().post_init(instance, meta)            # parent first
+        # build-time validation -- must be a CNN
         if not any(isinstance(m, nn.Conv2d) for m in instance.modules()):
             raise ValueError("not a CNN")
 
+    @classmethod
+    def serialize_meta(cls, instance, meta):
+        super().serialize_meta(instance, meta)  # checksum + family
+        meta["axis"] = "cnn"
+
 
 class Pretrained(Models, repo="my.models.pretrained"):
+    """Validates that loaded weights match a pinned expected hash.
+
+    Emission is inherited from Models -- no need to redeclare checksum here.
+    """
+
     @classmethod
     def post_init(cls, instance, meta):
-        super().post_init(instance, meta)
-        # post_init runs AFTER target.__init__, which loaded the weights
-        # via torchvision's `weights=` API. The checksum reflects the
-        # actually-loaded state_dict, not a freshly-initialized one.
-        meta["checksum"] = hash_state_dict(instance.state_dict())
+        expected = getattr(instance, "_expected_hash", None)
+        if expected is None:
+            raise ValueError("Pretrained: instance must declare _expected_hash")
+        actual = hash_state_dict(instance.state_dict())
+        if actual != expected:
+            raise ValueError(f"weight hash mismatch: {actual} != {expected}")
 
 
-# Same class in multiple sub-registries -- different disciplines.
 @CNNModels.register_artifact
 @Pretrained.register_artifact
 class ResNet50(nn.Module):
-    """Wraps torchvision.resnet50. Weight loading happens inside __init__,
-    before post_init runs -- so Pretrained.post_init can verify or record
-    the loaded weights' checksum.
-    """
+    """Weight loading happens inside __init__. Pretrained.post_init
+    VALIDATES the loaded hash; Models.serialize_meta EMITS it on serialize."""
+
+    _expected_hash = "sha256:..."
 
     def __init__(self, pretrained: bool = True) -> None:
         super().__init__()
@@ -148,10 +167,25 @@ class ResNet50(nn.Module):
         return self.net(x)
 
 
-build("ResNet50", {"pretrained": True}, repo="my.models.cnn")          # CNN check runs
-build("ResNet50", {"pretrained": True}, repo="my.models.pretrained")   # checksum runs
+build("ResNet50", {"pretrained": True}, repo="my.models.cnn")          # CNN check
+build("ResNet50", {"pretrained": True}, repo="my.models.pretrained")   # hash check
+serialize(model, repo="my.models.cnn")
+# -> {"type": "ResNet50", "data": {"pretrained": True},
+#     "meta": {"family": "models", "checksum": "sha256:...", "axis": "cnn"}}
 build("ResNet50", {"pretrained": True}, repo="my.models")              # ambiguous: pick a sub
 ```
+
+#### Cross-arg shape contracts
+
+The marker mechanism extends to shape checks across multiple kwargs of a
+single function. `torch_compat` ships `MatchesInputShape` /
+`MatchesOutputShape` / `MatchesTargetShape`, which read each peer's
+`__meta__["input_shape" | "output_shape" | "target_shape"]` (populated by a
+registry's `serialize_meta` hook). A training step then validates that the
+batch's shape matches the model's declared input, the criterion's input
+shape matches the model's output, and the batch's target shape matches the
+criterion's target_shape -- without explicit boilerplate inside the
+function.
 
 ### Annotated markers: declarative cross-arg checks and meta provenance
 
