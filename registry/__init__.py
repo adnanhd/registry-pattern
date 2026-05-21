@@ -32,6 +32,13 @@ from ._version import __version__, get_debug_info, get_version_info, print_versi
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .factory import build, resolve
 from .fnc_registry import FunctionalRegistry
+from .observers import (
+    FactoryObserver,
+    HTTPDashboardObserver,
+    JournalObserver,
+    attach,
+    detach,
+)
 from .mixin import ContainerMixin, RegistryFactorizorMixin
 from .sch_registry import SchemeRegistry
 from .typ_registry import TypeRegistry
@@ -65,6 +72,12 @@ __all__ = [
     # Factory
     "build",
     "resolve",
+    # Observers
+    "FactoryObserver",
+    "JournalObserver",
+    "HTTPDashboardObserver",
+    "attach",
+    "detach",
     # Type Guard
     "Buildable",
     "BuildableValidator",
