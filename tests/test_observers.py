@@ -150,3 +150,108 @@ def test_nested_build_emits_per_envelope() -> None:
     phases = [e[0] for e in rec.events]
     assert phases.count("start") == 2
     assert phases.count("built") == 2
+
+
+# ---------------------------------------------------------------------------
+# Resource-consumption observers
+# ---------------------------------------------------------------------------
+
+
+from registry.observers import (  # noqa: E402
+    CPUObserver,
+    HeapObserver,
+    IOObserver,
+    LifetimeObserver,
+    MemoryObserver,
+    NetworkObserver,
+    RecursionObserver,
+)
+
+
+def test_lifetime_observer_writes_seconds_to_meta() -> None:
+    attach(LifetimeObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    assert "lifetime_seconds" in cfg["meta"]
+    assert cfg["meta"]["lifetime_seconds"] >= 0.0
+
+
+def test_cpu_observer_writes_user_sys_to_meta() -> None:
+    attach(CPUObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    assert "cpu_user_seconds" in cfg["meta"]
+    assert "cpu_system_seconds" in cfg["meta"]
+
+
+def test_memory_observer_writes_rss() -> None:
+    attach(MemoryObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    assert cfg["meta"]["rss_max_kb"] > 0
+    assert "rss_delta_kb" in cfg["meta"]
+
+
+def test_io_observer_writes_bytes() -> None:
+    attach(IOObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    # /proc/self/io is Linux-only; counters should exist (possibly 0).
+    for key in ("io_read_bytes", "io_write_bytes", "io_rchar_bytes", "io_wchar_bytes"):
+        assert key in cfg["meta"]
+
+
+def test_network_observer_writes_rx_tx() -> None:
+    attach(NetworkObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    assert "net_rx_bytes" in cfg["meta"]
+    assert "net_tx_bytes" in cfg["meta"]
+
+
+def test_heap_observer_writes_tracemalloc_stats() -> None:
+    attach(HeapObserver())
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 1}, "meta": {}}
+    build(cfg)
+    assert "heap_current_bytes" in cfg["meta"]
+    assert "heap_delta_bytes" in cfg["meta"]
+    assert "heap_peak_bytes" in cfg["meta"]
+
+
+def test_recursion_observer_tracks_nested_depth() -> None:
+    attach(RecursionObserver())
+
+    @_ObsTestFnReg.register_artifact
+    def _outer(inner: Any) -> Any:
+        return inner
+
+    cfg: dict[str, Any] = {
+        "type": "_outer",
+        "data": {"inner": {"type": "_ObsAdder", "data": {"base": 1}, "meta": {}}},
+        "meta": {},
+    }
+    build(cfg)
+    # Top-level build_depth == 1 (this envelope), max == 2 (saw the inner at depth 2).
+    assert cfg["meta"]["build_depth"] == 1
+    assert cfg["meta"]["build_max_depth"] == 2
+    assert cfg["data"]["inner"]["meta"]["build_depth"] == 2
+
+
+def test_all_observers_compose() -> None:
+    """All 6 resource observers can attach together without conflict."""
+    attach(LifetimeObserver())
+    attach(CPUObserver())
+    attach(MemoryObserver())
+    attach(IOObserver())
+    attach(NetworkObserver())
+    attach(HeapObserver())
+
+    cfg: dict[str, Any] = {"type": "_ok_fn", "data": {"x": 2}, "meta": {}}
+    out = build(cfg)
+    assert out == 4
+    # Every observer wrote at least one key
+    expected_keys = {
+        "lifetime_seconds", "cpu_user_seconds", "rss_max_kb",
+        "io_read_bytes", "net_rx_bytes", "heap_current_bytes",
+    }
+    assert expected_keys <= set(cfg["meta"])

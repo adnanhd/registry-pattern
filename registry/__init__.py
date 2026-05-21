@@ -33,9 +33,16 @@ from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .factory import build, resolve
 from .fnc_registry import FunctionalRegistry
 from .observers import (
+    CPUObserver,
     FactoryObserver,
     HTTPDashboardObserver,
+    HeapObserver,
+    IOObserver,
     JournalObserver,
+    LifetimeObserver,
+    MemoryObserver,
+    NetworkObserver,
+    RecursionObserver,
     attach,
     detach,
 )
@@ -76,6 +83,13 @@ __all__ = [
     "FactoryObserver",
     "JournalObserver",
     "HTTPDashboardObserver",
+    "LifetimeObserver",
+    "CPUObserver",
+    "MemoryObserver",
+    "IOObserver",
+    "NetworkObserver",
+    "HeapObserver",
+    "RecursionObserver",
     "attach",
     "detach",
     # Type Guard
