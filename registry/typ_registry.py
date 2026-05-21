@@ -181,7 +181,7 @@ class TypeRegistry(
         Args:
             strict: Enforce protocol conformance checks.
             abstract: Require registered classes to inherit from this registry.
-            repo: Dotted path for hierarchical resolve, e.g. ``"cofinn.networks"``.
+            repo: Dotted path for hierarchical resolve, e.g. ``"myapp.networks"``.
                 Defaults to ``cls.__name__``. Used by ``resolve(name, repo=...)``
                 for prefix-or-exact matching across the registry tree.
 
