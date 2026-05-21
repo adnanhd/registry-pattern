@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from typing_extensions import ParamSpec, get_args
 
 from .mixin import ContainerMixin
-from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
+from .storage import ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
     ValidationError,
@@ -93,22 +93,19 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
     def __init_subclass__(
         cls,
         strict: bool = False,
-        logic_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize a FunctionalRegistry subclass.
 
         Args:
             strict: Enforce signature type checking.
-            logic_namespace: Optional remote storage namespace.
+
+        For remote storage, assign ``cls._repository`` directly with a
+        ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
+        ``http`` extra).
         """
         super().__init_subclass__(**kwargs)
-        if logic_namespace is None:
-            cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
-        else:
-            cls._repository = RemoteStorageProxy[Hashable, Callable[P, R]](
-                namespace=logic_namespace
-            )
+        cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
         cls._strict = strict
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(

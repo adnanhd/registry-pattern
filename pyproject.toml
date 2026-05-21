@@ -7,7 +7,7 @@ name = "registry-pattern"
 version = "0.4.0"
 description = "A flexible registry pattern with DI container, Pydantic validation, and recursive config building"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Adnan Harun Dogan", email = "adnanharundogan@gmail.com"}
@@ -29,8 +29,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -39,17 +37,19 @@ classifiers = [
     "Topic :: Software Development :: Object Brokering",
     "Typing :: Typed",
 ]
+# Core deps only. Optional features live under [project.optional-dependencies].
 dependencies = [
     "pydantic>=2.0",
     "typing-extensions>=4.0",
-    "pyyaml>=6.0",
-    "tomli>=2.0;python_version<'3.11'",
-    "requests>=2.28",
-    "flask>=3.0",
-    "rpyc>=6.0",
 ]
 
 [project.optional-dependencies]
+# Use `from registry.engines import ConfigFileEngine` after installing the relevant extra.
+yaml   = ["pyyaml>=6.0"]
+http   = ["requests>=2.28"]
+rpc    = ["rpyc>=6.0"]
+# Remote registry server + CLI.
+server = ["flask>=3.0", "requests>=2.28"]
 torch = [
     "torch>=2.0",
     "torchvision>=0.15",
@@ -66,9 +66,13 @@ dev = [
     "flake8>=6.0",
     "pyright>=1.1",
     "ruff>=0.1.0",
+    "pyyaml>=6.0",
+    "requests>=2.28",
+    "flask>=3.0",
+    "rpyc>=6.0",
 ]
 all = [
-    "registry-pattern[torch,docs,dev]",
+    "registry-pattern[yaml,http,rpc,server,torch,docs,dev]",
 ]
 
 [project.urls]
@@ -92,7 +96,7 @@ addopts = "-v --tb=short"
 
 [tool.black]
 line-length = 88
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 exclude = '''
 /(
     \.git
@@ -106,14 +110,14 @@ exclude = '''
 [tool.pyright]
 include = ["registry", "tests"]
 exclude = ["build", "dist", ".venv"]
-pythonVersion = "3.8"
+pythonVersion = "3.10"
 typeCheckingMode = "basic"
 reportMissingImports = true
 reportMissingTypeStubs = false
 
 [tool.ruff]
 line-length = 88
-target-version = "py38"
+target-version = "py310"
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
