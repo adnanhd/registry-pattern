@@ -430,3 +430,222 @@ def test_dollar_ref_resolves_built_inner_into_outer_kwargs() -> None:
     }
     out = build(cfg, repo="myapp.steps")
     assert out == 90
+
+
+# =============================================================================
+# Deep nested builds: each level instantiates from a distinct registrar.
+# Verifies the recursive pipeline traverses arbitrary depth and every
+# level's post_init hook fires against its OWN envelope's meta.
+# =============================================================================
+
+
+class _LvlA(TypeRegistry[object], repo="depth.a"):
+    @classmethod
+    def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
+        meta["lvl"] = "a"
+
+
+class _LvlB(TypeRegistry[object], repo="depth.b"):
+    @classmethod
+    def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
+        meta["lvl"] = "b"
+
+
+class _LvlC(FunctionalRegistry, repo="depth.c"):
+    @classmethod
+    def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
+        meta["lvl"] = "c"
+
+
+class _LvlD(TypeRegistry[object], repo="depth.d"):
+    @classmethod
+    def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
+        meta["lvl"] = "d"
+
+
+class _LvlE(FunctionalRegistry, repo="depth.e"):
+    @classmethod
+    def post_init(cls, instance: Any, meta: dict[str, Any]) -> None:
+        meta["lvl"] = "e"
+
+
+@_LvlA.register_artifact
+class _NodeA:
+    def __init__(self, child: Any, label: str = "a") -> None:
+        self.child = child
+        self.label = label
+
+
+@_LvlB.register_artifact
+class _NodeB:
+    def __init__(self, child: Any, n: int = 0) -> None:
+        self.child = child
+        self.n = n
+
+
+@_LvlC.register_artifact
+def _wrap_c(child: Any, factor: int = 1) -> dict[str, Any]:
+    return {"wrapped": child, "factor": factor}
+
+
+@_LvlD.register_artifact
+class _NodeD:
+    def __init__(self, child: Any) -> None:
+        self.child = child
+
+
+@_LvlE.register_artifact
+def _leaf(value: int = 0) -> int:
+    return value
+
+
+def test_three_level_deep_build_mixed_registrars() -> None:
+    """L1 (TypeRegistry) -> L2 (FunctionalRegistry) -> L3 (TypeRegistry leaf)."""
+    cfg: dict[str, Any] = {
+        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "data": {
+            "label": "root",
+            "child": {
+                "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                "data": {
+                    "factor": 7,
+                    "child": {
+                        "type": "_NodeD", "repo": "depth.d", "meta": {},
+                        "data": {"child": "terminal"},
+                    },
+                },
+            },
+        },
+    }
+    out = build(cfg)
+
+    # Structural traversal
+    assert out.label == "root"
+    assert out.child["factor"] == 7
+    assert out.child["wrapped"].child == "terminal"
+
+    # Each level's post_init wrote into its OWN envelope's meta
+    assert cfg["meta"]["lvl"] == "a"
+    assert cfg["data"]["child"]["meta"]["lvl"] == "c"
+    assert cfg["data"]["child"]["data"]["child"]["meta"]["lvl"] == "d"
+
+
+def test_four_level_deep_build_distinct_registrars() -> None:
+    """A -> B -> C -> E (leaf), four distinct registries."""
+    cfg: dict[str, Any] = {
+        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "data": {
+            "child": {
+                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "data": {
+                    "n": 2,
+                    "child": {
+                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "data": {
+                            "factor": 3,
+                            "child": {
+                                "type": "_leaf", "repo": "depth.e", "meta": {},
+                                "data": {"value": 99},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    out = build(cfg)
+
+    assert out.child.n == 2
+    assert out.child.child["factor"] == 3
+    assert out.child.child["wrapped"] == 99   # leaf function returned the int
+
+    # Verify each level's post_init fired against its OWN envelope's meta
+    meta_a = cfg["meta"]
+    meta_b = cfg["data"]["child"]["meta"]
+    meta_c = cfg["data"]["child"]["data"]["child"]["meta"]
+    meta_e = cfg["data"]["child"]["data"]["child"]["data"]["child"]["meta"]
+    assert (meta_a["lvl"], meta_b["lvl"], meta_c["lvl"], meta_e["lvl"]) == ("a", "b", "c", "e")
+
+
+def test_five_level_deep_build_all_registrars() -> None:
+    """A -> B -> C -> D -> E, every level different registrar; FunctionalRegistry
+    nodes interleaved with TypeRegistry nodes."""
+    cfg: dict[str, Any] = {
+        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "data": {
+            "child": {
+                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "data": {
+                    "n": 1,
+                    "child": {
+                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "data": {
+                            "factor": 5,
+                            "child": {
+                                "type": "_NodeD", "repo": "depth.d", "meta": {},
+                                "data": {
+                                    "child": {
+                                        "type": "_leaf", "repo": "depth.e", "meta": {},
+                                        "data": {"value": 42},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    out = build(cfg)
+
+    # Walk the constructed graph
+    assert out.child.n == 1
+    assert out.child.child["factor"] == 5
+    assert out.child.child["wrapped"].child == 42
+
+    # Every level's post_init fired in its OWN envelope's meta
+    levels = []
+    node = cfg
+    while True:
+        levels.append(node["meta"].get("lvl"))
+        # find the nested envelope key
+        data = node["data"]
+        next_node = None
+        for v in data.values():
+            if isinstance(v, dict) and "type" in v and "data" in v:
+                next_node = v
+                break
+        if next_node is None:
+            break
+        node = next_node
+
+    assert levels == ["a", "b", "c", "d", "e"]
+
+
+def test_deep_build_ref_pulls_value_from_outer_sibling() -> None:
+    """At depth 4, a sibling uses ``$ref`` to read from a peer at the same level."""
+    cfg: dict[str, Any] = {
+        "type": "_NodeA", "repo": "depth.a", "meta": {},
+        "data": {
+            "label": "outer",
+            "child": {
+                "type": "_NodeB", "repo": "depth.b", "meta": {},
+                "data": {
+                    "n": 13,
+                    "child": {
+                        "type": "_wrap_c", "repo": "depth.c", "meta": {},
+                        "data": {
+                            # $ref reads from this envelope's sibling scope
+                            "factor": "$n",
+                            "child": {
+                                "type": "_NodeD", "repo": "depth.d", "meta": {},
+                                "data": {"child": "leaf"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    out = build(cfg)
+    assert out.child.child["factor"] == 13   # $n -> 13 (from _NodeB sibling)
