@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from registry import ValidatorRegistry
+from registry.validators import ValidatorRegistry
 
 
 class _Sample:
