@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Cofinn-style one-liner methods bound to factory primitives.
 
-Existing cofinn classes have ``add_args`` / ``from_args`` / ``to_config``
+Existing legacy classes have ``add_args`` / ``from_args`` / ``to_config``
 methods with duplicated implementations. The library exposes ``build()`` and
 ``serialize()`` as generic primitives so each method body collapses to a
 single line that delegates to the pipeline.
@@ -23,7 +23,7 @@ class NetworkRegistry(TypeRegistry[object]):
 
 
 @NetworkRegistry.register_artifact
-class CoFINN:
+class MyModel:
     def __init__(self, in_channels: int = 3, hidden: int = 64) -> None:
         self.in_channels: int = in_channels
         self.hidden: int = hidden
@@ -31,19 +31,19 @@ class CoFINN:
     # ---- inbound: one-liners delegating to build() with a medium name ----
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "CoFINN":
+    def from_dict(cls, data: dict[str, Any]) -> "MyModel":
         return build(cls, data, validator="python")
 
     @classmethod
-    def from_yaml(cls, text: str) -> "CoFINN":
+    def from_yaml(cls, text: str) -> "MyModel":
         return build(cls, text, validator="yaml")
 
     @classmethod
-    def from_json(cls, text: str) -> "CoFINN":
+    def from_json(cls, text: str) -> "MyModel":
         return build(cls, text, validator="json")
 
     @classmethod
-    def from_args(cls, args: Namespace) -> "CoFINN":
+    def from_args(cls, args: Namespace) -> "MyModel":
         return build(cls, args, validator="argparse")
 
     # ---- outbound: one-liners delegating to serialize() ----
@@ -63,11 +63,11 @@ class CoFINN:
 
 def main() -> None:
     # 1) From a YAML string
-    m1 = CoFINN.from_yaml("in_channels: 1\nhidden: 128\n")
+    m1 = MyModel.from_yaml("in_channels: 1\nhidden: 128\n")
     print("from_yaml:", m1.in_channels, m1.hidden)
 
     # 2) From a Python dict
-    m2 = CoFINN.from_dict({"in_channels": 4, "hidden": 32})
+    m2 = MyModel.from_dict({"in_channels": 4, "hidden": 32})
     print("from_dict:", m2.in_channels, m2.hidden)
 
     # 3) From argparse
@@ -75,12 +75,12 @@ def main() -> None:
     parser.add_argument("--in-channels", type=int, default=3)
     parser.add_argument("--hidden", type=int, default=64)
     args = parser.parse_args(["--in-channels", "8", "--hidden", "16"])
-    m3 = CoFINN.from_args(args)
+    m3 = MyModel.from_args(args)
     print("from_args:", m3.in_channels, m3.hidden)
 
     # 4) Round-trip
     yaml_text = m1.to_yaml()
-    m4 = CoFINN.from_yaml(yaml_text)
+    m4 = MyModel.from_yaml(yaml_text)
     assert (m1.in_channels, m1.hidden) == (m4.in_channels, m4.hidden)
     print("yaml round-trip OK")
     print("to_dict :", m1.to_dict())

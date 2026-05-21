@@ -248,14 +248,11 @@ relevant submodule (`registry.markers`, `registry.validators`,
 
 The `examples/` directory walks through the major patterns:
 
-- `01_registry_basics.py`        -- bare registries
-- `02_factory_pattern.py`        -- Pydantic validation + envelopes
-- `03_di_container.py`           -- legacy `ContainerMixin.build_cfg`
-- `04_pytorch_mnist.py`          -- end-to-end MNIST with PyTorch
-- `05_full_experiment_config.py` -- full experiment from a YAML
-- `06_factory_pipeline.py`       -- the new pipeline end-to-end
-- `07_custom_reporters.py`       -- WandB / TensorBoard reporter extensions
-- `08_cofinn_pattern.py`         -- one-liner from_X / to_X methods
+- `01_registry_basics.py`         -- bare registries (`@register_artifact` + `get_artifact`)
+- `02_factory_pipeline.py`        -- the recursive `build()` pipeline end-to-end with PyTorch + MNIST
+- `03_custom_reporters.py`        -- WandB / TensorBoard reporter extensions
+- `04_one_liner_methods.py`       -- one-liner `from_X` / `to_X` methods via `build` / `serialize`
+- `05_registry_tree_stress.py`    -- 4-level deep tree, diamond MRO, meta_schema escalation, cross-axis $ref
 
 ## CLI
 
