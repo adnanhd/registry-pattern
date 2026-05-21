@@ -139,6 +139,10 @@ def build(
     Both modes go through the same pipeline (validation, meters, reporters,
     post hooks, meta). Returns the constructed instance or function result.
     """
+    # String-name mode: look up the class via resolve, then drop into class mode.
+    if isinstance(cfg_or_target, str):
+        _, cfg_or_target = resolve(cfg_or_target, repo=repo)
+
     # Explicit class mode: decode raw data via the medium, then run the
     # standard envelope pipeline with validator="noop" (already validated).
     if not isinstance(cfg_or_target, (BuildCfg, dict)) and callable(cfg_or_target):
