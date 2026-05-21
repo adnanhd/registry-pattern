@@ -47,7 +47,7 @@ from ._version import __version__, print_version_info
 from .container import is_build_cfg, normalize_cfg
 from .engines import ConfigFileEngine
 from .mixin import ContainerMixin
-from .storage import RemoteStorageProxy
+from .remote_storage import RemoteStorageProxy
 from .typ_registry import TypeRegistry
 
 

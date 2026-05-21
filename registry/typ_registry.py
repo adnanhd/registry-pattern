@@ -25,7 +25,7 @@ from typing import (
 from pydantic import BaseModel
 
 from .mixin import ContainerMixin
-from .storage import RemoteStorageProxy, ThreadSafeLocalStorage
+from .storage import ThreadSafeLocalStorage
 from .utils import (
     ConformanceError,
     InheritanceError,
@@ -155,7 +155,6 @@ class TypeRegistry(
         cls,
         strict: bool = False,
         abstract: bool = False,
-        logic_namespace: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize the TypeRegistry subclass.
@@ -163,15 +162,13 @@ class TypeRegistry(
         Args:
             strict: Enforce protocol conformance checks.
             abstract: Require registered classes to inherit from this registry.
-            logic_namespace: Optional remote storage namespace.
+
+        For remote storage, assign ``cls._repository`` directly with a
+        ``RemoteStorageProxy`` from ``registry.remote_storage`` (requires the
+        ``http`` extra).
         """
         super().__init_subclass__(**kwargs)
-        if logic_namespace is None:
-            cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
-        else:
-            cls._repository = RemoteStorageProxy[Hashable, Type[Cls]](
-                namespace=logic_namespace
-            )
+        cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         cls._strict = strict
         cls._abstract = abstract
         if logger.isEnabledFor(logging.DEBUG):

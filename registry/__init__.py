@@ -1,27 +1,16 @@
 r"""Registry Pattern - DI Container / IoC Framework.
 
-This package provides a registry pattern implementation with dependency injection
-capabilities for building object graphs from nested configurations.
+Core API:
+    TypeRegistry, FunctionalRegistry, SchemeRegistry
+    BuildCfg, ContainerMixin, Buildable
+    ValidationError, RegistryError, CoercionError, ConformanceError, InheritanceError
 
-Core Registries:
-    TypeRegistry: Class registry with inheritance/protocol checks.
-    FunctionalRegistry: Function registry with signature validation.
-    SchemeRegistry: Pydantic config scheme registry.
-
-DI Container:
-    BuildCfg: Configuration envelope (type/repo/data/meta).
-    ContainerMixin: Mixin for recursive object graph construction.
-
-Engines:
-    ConfigFileEngine: Registry for config file loaders (json, yaml, toml).
-    SocketEngine: Registry for network handlers (rpc, http).
-
-Exceptions:
-    ValidationError: Base validation error with suggestions and context.
-    RegistryError: Key-related mapping errors.
-    CoercionError: Value coercion failures.
-    ConformanceError: Signature/protocol conformance failures.
-    InheritanceError: Class inheritance failures.
+Optional features live in submodules and require extras:
+    from registry.engines import ConfigFileEngine, SocketEngine
+        # SocketEngine.rpc requires pip install 'registry-pattern[rpc]'
+        # SocketEngine.http and ConfigFileEngine.yaml require [http] and [yaml]
+    from registry.remote_storage import RemoteStorageProxy   # needs [http]
+    python -m registry server ...                            # needs [server]
 
 Usage::
 
@@ -34,47 +23,13 @@ Usage::
     class ResNet18:
         def __init__(self, num_classes: int = 10): ...
 
-    # Configure repos and build
     ContainerMixin.configure_repos({"models": ModelRegistry})
-
-    cfg = BuildCfg(
-        type="ResNet18",
-        repo="models",
-        data={"num_classes": 10},
-    )
+    cfg = BuildCfg(type="ResNet18", repo="models", data={"num_classes": 10})
     model = ContainerMixin.build_cfg(cfg)
 """
 
-import sys
-
-_REQUIRED_DEPS = {
-    "pydantic": "pip install pydantic",
-    "typing_extensions": "pip install typing-extensions",
-    "yaml": "pip install pyyaml",
-    "requests": "pip install requests",
-    "rpyc": "pip install rpyc",
-    "flask": "pip install flask",
-}
-
-if sys.version_info < (3, 11):
-    _REQUIRED_DEPS["tomli"] = "pip install tomli"
-
-_missing = []
-for _mod, _install in _REQUIRED_DEPS.items():
-    try:
-        __import__(_mod)
-    except ImportError:
-        _missing.append(f"  - {_mod}: {_install}")
-
-if _missing:
-    raise ImportError(
-        "registry-pattern is missing required dependencies:\n"
-        + "\n".join(_missing)
-    )
-
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
 from .container import BuildCfg, is_build_cfg, normalize_cfg
-from .engines import ConfigFileEngine, SocketEngine
 from .fnc_registry import FunctionalRegistry
 from .mixin import ContainerMixin, RegistryFactorizorMixin
 from .sch_registry import SchemeRegistry
@@ -104,9 +59,6 @@ __all__ = [
     "RegistryFactorizorMixin",
     "is_build_cfg",
     "normalize_cfg",
-    # Engines
-    "ConfigFileEngine",
-    "SocketEngine",
     # Type Guard
     "Buildable",
     "BuildableValidator",
