@@ -30,6 +30,7 @@ Usage::
 
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
 from .container import BuildCfg, is_build_cfg, normalize_cfg
+from .factory import build, resolve
 from .fnc_registry import FunctionalRegistry
 from .mixin import ContainerMixin, RegistryFactorizorMixin
 from .sch_registry import SchemeRegistry
@@ -42,6 +43,7 @@ from .utils import (
     RegistryError,
     ValidationError,
 )
+from .validators import ValidatorRegistry
 
 __all__ = [
     # Version utilities
@@ -53,12 +55,16 @@ __all__ = [
     "TypeRegistry",
     "FunctionalRegistry",
     "SchemeRegistry",
+    "ValidatorRegistry",
     # DI Container
     "BuildCfg",
     "ContainerMixin",
     "RegistryFactorizorMixin",
     "is_build_cfg",
     "normalize_cfg",
+    # Factory
+    "build",
+    "resolve",
     # Type Guard
     "Buildable",
     "BuildableValidator",

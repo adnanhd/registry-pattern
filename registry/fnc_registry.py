@@ -27,6 +27,9 @@ from typing_extensions import ParamSpec, get_args
 
 from .mixin import ContainerMixin
 from .storage import ThreadSafeLocalStorage
+
+# Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
+_ALL_FN_REGISTRIES: dict[str, type] = {}
 from .utils import (
     ConformanceError,
     ValidationError,
@@ -107,6 +110,7 @@ class FunctionalRegistry(ContainerMixin[Hashable, Callable[P, R]], ABC):
         super().__init_subclass__(**kwargs)
         cls._repository = ThreadSafeLocalStorage[Hashable, Callable[P, R]]()
         cls._strict = strict
+        _ALL_FN_REGISTRIES[cls.__name__] = cls
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 "Initialized FunctionalRegistry subclass %s (strict=%s)",

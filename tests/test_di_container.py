@@ -234,11 +234,13 @@ class TestBuildCfgHelpers:
     """Tests for BuildCfg helper functions."""
 
     def test_is_build_cfg_with_dict(self):
-        """Test is_build_cfg with dict inputs."""
-        assert is_build_cfg({"type": "something"})
+        """Test is_build_cfg with dict inputs. Requires both `type` and `data`."""
+        assert is_build_cfg({"type": "something", "data": {}})
         assert is_build_cfg({"type": "something", "repo": "default", "data": {}})
+        assert not is_build_cfg({"type": "something"})  # missing data
         assert not is_build_cfg({"not_type": "something"})
-        assert not is_build_cfg({"type": 123})  # type must be str
+        assert not is_build_cfg({"type": 123, "data": {}})  # type must be str
+        assert not is_build_cfg({"type": "x", "data": "not a dict"})  # data must be dict
         assert not is_build_cfg("not a dict")
         assert not is_build_cfg(None)
 

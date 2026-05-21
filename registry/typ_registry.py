@@ -24,8 +24,25 @@ from typing import (
 
 from pydantic import BaseModel
 
+import typing as _typing
+
 from .mixin import ContainerMixin
 from .storage import ThreadSafeLocalStorage
+
+# Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
+_ALL_TYPE_REGISTRIES: dict[str, type] = {}
+
+
+def _base_type_of(cls: type) -> Any:
+    """Return T from a `TypeRegistry[T]` declaration via __orig_bases__.
+
+    Returns `Any` when the generic param isn't bound to a concrete class.
+    """
+    for base in getattr(cls, "__orig_bases__", ()):
+        args = _typing.get_args(base)
+        if args:
+            return args[0]
+    return Any
 from .utils import (
     ConformanceError,
     InheritanceError,
@@ -171,6 +188,7 @@ class TypeRegistry(
         cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         cls._strict = strict
         cls._abstract = abstract
+        _ALL_TYPE_REGISTRIES[cls.__name__] = cls
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 "Initialized TypeRegistry subclass %s (strict=%s, abstract=%s)",
@@ -184,7 +202,12 @@ class TypeRegistry(
         """Validate and internalize a class artifact."""
         v = _validate_class(value)
         if cls._abstract:
-            v = _validate_class_hierarchy(v, abc_class=cls)
+            base = _base_type_of(cls)
+            if isinstance(base, type):
+                v = _validate_class_hierarchy(v, abc_class=base)
+            else:
+                # Fallback to old behavior when generic param isn't a concrete class.
+                v = _validate_class_hierarchy(v, abc_class=cls)
         if cls._strict:
             protocol = get_protocol(cls)
             v = _validate_class_structure(v, exp_type=protocol)

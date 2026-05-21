@@ -109,17 +109,27 @@ class TestTypeRegistryStrict:
     """Tests for TypeRegistry with strict mode (inheritance checking)."""
 
     def test_abstract_mode_requires_inheritance(self):
-        """Test that abstract mode requires classes to inherit from registry."""
+        """Test that abstract mode requires classes to inherit from the generic param."""
 
-        class BaseRegistry(TypeRegistry[object], abstract=True):
+        class BaseArtifact:
             pass
 
-        # This should fail - doesn't inherit from BaseRegistry
+        class BaseRegistry(TypeRegistry[BaseArtifact], abstract=True):
+            pass
+
+        # This should fail - doesn't inherit from BaseArtifact
         class NotASubclass:
             pass
 
         with pytest.raises(InheritanceError):
             BaseRegistry.register_artifact(NotASubclass)
+
+        # This should succeed - inherits from BaseArtifact
+        class GoodSubclass(BaseArtifact):
+            pass
+
+        BaseRegistry.register_artifact(GoodSubclass)
+        assert BaseRegistry.has_identifier("GoodSubclass")
 
     def test_strict_mode_protocol_checking(self):
         """Test that strict mode checks protocol conformance."""
