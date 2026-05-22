@@ -26,6 +26,7 @@ from typing import (
 from pydantic import BaseModel
 
 from .mixin.validator import MutableValidatorMixin
+from .resolve_cache import invalidate_resolve_cache
 from .schema import cache_schema, drop_schema
 from .storage import ThreadSafeLocalStorage
 
@@ -290,6 +291,8 @@ class TypeRegistry(
             # Eagerly populate the per-target schema cache. Explicit
             # params_model wins over the auto-derived config schema.
             cache_schema(art, config_override=params_model)
+            # Newly registered artifact can change resolve() results.
+            invalidate_resolve_cache()
             if params_model is not None and logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "Cached explicit params_model for %s: %s",
@@ -320,6 +323,9 @@ class TypeRegistry(
         super(TypeRegistry, cls).unregister_identifier(key)
         if target is not None:
             drop_schema(target)
+        # Removed artifact can change resolve() results (KeyError now, or
+        # disambiguates a previously-ambiguous resolve).
+        invalidate_resolve_cache()
 
     # -------------------------------------------------------------------------
     # Module Registration

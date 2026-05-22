@@ -27,6 +27,7 @@ from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .fnc_registry import _ALL_FN_REGISTRIES, FunctionalRegistry
 from .meters import emit_meter
 from .reporters import emit_reporter
+from .resolve_cache import RESOLVE_CACHE
 from .schema import process_compute, process_validate, resolve_meta_schema
 from .typ_registry import _ALL_TYPE_REGISTRIES, TypeRegistry
 from .validators import resolve_validator
@@ -134,7 +135,17 @@ def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
 
     If multiple registries match, an exact-repo match wins; otherwise the
     call raises with a hint showing the candidate paths.
+
+    Successful lookups are memoized in ``RESOLVE_CACHE`` keyed by
+    ``(type_name, repo)``; the cache is cleared whenever artifacts are
+    registered or unregistered (see
+    ``registry.resolve_cache.invalidate_resolve_cache``).
     """
+    cache_key = (type_name, repo)
+    cached = RESOLVE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     matches: list[tuple[type, Any]] = []
     for repo_path, reg in {**_ALL_TYPE_REGISTRIES, **_ALL_FN_REGISTRIES}.items():
         if repo is not None and not _repo_matches(repo_path, repo):
@@ -150,10 +161,12 @@ def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
             f"'{type_name}' not registered in any TypeRegistry/FunctionalRegistry{suffix}"
         )
     if len(matches) == 1:
+        RESOLVE_CACHE[cache_key] = matches[0]
         return matches[0]
     if repo is not None:
         exact = [(r, a) for r, a in matches if r.repo == repo]
         if len(exact) == 1:
+            RESOLVE_CACHE[cache_key] = exact[0]
             return exact[0]
     raise KeyError(
         f"'{type_name}' is ambiguous (found in repos "
