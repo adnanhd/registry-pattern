@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from typing_extensions import ParamSpec, get_args
 
 from .mixin.validator import MutableValidatorMixin
+from .schema import cache_schema, drop_schema
 from .storage import ThreadSafeLocalStorage
 
 # Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
@@ -193,21 +194,20 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
         """
 
         def _do_register(art: Callable[P, R]) -> Callable[P, R]:
-            # Save explicit params_model before registration
-            if params_model is not None:
-                identifier = get_func_name(_validate_function(art))
-                cls._save_scheme(identifier, params_model)
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        "Saved explicit params_model for %s: %s",
-                        identifier,
-                        params_model.__name__,
-                    )
-
             # Use parent's register_artifact for the actual registration
-            return cast(
+            registered = cast(
                 Callable[P, R], super(FunctionalRegistry, cls).register_artifact(art)
             )
+            # Eagerly populate the per-target schema cache. Explicit
+            # params_model wins over the auto-derived config schema.
+            cache_schema(art, config_override=params_model)
+            if params_model is not None and logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Cached explicit params_model for %s: %s",
+                    get_func_name(_validate_function(art)),
+                    params_model.__name__,
+                )
+            return registered
 
         if artifact is None:
             # Decorator form: @register_artifact(params_model=...)
@@ -215,6 +215,21 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
         else:
             # Direct call: register_artifact(my_func, params_model=...)
             return _do_register(artifact)
+
+    @classmethod
+    def unregister_identifier(cls, key: Any) -> None:  # type: ignore[override]
+        """Drop the schema cache entry, then delegate to the mixin remover.
+
+        ``unregister_artifact`` in the mixin also routes through this method,
+        so the schema cache is evicted on both unregister entry points.
+        """
+        try:
+            target = cls.get_artifact(key)
+        except Exception:
+            target = None
+        super(FunctionalRegistry, cls).unregister_identifier(key)
+        if target is not None:
+            drop_schema(target)
 
     # -------------------------------------------------------------------------
     # Module Registration

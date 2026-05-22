@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .fnc_registry import FunctionalRegistry
-from .schema import resolve_data_schema
+from .schema import ensure_schema
 
 __all__ = ["ValidatorRegistry", "Validator"]
 
@@ -28,14 +28,13 @@ class ValidatorRegistry(FunctionalRegistry):
 
 @ValidatorRegistry.register_artifact
 def pydantic(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, Any]:
-    """Validate ``data`` against the target's derived config schema.
+    """Validate ``data`` against the target's cached config schema.
 
-    Resolves the schema via ``resolve_data_schema`` so explicit
-    ``registry.data_schema`` overrides win.
+    Reads from the per-target schema cache populated at registration time.
+    Falls back to deriving on the fly if the target was never registered
+    (e.g. an anonymous callable passed directly to ``build``).
     """
-    from .schema import derive_config_schema
-
-    schema = derive_config_schema(target)
+    schema = ensure_schema(target).config
     return schema.model_validate(data).model_dump()
 
 

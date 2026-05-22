@@ -11,19 +11,35 @@ Two layers, two derived schemas:
 Explicit ``data_schema``/``meta_schema`` class attributes on a registry
 override the derived schemas; both can coexist with ``Annotated`` markers,
 which fire on the runtime layer independently.
+
+A process-wide ``WeakKeyDictionary`` cache keyed by target class/function
+holds an :class:`ArtifactSchema` (config + meta + resolved hints) per
+artifact. Population happens at registration time
+(:func:`cache_schema`), lookup at build time (:func:`ensure_schema`),
+explicit eviction at unregistration time (:func:`drop_schema`). When the
+target is itself garbage-collected the cache entry vanishes automatically.
 """
 
 from __future__ import annotations
 
 import inspect
+import threading
 import typing
-from typing import Any, Callable, Type
+import weakref
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, Type
 
 from pydantic import BaseModel, create_model
 
 from .type_guard import Buildable
 
 __all__ = [
+    "ArtifactSchema",
+    "build_schema",
+    "cache_schema",
+    "ensure_schema",
+    "get_schema",
+    "drop_schema",
     "derive_config_schema",
     "derive_meta_schema",
     "resolve_data_schema",
@@ -159,21 +175,21 @@ def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | N
 def resolve_data_schema(
     registry: type, target: type | Callable[..., Any]
 ) -> Type[BaseModel]:
-    """Explicit ``registry.data_schema`` wins; otherwise derive from signature."""
+    """Explicit ``registry.data_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "data_schema", None)
     if explicit is not None:
         return explicit
-    return derive_config_schema(target)
+    return ensure_schema(target).config
 
 
 def resolve_meta_schema(
     registry: type, target: type | Callable[..., Any]
 ) -> Type[BaseModel] | None:
-    """Explicit ``registry.meta_schema`` wins; otherwise derive from markers."""
+    """Explicit ``registry.meta_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "meta_schema", None)
     if explicit is not None:
         return explicit
-    return derive_meta_schema(target)
+    return ensure_schema(target).meta
 
 
 def process_validate(
@@ -182,7 +198,7 @@ def process_validate(
     ctx: dict[str, Any],
 ) -> None:
     """Run every ``Annotated[..., marker_with_validate].validate(value, kwargs, ctx)``."""
-    hints = _resolved_hints(target)
+    hints = ensure_schema(target).hints
     for name, hint in hints.items():
         if name not in kwargs or not hasattr(hint, "__metadata__"):
             continue
@@ -197,7 +213,7 @@ def process_compute(
     meta: dict[str, Any],
 ) -> None:
     """Run every ``Annotated[..., marker_with_compute].compute(value)`` and write to meta."""
-    hints = _resolved_hints(target)
+    hints = ensure_schema(target).hints
     for name, hint in hints.items():
         if name not in kwargs or not hasattr(hint, "__metadata__"):
             continue
@@ -205,3 +221,97 @@ def process_compute(
             if hasattr(marker, "compute"):
                 marker_name = getattr(marker, "name", None) or name
                 meta[marker_name] = marker.compute(kwargs[name])
+
+
+# ---------------------------------------------------------------------------
+# Schema cache: WeakKeyDictionary keyed by target class / function
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ArtifactSchema:
+    """Per-target schemas + introspection state, built once at registration.
+
+    - ``config`` is the Pydantic model used to validate the envelope's
+      ``data`` dict (input layer). May be an explicit ``params_model``
+      passed at registration, or the auto-derived schema.
+    - ``meta`` is the model derived from ``Annotated`` ``compute`` markers
+      on the target's signature; ``None`` if the target has no markers.
+    - ``hints`` is the resolved ``get_type_hints`` mapping; cached because
+      both ``process_validate`` and ``process_compute`` need it on every
+      build and ``get_type_hints`` is itself expensive.
+    """
+
+    config: Type[BaseModel]
+    meta: Optional[Type[BaseModel]]
+    hints: dict[str, Any]
+
+
+_SCHEMA_CACHE: "weakref.WeakKeyDictionary[Any, ArtifactSchema]" = (
+    weakref.WeakKeyDictionary()
+)
+_SCHEMA_LOCK = threading.Lock()
+
+
+def build_schema(
+    target: type | Callable[..., Any],
+    *,
+    config_override: Optional[Type[BaseModel]] = None,
+) -> ArtifactSchema:
+    """Derive an :class:`ArtifactSchema` for ``target`` without caching.
+
+    ``config_override``, if given, takes the place of the auto-derived
+    config schema (the explicit ``params_model`` path from
+    ``register_artifact``). Meta + hints are still derived.
+    """
+    hints = _resolved_hints(target)
+    config = (
+        config_override if config_override is not None else derive_config_schema(target)
+    )
+    meta = derive_meta_schema(target)
+    return ArtifactSchema(config=config, meta=meta, hints=hints)
+
+
+def cache_schema(
+    target: type | Callable[..., Any],
+    *,
+    config_override: Optional[Type[BaseModel]] = None,
+) -> ArtifactSchema:
+    """Build the schema for ``target`` and store it in the weak cache.
+
+    Called eagerly from ``register_artifact`` so the build pipeline sees a
+    pre-populated cache entry. Falls back to returning the freshly built
+    schema if ``target`` is not weakly referenceable (rare; some builtins).
+    """
+    schema = build_schema(target, config_override=config_override)
+    try:
+        _SCHEMA_CACHE[target] = schema
+    except TypeError:
+        pass
+    return schema
+
+
+def get_schema(target: Any) -> Optional[ArtifactSchema]:
+    """Return the cached :class:`ArtifactSchema` for ``target`` or ``None``."""
+    return _SCHEMA_CACHE.get(target)
+
+
+def ensure_schema(target: type | Callable[..., Any]) -> ArtifactSchema:
+    """Return the cached schema, deriving + caching on the first miss.
+
+    Double-checked under a lock so concurrent first-builds for the same
+    target do not duplicate the Pydantic model creation.
+    """
+    cached = _SCHEMA_CACHE.get(target)
+    if cached is not None:
+        return cached
+    with _SCHEMA_LOCK:
+        cached = _SCHEMA_CACHE.get(target)
+        if cached is not None:
+            return cached
+        return cache_schema(target)
+
+
+def drop_schema(target: Any) -> None:
+    """Evict the cache entry for ``target``. No-op if absent."""
+    _SCHEMA_CACHE.pop(target, None)
