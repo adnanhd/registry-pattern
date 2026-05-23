@@ -1,32 +1,30 @@
 #!/usr/bin/env python
-"""Comprehensive profiling of the registry-pattern build pipeline.
+"""Comprehensive profiling of the registry-pattern build pipeline (v2).
 
-Covers six angles:
-
-  1. Depth sweep -- wall-clock and pstats at depth 1, 5, 10, 25, 50
-  2. Pipeline stage breakdown -- isolate is_build_cfg, derive_config_schema,
-     validators.pydantic, factory.build at fixed depth 10
-  3. Cold-vs-warm -- first call after import vs. Nth call (cache effects)
-  4. Serialize round-trip -- factory.serialize cost vs. build cost
-  5. Buildable[T] Pydantic validation -- the public type-guard surface
-  6. tracemalloc allocators -- where memory is going
+Seven sections; wall-clock sections go through ``bench.BenchSuite`` so they
+collect stats (best / median / p95 / stddev), can dump JSON, and can diff
+against a saved baseline. cProfile sections stay as standalone helpers.
 
 Run::
 
-    PYTHONPATH=. python benchmarks/profile_pipeline.py
+    PYTHONPATH=. python benchmarks/profile_pipeline.py            # full run
+    PYTHONPATH=. python benchmarks/profile_pipeline.py --quiet
+    PYTHONPATH=. python benchmarks/profile_pipeline.py --output baseline.json
+    PYTHONPATH=. python benchmarks/profile_pipeline.py --baseline baseline.json --strict
+    PYTHONPATH=. python benchmarks/profile_pipeline.py --iterations-scale 0.1   # smoke
 """
 
 from __future__ import annotations
 
 import cProfile
-import gc
 import io
 import pstats
-import time
+import sys
 import tracemalloc
 from typing import Any
 
 from pydantic import BaseModel
+
 from registry import (
     Buildable,
     BuildCfg,
@@ -37,8 +35,12 @@ from registry import (
     serialize,
 )
 
+# Local framework -- vendored copy lives in this directory.
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+from bench import BenchSuite, banner, finalize, parse_args  # noqa: E402
+
 # ---------------------------------------------------------------------------
-# Common setup -- registries with up to 50 levels
+# Setup -- one TypeRegistry per depth level
 # ---------------------------------------------------------------------------
 
 
@@ -51,8 +53,7 @@ class _Node:
         self.label = label
 
 
-_REGISTRIES: list[type] = []
-
+_REGISTRIES: list = []
 for i in range(MAX_DEPTH):
 
     class _R(TypeRegistry[Any], repo=f"prof.depth.l{i}"):
@@ -86,19 +87,7 @@ def make_envelope(depth: int) -> dict[str, Any]:
     return cfg
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def banner(text: str) -> None:
-    print()
-    print("#" * 72)
-    print(f"# {text}")
-    print("#" * 72)
-
-
-def print_pstats(pr: cProfile.Profile, top: int = 12) -> None:
+def _print_pstats(pr: cProfile.Profile, top: int = 12) -> None:
     for sort_key, header in (
         ("cumulative", "by cumulative time"),
         ("tottime", "by internal time"),
@@ -110,74 +99,37 @@ def print_pstats(pr: cProfile.Profile, top: int = 12) -> None:
         print(s.getvalue())
 
 
-def time_ms(fn, iterations: int) -> tuple[float, float]:
-    """Returns (best_ms_per_call, mean_ms_per_call)."""
-    samples = []
-    for _ in range(iterations):
-        gc.collect()
-        t0 = time.perf_counter()
-        fn()
-        samples.append((time.perf_counter() - t0) * 1000.0)
-    return min(samples), sum(samples) / len(samples)
-
-
 # ---------------------------------------------------------------------------
-# Section 1: depth sweep
+# Sections
 # ---------------------------------------------------------------------------
 
 
-def section_depth_sweep() -> None:
-    banner("SECTION 1 -- depth sweep (wall clock per build, 100 iterations)")
-    print(f"{'depth':>6} {'best_ms':>10} {'mean_ms':>10}")
-    print("-" * 30)
+def section_depth_sweep(suite: BenchSuite) -> None:
+    banner("SECTION 1 -- depth sweep (best/median/p95/stddev, 100 iter)")
     for depth in (1, 5, 10, 25, 50):
         cfg = make_envelope(depth)
-        # Warm up
-        for _ in range(3):
-            build(cfg)
-        best, mean = time_ms(lambda c=cfg: build(c), iterations=100)
-        print(f"{depth:>6} {best:>10.3f} {mean:>10.3f}")
+        suite.measure(
+            f"build depth={depth:<3}", lambda c=cfg: build(c), iterations=100, unit="ms"
+        )
 
 
-# ---------------------------------------------------------------------------
-# Section 2: pipeline stage breakdown at fixed depth
-# ---------------------------------------------------------------------------
-
-
-def section_stage_breakdown() -> None:
-    banner("SECTION 2 -- pipeline stage breakdown at depth 10, 500 iterations each")
+def section_stage_breakdown(suite: BenchSuite) -> None:
+    banner("SECTION 2 -- pipeline stage breakdown at depth 10, 500 iter")
     depth = 10
     cfg = make_envelope(depth)
-    # Warm up so first-call schema derivation does not pollute timings.
-    for _ in range(10):
-        build(cfg)
-
-    stages = [
-        ("is_build_cfg(envelope)", lambda: is_build_cfg(cfg)),
-        ("is_build_cfg(plain dict)", lambda: is_build_cfg({"foo": "bar"})),
-        ("normalize_cfg(envelope)", lambda: normalize_cfg(cfg)),
-        ("build(envelope)", lambda: build(cfg)),
-        ("serialize(built)", None),  # filled in below
-    ]
+    suite.measure("is_build_cfg(envelope)", lambda: is_build_cfg(cfg), iterations=500)
+    suite.measure(
+        "is_build_cfg(plain dict)", lambda: is_build_cfg({"foo": "bar"}), iterations=500
+    )
+    suite.measure("normalize_cfg(envelope)", lambda: normalize_cfg(cfg), iterations=500)
+    suite.measure("build(envelope)", lambda: build(cfg), iterations=500, unit="ms")
     built = build(cfg)
-    stages[-1] = ("serialize(built)", lambda b=built: serialize(b))
-
-    print(f"{'stage':<30} {'best_us':>12} {'mean_us':>12}")
-    print("-" * 58)
-    for label, fn in stages:
-        best, mean = time_ms(fn, iterations=500)
-        # Convert ms to us for finer-grained reading on cheap operations.
-        print(f"{label:<30} {best * 1000:>12.2f} {mean * 1000:>12.2f}")
+    suite.measure("serialize(built)", lambda: serialize(built), iterations=500, unit="ms")
 
 
-# ---------------------------------------------------------------------------
-# Section 3: cold vs. warm
-# ---------------------------------------------------------------------------
+def section_cold_vs_warm(suite: BenchSuite) -> None:
+    banner("SECTION 3 -- cold-vs-warm")
 
-
-def section_cold_vs_warm() -> None:
-    banner("SECTION 3 -- cold-vs-warm: first call after import vs. amortized")
-    # Use a fresh registry pair so the schema cache (if any) is cold.
     class _ColdReg(TypeRegistry[Any], repo="prof.cold.warm"):
         pass
 
@@ -186,43 +138,19 @@ def section_cold_vs_warm() -> None:
 
     _ColdNode.__name__ = "ColdNode"
     _ColdReg.register_artifact(_ColdNode)
-
     cfg = {
         "type": "ColdNode",
         "repo": "prof.cold.warm",
         "data": {"label": "cold"},
         "meta": {},
     }
-
-    # Force cold path -- this is the first-ever build for ColdNode.
-    gc.collect()
-    t0 = time.perf_counter()
-    build(cfg)
-    cold_ms = (time.perf_counter() - t0) * 1000.0
-
-    # Now warm: same class, same envelope.
-    warm_samples = []
-    for _ in range(50):
-        gc.collect()
-        t0 = time.perf_counter()
-        build(cfg)
-        warm_samples.append((time.perf_counter() - t0) * 1000.0)
-    warm_best = min(warm_samples)
-    warm_mean = sum(warm_samples) / len(warm_samples)
-
-    print(f"cold first call    : {cold_ms:>10.3f} ms")
-    print(f"warm best of 50    : {warm_best:>10.3f} ms")
-    print(f"warm mean of 50    : {warm_mean:>10.3f} ms")
-    print(f"cold-to-warm ratio : {cold_ms / warm_mean:>10.2f}x")
-
-
-# ---------------------------------------------------------------------------
-# Section 4: cProfile of the build pipeline at depth 25
-# ---------------------------------------------------------------------------
+    # Single sample for cold (warmup=0 measures the very first call).
+    suite.measure("cold first call", lambda: build(cfg), iterations=1, warmup=0, unit="ms")
+    suite.measure("warm 50 calls", lambda: build(cfg), iterations=50, unit="ms")
 
 
 def section_build_profile() -> None:
-    banner("SECTION 4 -- cProfile of build() at depth 25, 200 iterations")
+    banner("SECTION 4 -- cProfile of build() at depth 25, 200 iter")
     cfg = make_envelope(25)
     for _ in range(10):
         build(cfg)
@@ -231,16 +159,11 @@ def section_build_profile() -> None:
     for _ in range(200):
         build(cfg)
     pr.disable()
-    print_pstats(pr, top=15)
-
-
-# ---------------------------------------------------------------------------
-# Section 5: cProfile of serialize() round-trip
-# ---------------------------------------------------------------------------
+    _print_pstats(pr, top=15)
 
 
 def section_serialize_profile() -> None:
-    banner("SECTION 5 -- cProfile of serialize() of a depth-25 tree, 200 iterations")
+    banner("SECTION 5 -- cProfile of serialize() depth 25, 200 iter")
     cfg = make_envelope(25)
     built = build(cfg)
     for _ in range(10):
@@ -250,16 +173,11 @@ def section_serialize_profile() -> None:
     for _ in range(200):
         serialize(built)
     pr.disable()
-    print_pstats(pr, top=15)
+    _print_pstats(pr, top=15)
 
 
-# ---------------------------------------------------------------------------
-# Section 6: Buildable[T] Pydantic validation
-# ---------------------------------------------------------------------------
-
-
-def section_buildable_validation() -> None:
-    banner("SECTION 6 -- Buildable[T] Pydantic validation, 500 iterations")
+def section_buildable_validation(suite: BenchSuite) -> None:
+    banner("SECTION 6 -- Buildable[T] Pydantic validation, 500 iter")
 
     class _BVReg(TypeRegistry[_Node], repo="prof.buildable"):
         pass
@@ -272,7 +190,6 @@ def section_buildable_validation() -> None:
 
     class Container(BaseModel):
         model_config = {"arbitrary_types_allowed": True}
-
         node: Buildable[_Node]
 
     cfg = {
@@ -281,59 +198,61 @@ def section_buildable_validation() -> None:
         "data": {"label": "x"},
         "meta": {},
     }
-
-    # Warm up
-    for _ in range(10):
-        Container(node=cfg)
-
-    pr = cProfile.Profile()
-    pr.enable()
-    for _ in range(500):
-        Container(node=cfg)
-    pr.disable()
-    print_pstats(pr, top=12)
-
-
-# ---------------------------------------------------------------------------
-# Section 7: tracemalloc allocator hot spots
-# ---------------------------------------------------------------------------
+    suite.measure(
+        "Buildable[T] validation", lambda: Container(node=cfg), iterations=500
+    )
 
 
 def section_tracemalloc() -> None:
     banner("SECTION 7 -- tracemalloc top allocators during 100 builds at depth 25")
     cfg = make_envelope(25)
-    # Warm up
     for _ in range(5):
         build(cfg)
-    gc.collect()
+    import gc
 
+    gc.collect()
     tracemalloc.start(25)
     snap_before = tracemalloc.take_snapshot()
     for _ in range(100):
         build(cfg)
     snap_after = tracemalloc.take_snapshot()
     tracemalloc.stop()
-
     diff = snap_after.compare_to(snap_before, "lineno")
     print(f"{'rank':>4}  {'size_kb':>10}  {'count':>8}  location")
-    print("-" * 72)
+    print("-" * 78)
     for i, stat in enumerate(diff[:15], 1):
-        loc = str(stat.traceback)
-        print(f"{i:>4}  {stat.size_diff / 1024:>10.1f}  {stat.count_diff:>8}  {loc}")
+        print(
+            f"{i:>4}  {stat.size_diff / 1024:>10.1f}  {stat.count_diff:>8}  "
+            f"{stat.traceback}"
+        )
 
 
 # ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    section_depth_sweep()
-    section_stage_breakdown()
-    section_cold_vs_warm()
+def main() -> int:
+    args = parse_args()
+    suite = BenchSuite(name="registry-pattern.profile_pipeline", cli=args)
+
+    section_depth_sweep(suite)
+    section_stage_breakdown(suite)
+    section_cold_vs_warm(suite)
     section_build_profile()
     section_serialize_profile()
-    section_buildable_validation()
+    section_buildable_validation(suite)
     section_tracemalloc()
+
+    # CI gates -- values picked from the post-cache numbers with a comfortable
+    # margin. Bump if the floor moves.
+    banner("ASSERT_WITHIN GATES")
+    suite.assert_within("build depth=25 ", 5.0)  # ms -- floor ~0.5 ms
+    suite.assert_within("build depth=50 ", 10.0)  # ms -- floor ~1.0 ms
+    suite.assert_within("Buildable[T] validation", 500.0)  # us -- floor ~120 us
+
+    return finalize(suite)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
