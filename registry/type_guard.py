@@ -6,7 +6,7 @@ This module provides `Buildable[T]`, a Pydantic-compatible type annotation that:
 3. Validates that the result is indeed of type T
 
 Usage:
-    from registry import Buildable, TypeRegistry, ContainerMixin
+    from registry import Buildable, TypeRegistry
 
     class ModelRegistry(TypeRegistry[nn.Module]):
         pass

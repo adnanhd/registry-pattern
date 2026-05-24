@@ -288,9 +288,6 @@ from registry import (
     FactoryReporter, attach_reporter, detach_reporter, reporters,
     JournalReporter, HTTPDashboardReporter, OpenTelemetryReporter,
 
-    # Container (mostly legacy)
-    ContainerMixin,
-
     # Exceptions
     ValidationError, RegistryError, CoercionError,
     ConformanceError, InheritanceError,
