@@ -1,3 +1,4 @@
 [flake8]
-max-line-length = 108
+# Aligned with pyproject.toml `[tool.black]` and `[tool.ruff]`.
+max-line-length = 88
 extend-ignore = E203, W503

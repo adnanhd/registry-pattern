@@ -1,8 +1,16 @@
-# Configuration file for Sphinx documentation builder
-project = "Registry"
-copyright = "2024"
-author = "Research Team"
-release = "0.2.0"
+# Configuration file for the Sphinx documentation builder.
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from registry._version import __version__  # noqa: E402
+
+project = "registry-pattern"
+copyright = "2024-2026, Adnan Harun Dogan"
+author = "Adnan Harun Dogan"
+release = __version__
+version = __version__
 
 extensions = [
     "sphinx.ext.intersphinx",

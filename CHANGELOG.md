@@ -90,7 +90,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 - `RemoteStorageProxy` + the Flask-based registry server CLI
   (`python -m registry server`). The pickle-over-HTTP RCE path is gone.
-  Use callpyback's RPC stack for remote dispatch if needed.
+  Bring your own RPC stack (e.g. gRPC, ZeroMQ, JSON-RPC) for remote
+  dispatch if needed.
 - `--server` flags on `build`/`run` subcommands. The CLI surface is
   now `info` / `build` / `run`.
 - `SchemeRegistry` (`registry/sch_registry.py`) -- superseded by
