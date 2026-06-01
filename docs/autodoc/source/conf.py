@@ -16,7 +16,6 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
-    "sphinx.ext.autodoc.typehints",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinxcontrib.mermaid",
@@ -54,7 +53,7 @@ def setup(app):
     app.connect("autodoc-skip-member", skip_paramspec)
 
 
-html_theme = "alabaster"
+html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 import os

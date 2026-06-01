@@ -59,6 +59,7 @@ docs = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=2.0",
     "sphinx-autodoc-typehints>=1.25",
+    "sphinxcontrib-mermaid",
 ]
 dev = [
     "pytest>=7.0",
