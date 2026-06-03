@@ -16,7 +16,6 @@ from registry.meters import (
     RecursionMeter,
     attach_meter,
     detach_meter,
-    emit_meter,
     meters,
 )
 

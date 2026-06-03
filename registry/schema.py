@@ -26,8 +26,9 @@ import inspect
 import threading
 import typing
 import weakref
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Type
+from typing import Any
 
 from pydantic import BaseModel, create_model
 
@@ -114,7 +115,7 @@ def _signature_of(target: type | Callable[..., Any]) -> inspect.Signature:
     return inspect.signature(target.__init__ if isinstance(target, type) else target)
 
 
-def derive_config_schema(target: type | Callable[..., Any]) -> Type[BaseModel]:
+def derive_config_schema(target: type | Callable[..., Any]) -> type[BaseModel]:
     """Build a Pydantic model from ``target``'s signature for input validation.
 
     No ``arbitrary_types_allowed``. Arbitrary classes are rewritten to
@@ -139,7 +140,7 @@ def derive_config_schema(target: type | Callable[..., Any]) -> Type[BaseModel]:
     return create_model(f"{schema_name}ConfigSchema", **fields)
 
 
-def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | None:
+def derive_meta_schema(target: type | Callable[..., Any]) -> type[BaseModel] | None:
     """Walk ``Annotated[T, Marker(...)]`` metadata; collect compute markers.
 
     Returns a Pydantic model with one field per marker (name -> return type),
@@ -174,7 +175,7 @@ def derive_meta_schema(target: type | Callable[..., Any]) -> Type[BaseModel] | N
 
 def resolve_data_schema(
     registry: type, target: type | Callable[..., Any]
-) -> Type[BaseModel]:
+) -> type[BaseModel]:
     """Explicit ``registry.data_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "data_schema", None)
     if explicit is not None:
@@ -184,7 +185,7 @@ def resolve_data_schema(
 
 def resolve_meta_schema(
     registry: type, target: type | Callable[..., Any]
-) -> Type[BaseModel] | None:
+) -> type[BaseModel] | None:
     """Explicit ``registry.meta_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "meta_schema", None)
     if explicit is not None:
@@ -242,12 +243,12 @@ class ArtifactSchema:
       build and ``get_type_hints`` is itself expensive.
     """
 
-    config: Type[BaseModel]
-    meta: Optional[Type[BaseModel]]
+    config: type[BaseModel]
+    meta: type[BaseModel] | None
     hints: dict[str, Any]
 
 
-_SCHEMA_CACHE: "weakref.WeakKeyDictionary[Any, ArtifactSchema]" = (
+_SCHEMA_CACHE: weakref.WeakKeyDictionary[Any, ArtifactSchema] = (
     weakref.WeakKeyDictionary()
 )
 _SCHEMA_LOCK = threading.Lock()
@@ -256,7 +257,7 @@ _SCHEMA_LOCK = threading.Lock()
 def build_schema(
     target: type | Callable[..., Any],
     *,
-    config_override: Optional[Type[BaseModel]] = None,
+    config_override: type[BaseModel] | None = None,
 ) -> ArtifactSchema:
     """Derive an :class:`ArtifactSchema` for ``target`` without caching.
 
@@ -275,7 +276,7 @@ def build_schema(
 def cache_schema(
     target: type | Callable[..., Any],
     *,
-    config_override: Optional[Type[BaseModel]] = None,
+    config_override: type[BaseModel] | None = None,
 ) -> ArtifactSchema:
     """Build the schema for ``target`` and store it in the weak cache.
 
@@ -291,7 +292,7 @@ def cache_schema(
     return schema
 
 
-def get_schema(target: Any) -> Optional[ArtifactSchema]:
+def get_schema(target: Any) -> ArtifactSchema | None:
     """Return the cached :class:`ArtifactSchema` for ``target`` or ``None``."""
     return _SCHEMA_CACHE.get(target)
 

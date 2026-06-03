@@ -6,24 +6,19 @@ import inspect
 import logging
 import sys
 from abc import ABC
+from collections.abc import Callable, Hashable, MutableMapping
 from types import ModuleType
 from typing import (
     Any,
-    Callable,
     ClassVar,
-    Hashable,
-    List,
-    MutableMapping,
-    Optional,
-    Tuple,
     TypeVar,
-    Union,
     cast,
+    get_args,
     overload,
 )
 
 from pydantic import BaseModel
-from typing_extensions import ParamSpec, get_args
+from typing_extensions import ParamSpec
 
 from .mixin.validator import MutableValidatorMixin
 from .resolve_cache import invalidate_resolve_cache
@@ -32,7 +27,7 @@ from .storage import ThreadSafeLocalStorage
 
 # Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
 _ALL_FN_REGISTRIES: dict[str, type] = {}
-from .utils import (
+from .utils import (  # noqa: E402
     ConformanceError,
     ValidationError,
     _validate_function_signature,
@@ -78,8 +73,8 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     _repository: MutableMapping[Hashable, Callable[P, R]]
     _strict: ClassVar[bool] = False
     repo: ClassVar[str] = "default"
-    __orig_bases__: ClassVar[Tuple[type, ...]]
-    __slots__: ClassVar[Tuple[str, ...]] = ()
+    __orig_bases__: ClassVar[tuple[type, ...]]
+    __slots__: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def _get_mapping(cls) -> MutableMapping[Hashable, Callable[P, R]]:
@@ -88,16 +83,16 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     @classmethod
     def __class_getitem__(cls, params: Any) -> Any:
         # Keep typing.ParameterSpec generics working across Python versions
-        if sys.version_info < (3, 10):
+        if sys.version_info < (3, 10):  # noqa: UP036
             args, kwargs = params
-            params = (Tuple[tuple(args)], kwargs)
+            params = (tuple[tuple(args)], kwargs)
         return super().__class_getitem__(params)  # type: ignore[misc]
 
     @classmethod
     def __init_subclass__(
         cls,
         strict: bool = False,
-        repo: Optional[str] = None,
+        repo: str | None = None,
         **kwargs,
     ) -> None:
         """Initialize a FunctionalRegistry subclass.
@@ -129,7 +124,7 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
         fn = _validate_function(value)
         if cls._strict:
             param, ret = get_args(cls.__orig_bases__[0])
-            if sys.version_info < (3, 10):
+            if sys.version_info < (3, 10):  # noqa: UP036
                 param = list(get_args(param))
             expected = Callable[param, ret]  # type: ignore[valid-type]
             _validate_function_signature(fn, expected_callable_alias=expected)
@@ -150,7 +145,7 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
         cls,
         artifact: Callable[P, R],
         *,
-        params_model: Optional[Type[BaseModel]] = None,
+        params_model: type[BaseModel] | None = None,
     ) -> Callable[P, R]:
         """Register a function artifact with optional params_model."""
         ...
@@ -160,18 +155,18 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
     def register_artifact(
         cls,
         *,
-        params_model: Optional[Type[BaseModel]] = None,
+        params_model: type[BaseModel] | None = None,
     ) -> Any:
         """Decorator form: register a function with optional params_model."""
         ...
 
     @classmethod
-    def register_artifact(
+    def register_artifact(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls,
-        artifact: Optional[Callable[P, R]] = None,
+        artifact: Callable[P, R] | None = None,
         *,
-        params_model: Optional[Type[BaseModel]] = None,
-    ) -> Union[Callable[P, R], Any]:
+        params_model: type[BaseModel] | None = None,
+    ) -> Callable[P, R] | Any:
         """Register a function artifact with optional explicit params_model.
 
         Can be used as a decorator or called directly.
@@ -230,7 +225,7 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
             target = cls.get_artifact(key)
         except Exception:
             target = None
-        super(FunctionalRegistry, cls).unregister_identifier(key)
+        super().unregister_identifier(key)
         if target is not None:
             drop_schema(target)
         # Removed artifact can change resolve() results (KeyError now, or
@@ -259,7 +254,7 @@ class FunctionalRegistry(MutableValidatorMixin[Hashable, Callable[P, R]], ABC):
         assert isinstance(
             module, ModuleType
         ), f"Expected ModuleType, got {type(module)}"
-        members: List[Any] = get_module_members(module)
+        members: list[Any] = get_module_members(module)
         ok, fail = 0, 0
         for obj in members:
             if not (inspect.isfunction(obj) or inspect.isbuiltin(obj)):

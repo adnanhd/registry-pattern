@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .fnc_registry import _ALL_FN_REGISTRIES, FunctionalRegistry
@@ -29,7 +30,7 @@ from .meters import emit_meter
 from .reporters import emit_reporter
 from .resolve_cache import RESOLVE_CACHE
 from .schema import process_compute, process_validate, resolve_meta_schema
-from .typ_registry import _ALL_TYPE_REGISTRIES, TypeRegistry
+from .typ_registry import _ALL_TYPE_REGISTRIES
 from .validators import resolve_validator
 
 logger = logging.getLogger(__name__)
@@ -189,12 +190,14 @@ def validate(
     if isinstance(target, str):
         _, target = resolve(target)
     medium_fn = resolve_validator(validator)
-    return medium_fn(target, data if data is not None else {})
+    return medium_fn(
+        target, data if data is not None else {}  # pyright: ignore[reportArgumentType]
+    )  # pyright: ignore[reportArgumentType]
 
 
 def build(
     cfg_or_target: BuildCfg | dict[str, Any] | type | Callable[..., Any],
-    data: Any = None,
+    data: Any = None,  # pyright: ignore[reportRedeclaration]
     *,
     validator: str = "pydantic",
     ctx: dict[str, Any] | None = None,

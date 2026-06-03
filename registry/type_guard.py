@@ -27,7 +27,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any, Generic, Type, TypeVar, get_args, get_origin
+from typing import Any, Generic, TypeVar, get_args, get_origin
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
@@ -49,7 +49,7 @@ T = TypeVar("T")
 _PARAMETERIZED_CACHE: dict[type, type] = {}
 
 
-def _runtime_type(expected_type: Type) -> Type:
+def _runtime_type(expected_type: type) -> type:
     """Return a type usable as the second arg to ``isinstance``.
 
     ``isinstance(x, dict[str, int])`` raises ``TypeError`` -- parameterized
@@ -62,7 +62,7 @@ def _runtime_type(expected_type: Type) -> Type:
     return origin if origin is not None else expected_type
 
 
-def _type_name(expected_type: Type) -> str:
+def _type_name(expected_type: type) -> str:
     """Display name for ``expected_type`` that survives parameterized generics."""
     return getattr(expected_type, "__name__", None) or str(expected_type)
 
@@ -74,7 +74,7 @@ class BuildableValidator(Generic[T]):
     as a type annotation in Pydantic models.
     """
 
-    def __init__(self, expected_type: Type[T]):
+    def __init__(self, expected_type: type[T]):
         self.expected_type = expected_type
 
     def validate(self, value: Any) -> T:
@@ -121,7 +121,7 @@ class BuildableValidator(Generic[T]):
         )
 
 
-def _create_validator_function(expected_type: Type) -> Any:
+def _create_validator_function(expected_type: type) -> Any:
     """Create a validation function for the given expected type."""
     runtime_type = _runtime_type(expected_type)
     type_label = _type_name(expected_type)
@@ -162,7 +162,7 @@ def _create_validator_function(expected_type: Type) -> Any:
     return validate_buildable
 
 
-def _create_json_schema(expected_type: Type) -> JsonSchemaValue:
+def _create_json_schema(expected_type: type) -> JsonSchemaValue:
     """Create JSON schema for the Buildable type."""
     type_name = getattr(expected_type, "__name__", "object")
 
@@ -219,7 +219,7 @@ class Buildable(Generic[T]):
 
     __slots__ = ()
 
-    def __class_getitem__(cls, item: Type[T]) -> type:
+    def __class_getitem__(cls, item: type[T]) -> type:
         """Support Buildable[SomeType] syntax."""
         # Check cache first
         if item in _PARAMETERIZED_CACHE:
@@ -229,9 +229,9 @@ class Buildable(Generic[T]):
         class _BuildableType:
             """Marker class for Buildable[T] that implements Pydantic protocol."""
 
-            _expected_type: Type = item
+            _expected_type: type = item
 
-            def __class_getitem__(inner_cls, inner_item: Type) -> type:
+            def __class_getitem__(inner_cls, inner_item: type) -> type:  # noqa: N804
                 """Prevent nested parameterization causing recursion."""
                 return Buildable[inner_item]
 

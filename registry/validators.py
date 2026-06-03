@@ -11,7 +11,8 @@ Pick by string name at ``build(cfg, validator=...)`` time.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .fnc_registry import FunctionalRegistry
 from .schema import ensure_schema
@@ -43,7 +44,7 @@ def jsonargparse(
     target: type | Callable[..., Any], data: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate via jsonargparse's parser. Requires the ``jsonargparse`` extra."""
-    import jsonargparse as ja
+    import jsonargparse as ja  # pyright: ignore[reportMissingImports]
 
     parser = ja.ArgumentParser()
     if isinstance(target, type):
