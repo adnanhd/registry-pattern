@@ -19,7 +19,7 @@ __all__ = ["RESOLVE_CACHE", "invalidate_resolve_cache"]
 
 # (type_name, repo) -> (registry_class, artifact). ``repo`` is None when
 # the resolve call did not narrow by repo.
-RESOLVE_CACHE: dict[tuple[str, "str | None"], tuple[type, Any]] = {}
+RESOLVE_CACHE: dict[tuple[str, str | None], tuple[type, Any]] = {}
 
 
 def invalidate_resolve_cache() -> None:

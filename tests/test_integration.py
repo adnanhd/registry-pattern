@@ -30,12 +30,10 @@ from registry import (
     attach_meter,
     build,
     detach_meter,
-    meters,
     resolve,
     serialize,
     validate,
 )
-from registry.meters import FactoryMeter
 
 # =============================================================================
 # Tree of registrars: Models -> {CNNModels, Pretrained -> ImagenetPretrained}

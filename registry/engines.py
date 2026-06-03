@@ -17,7 +17,7 @@ import logging
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import yaml as yaml_lib
 
@@ -25,7 +25,7 @@ import yaml as yaml_lib
 if sys.version_info >= (3, 11):
     import tomllib as tomli
 else:
-    import tomli
+    import tomli  # pyright: ignore[reportMissingImports]
 
 from .fnc_registry import FunctionalRegistry
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["ConfigFileEngine"]
 
 
-class ConfigFileEngine(FunctionalRegistry[[Path], Dict[str, Any]]):
+class ConfigFileEngine(FunctionalRegistry[[Path], dict[str, Any]]):
     """Registry for config file loaders.
 
     Each registered function takes a filepath and returns a config dict.
@@ -43,49 +43,49 @@ class ConfigFileEngine(FunctionalRegistry[[Path], Dict[str, Any]]):
 
 
 @ConfigFileEngine.register_artifact
-def json(filepath: Path) -> Dict[str, Any]:
+def json(filepath: Path) -> dict[str, Any]:
     """Load config from JSON file."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         return json_lib.load(f)
 
 
 @ConfigFileEngine.register_artifact
-def yaml(filepath: Path) -> Dict[str, Any]:
+def yaml(filepath: Path) -> dict[str, Any]:
     """Load config from YAML file. Requires the ``yaml`` extra."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         return yaml_lib.safe_load(f)
 
 
 @ConfigFileEngine.register_artifact
-def yml(filepath: Path) -> Dict[str, Any]:
+def yml(filepath: Path) -> dict[str, Any]:
     """Load config from YML file (alias for yaml)."""
     return yaml(filepath)
 
 
 @ConfigFileEngine.register_artifact
-def toml(filepath: Path) -> Dict[str, Any]:
+def toml(filepath: Path) -> dict[str, Any]:
     """Load config from TOML file."""
     with open(filepath, "rb") as f:
         return tomli.load(f)
 
 
 @ConfigFileEngine.register_artifact
-def xml(filepath: Path) -> Dict[str, Any]:
+def xml(filepath: Path) -> dict[str, Any]:
     """Load config from XML file.
 
     Converts XML to dict structure. Attributes become keys prefixed with '@'.
     Text content becomes '_text' key.
     """
 
-    def element_to_dict(elem: ET.Element) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    def element_to_dict(elem: ET.Element) -> dict[str, Any]:
+        result: dict[str, Any] = {}
 
         # Attributes with @ prefix
         for key, value in elem.attrib.items():
             result[f"@{key}"] = value
 
         # Children
-        children: Dict[str, list] = {}
+        children: dict[str, list] = {}
         for child in elem:
             child_data = element_to_dict(child)
             if child.tag in children:

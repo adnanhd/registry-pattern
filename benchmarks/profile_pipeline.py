@@ -124,7 +124,9 @@ def section_stage_breakdown(suite: BenchSuite) -> None:
     suite.measure("normalize_cfg(envelope)", lambda: normalize_cfg(cfg), iterations=500)
     suite.measure("build(envelope)", lambda: build(cfg), iterations=500, unit="ms")
     built = build(cfg)
-    suite.measure("serialize(built)", lambda: serialize(built), iterations=500, unit="ms")
+    suite.measure(
+        "serialize(built)", lambda: serialize(built), iterations=500, unit="ms"
+    )
 
 
 def section_cold_vs_warm(suite: BenchSuite) -> None:
@@ -145,7 +147,9 @@ def section_cold_vs_warm(suite: BenchSuite) -> None:
         "meta": {},
     }
     # Single sample for cold (warmup=0 measures the very first call).
-    suite.measure("cold first call", lambda: build(cfg), iterations=1, warmup=0, unit="ms")
+    suite.measure(
+        "cold first call", lambda: build(cfg), iterations=1, warmup=0, unit="ms"
+    )
     suite.measure("warm 50 calls", lambda: build(cfg), iterations=50, unit="ms")
 
 

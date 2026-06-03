@@ -100,7 +100,7 @@ def test_build_kwarg_overrides_envelope_repo() -> None:
 
 
 def test_build_explicit_class_with_repo() -> None:
-    cfg_dict: dict[str, Any] = {}
+    cfg_dict: dict[str, Any] = {}  # noqa: F841
     obj = build(
         _ResNet, {"layers": 34}, validator="python", repo="models.imagenet_pretrained"
     )

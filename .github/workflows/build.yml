@@ -62,7 +62,7 @@ jobs:
       - name: Lint with flake8
         # max-line-length picks up .flake8 (88); keep E501 ignored
         # because black already enforces line length.
-        run: flake8 registry/ tests/ --ignore=E501,W503
+        run: flake8 registry/ tests/ --ignore=E501,W503,E704
 
       - name: Lint with ruff
         run: ruff check registry/ tests/

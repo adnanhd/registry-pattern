@@ -21,7 +21,7 @@ import json
 import syslog
 import threading
 import time
-from typing import Any, Callable
+from typing import Any
 
 __all__ = [
     "FactoryReporter",
@@ -272,7 +272,7 @@ class OpenTelemetryReporter(FactoryReporter):
         meter_name: str = "registry.factory",
         span_name_prefix: str = "registry.build",
     ) -> None:
-        from opentelemetry import (  # raises ImportError if [otel] not installed
+        from opentelemetry import (  # pyright: ignore[reportMissingImports]; raises ImportError if [otel] not installed
             metrics,
             trace,
         )
@@ -311,7 +311,10 @@ class OpenTelemetryReporter(FactoryReporter):
     def on_error(self, *, cfg, exc, ctx, meta) -> None:
         if not self._stack:
             return
-        from opentelemetry.trace import Status, StatusCode
+        from opentelemetry.trace import (  # pyright: ignore[reportMissingImports]
+            Status,
+            StatusCode,
+        )  # pyright: ignore[reportMissingImports]
 
         span, _, _ = self._stack.pop()
         span.record_exception(exc)

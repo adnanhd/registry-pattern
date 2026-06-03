@@ -14,7 +14,6 @@ import gc
 import weakref
 from typing import Any
 
-import pytest
 from pydantic import BaseModel
 
 from registry import FunctionalRegistry, TypeRegistry, build
@@ -25,7 +24,6 @@ from registry.schema import (
     ensure_schema,
     get_schema,
 )
-
 
 # ---------------------------------------------------------------------------
 # Population at registration time

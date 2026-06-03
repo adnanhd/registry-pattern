@@ -30,7 +30,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Sample: one measurement series
 # ---------------------------------------------------------------------------
@@ -75,7 +74,11 @@ def _summarize(samples_t: List[float], label: str, unit: str) -> Sample:
         best=samples_t_sorted[0],
         mean=sum(samples_t_sorted) / n,
         median=samples_t_sorted[n // 2],
-        p95=samples_t_sorted[max(int(0.95 * n) - 1, 0)] if n >= 20 else samples_t_sorted[-1],
+        p95=(
+            samples_t_sorted[max(int(0.95 * n) - 1, 0)]
+            if n >= 20
+            else samples_t_sorted[-1]
+        ),
         stddev=statistics.stdev(samples_t_sorted) if n >= 2 else 0.0,
     )
 
@@ -245,9 +248,7 @@ def compare_baseline(
     for s in suite.samples:
         b = by_label.get(s.label)
         if b is None:
-            print(
-                f"{s.label:<45} {'-':>10} {s.best:>10.3f} {'-':>10}  NEW"
-            )
+            print(f"{s.label:<45} {'-':>10} {s.best:>10.3f} {'-':>10}  NEW")
             continue
         b_best = float(b["best"])
         delta_pct = (s.best - b_best) / b_best * 100 if b_best > 0 else 0.0

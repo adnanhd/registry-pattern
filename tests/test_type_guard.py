@@ -7,7 +7,7 @@ to accept either an instance of T or a BuildCfg that gets built into T.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -170,7 +170,7 @@ class TestBuildableNested:
 
         class AppConfig(BaseModel):
             main_component: Buildable[object]
-            backup_component: Optional[Buildable[object]] = None
+            backup_component: Buildable[object] | None = None
 
         config = AppConfig(
             main_component={
@@ -196,7 +196,7 @@ class TestBuildableNested:
 
         class Config(BaseModel):
             required: Buildable[object]
-            optional: Optional[Buildable[object]] = None
+            optional: Buildable[object] | None = None
 
         config = Config(required={"type": "SimpleComponent", "data": {"value": 1}})
 
@@ -205,10 +205,9 @@ class TestBuildableNested:
 
     def test_list_of_buildable(self):
         """List of Buildable items."""
-        from typing import List
 
         class Config(BaseModel):
-            components: List[Buildable[object]]
+            components: list[Buildable[object]]
 
         config = Config(
             components=[

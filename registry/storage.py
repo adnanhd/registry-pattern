@@ -2,9 +2,16 @@ r"""Thread-safe local storage for registries."""
 
 from __future__ import annotations
 
-from collections.abc import ItemsView, KeysView, ValuesView
+from collections.abc import (
+    Hashable,
+    ItemsView,
+    Iterator,
+    KeysView,
+    MutableMapping,
+    ValuesView,
+)
 from threading import RLock
-from typing import Dict, Generic, Hashable, Iterator, MutableMapping, TypeVar
+from typing import Generic, TypeVar
 
 __all__ = ["ThreadSafeLocalStorage"]
 
@@ -18,7 +25,7 @@ class ThreadSafeLocalStorage(
     """Thread-safe local storage with single-write multi-read semantics."""
 
     def __init__(self):
-        self._storage: Dict[KeyType, ValType] = {}
+        self._storage: dict[KeyType, ValType] = {}
         self._lock = RLock()
 
     def __getitem__(self, key: KeyType) -> ValType:
