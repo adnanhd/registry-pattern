@@ -7,11 +7,13 @@ from collections.abc import (
     ItemsView,
     Iterator,
     KeysView,
-    MutableMapping,
     ValuesView,
 )
 from threading import RLock
-from typing import Generic, TypeVar
+
+# ``MutableMapping`` is subscripted as a base class below, which requires the
+# typing alias on Python 3.8 (``collections.abc`` generics are PEP 585, 3.9+).
+from typing import Dict, Generic, MutableMapping, TypeVar
 
 __all__ = ["ThreadSafeLocalStorage"]
 
@@ -25,7 +27,7 @@ class ThreadSafeLocalStorage(
     """Thread-safe local storage with single-write multi-read semantics."""
 
     def __init__(self):
-        self._storage: dict[KeyType, ValType] = {}
+        self._storage: Dict[KeyType, ValType] = {}
         self._lock = RLock()
 
     def __getitem__(self, key: KeyType) -> ValType:
