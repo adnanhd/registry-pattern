@@ -7,7 +7,7 @@ name = "registry-pattern"
 version = "0.5.0"
 description = "A flexible registry pattern with DI container, Pydantic validation, and recursive config building"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Adnan Harun Dogan", email = "adnanharundogan@gmail.com"}
@@ -34,6 +34,8 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

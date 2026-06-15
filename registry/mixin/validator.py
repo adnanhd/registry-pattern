@@ -19,6 +19,8 @@ Notes on timing:
     the expired count may be inaccurate; it does not affect eviction behavior.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from threading import RLock

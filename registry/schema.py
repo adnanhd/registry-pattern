@@ -140,7 +140,9 @@ def derive_config_schema(target: type | Callable[..., Any]) -> type[BaseModel]:
     return create_model(f"{schema_name}ConfigSchema", **fields)
 
 
-def derive_meta_schema(target: type | Callable[..., Any]) -> type[BaseModel] | None:
+def derive_meta_schema(
+    target: type | Callable[..., Any],
+) -> type[BaseModel] | None:
     """Walk ``Annotated[T, Marker(...)]`` metadata; collect compute markers.
 
     Returns a Pydantic model with one field per marker (name -> return type),

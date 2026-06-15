@@ -7,6 +7,8 @@ Exports:
     MutableValidatorMixin: Write-side validation wrapper.
 """
 
+from __future__ import annotations
+
 from .accessor import RegistryAccessorMixin
 from .mutator import RegistryMutatorMixin
 from .validator import ImmutableValidatorMixin, MutableValidatorMixin

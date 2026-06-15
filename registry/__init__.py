@@ -24,6 +24,8 @@ Usage::
     model = build({"type": "ResNet18", "data": {"num_classes": 10}})
 """
 
+from __future__ import annotations
+
 from ._version import __version__, get_debug_info, get_version_info, print_version_info
 from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .factory import build, resolve, serialize, validate

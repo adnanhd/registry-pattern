@@ -16,6 +16,8 @@ Helpers:
     build_error_context: Build standardized error context dict.
 """
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import logging
