@@ -30,6 +30,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
+# ``typing.get_type_hints`` gained ``include_extras`` (needed to read
+# Annotated[...] markers) in 3.9; typing_extensions backports it to 3.8.
+import typing_extensions
 from pydantic import BaseModel, create_model
 
 from .type_guard import Buildable
@@ -68,7 +71,7 @@ def _resolved_hints(target: Union[type, Callable[..., Any]]) -> Dict[str, Any]:
     """
     obj = target.__init__ if isinstance(target, type) else target
     try:
-        return typing.get_type_hints(obj, include_extras=True)
+        return typing_extensions.get_type_hints(obj, include_extras=True)
     except Exception:
         # Best effort: use raw annotations from the signature.
         sig = inspect.signature(obj)
