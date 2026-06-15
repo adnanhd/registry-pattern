@@ -27,7 +27,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any, Generic, TypeVar, get_args, get_origin
+from typing import Any, Dict, Generic, Type, TypeVar, get_args, get_origin
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
@@ -46,7 +46,7 @@ __all__ = [
 T = TypeVar("T")
 
 # Cache for parameterized types to avoid recreation
-_PARAMETERIZED_CACHE: dict[type, type] = {}
+_PARAMETERIZED_CACHE: Dict[type, type] = {}
 
 
 def _runtime_type(expected_type: type) -> type:
@@ -74,7 +74,7 @@ class BuildableValidator(Generic[T]):
     as a type annotation in Pydantic models.
     """
 
-    def __init__(self, expected_type: type[T]):
+    def __init__(self, expected_type: Type[T]):
         self.expected_type = expected_type
 
     def validate(self, value: Any) -> T:
@@ -219,7 +219,7 @@ class Buildable(Generic[T]):
 
     __slots__ = ()
 
-    def __class_getitem__(cls, item: type[T]) -> type:
+    def __class_getitem__(cls, item: Type[T]) -> type:
         """Support Buildable[SomeType] syntax."""
         # Check cache first
         if item in _PARAMETERIZED_CACHE:

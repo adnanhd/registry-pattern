@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import time
 from threading import RLock
+from typing import Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 from collections.abc import Hashable, Iterator  # noqa: E402
@@ -72,13 +73,13 @@ class ValidationCache:
         self.max_size: int = max_size
         self.ttl: float = ttl_seconds
         # (id, type_name, op) -> (result, ts, suggestions_tuple)
-        self._cache: dict[tuple[Hashable, str, str], tuple[bool, float, list[str]]] = {}
+        self._cache: Dict[Tuple[Hashable, str, str], Tuple[bool, float, List[str]]] = {}
         self._lock: RLock = RLock()
 
     def _now(self) -> float:
         return time.monotonic()
 
-    def get(self, obj: Any, operation: str) -> tuple[bool, list[str]] | None:
+    def get(self, obj: Any, operation: str) -> Optional[Tuple[bool, List[str]]]:
         """Return cached `(result, suggestions)` for `obj`/`operation`, or `None`."""
         key = (id(obj), get_type_name(type(obj)), operation)
         with self._lock:
@@ -94,7 +95,7 @@ class ValidationCache:
             return result, list(sugg_tuple)
 
     def set(
-        self, obj: Any, operation: str, result: bool, suggestions: list[str]
+        self, obj: Any, operation: str, result: bool, suggestions: List[str]
     ) -> None:
         """Insert or replace cache entry for `obj`/`operation` with a TTL."""
         key = (id(obj), get_type_name(type(obj)), operation)
@@ -120,7 +121,7 @@ def clear_validation_cache() -> int:
         return count
 
 
-def get_cache_stats() -> dict[str, Any]:
+def get_cache_stats() -> Dict[str, Any]:
     """Return simple stats for the module-level cache.
 
     Expired entries are counted against `time.time()`, not `time.monotonic()`.
@@ -143,7 +144,7 @@ def get_cache_stats() -> dict[str, Any]:
 
 
 def configure_validation_cache(
-    max_size: int | None = None, ttl_seconds: float | None = None
+    max_size: Optional[int] = None, ttl_seconds: Optional[float] = None
 ) -> None:
     """Mutate the module-level cache configuration.
 
@@ -169,7 +170,7 @@ def _is_hashable(value: Any) -> bool:
     return isinstance(value, Hashable)
 
 
-def _resolve_typevars(cls: type) -> tuple[Any, Any]:
+def _resolve_typevars(cls: type) -> Tuple[Any, Any]:
     if not hasattr(cls, "__orig_bases__"):
         raise TypeError(f"Expected a parametrized Generic subclass, got {cls!r}")
 
@@ -393,7 +394,7 @@ class MutableValidatorMixin(
 
     @classmethod
     def register_artifact(
-        cls, key: KeyType | ValType, item: ValType | None = None
+        cls, key: Union[KeyType, ValType], item: Optional[ValType] = None
     ) -> ValType:
         """Register an artifact with validation; supports explicit or inferred keys."""
         if item is None:
@@ -509,7 +510,7 @@ class MutableValidatorMixin(
     # -----------------------------------------------------------------------------
 
     @classmethod
-    def validate_registry_state(cls) -> dict[str, Any]:
+    def validate_registry_state(cls) -> Dict[str, Any]:
         """Validate every artifact and return a summary report."""
         total_artifacts = cls._len_mapping()
         validation_errors = []
@@ -549,20 +550,20 @@ class MutableValidatorMixin(
 
     @classmethod
     def configure_validation(
-        cls, cache_size: int | None = None, cache_ttl: float | None = None
+        cls, cache_size: Optional[int] = None, cache_ttl: Optional[float] = None
     ) -> None:
         """Adjust shared validation cache parameters for this process."""
         configure_validation_cache(cache_size, cache_ttl)
 
     @classmethod
-    def get_validation_stats(cls) -> dict[str, Any]:
+    def get_validation_stats(cls) -> Dict[str, Any]:
         """Return shared validation cache statistics."""
         return get_cache_stats()
 
     @classmethod
     def batch_validate(
-        cls, items: dict[KeyType, ValType]
-    ) -> dict[KeyType, bool | ValidationError]:
+        cls, items: Dict[KeyType, ValType]
+    ) -> Dict[KeyType, Union[bool, ValidationError]]:
         """Validate multiple items without registering them.
 
         Returns:
@@ -593,16 +594,16 @@ class MutableValidatorMixin(
 
     @classmethod
     def safe_register_batch(
-        cls, items: dict[KeyType, ValType], skip_invalid: bool = True
-    ) -> dict[str, Any]:
+        cls, items: Dict[KeyType, ValType], skip_invalid: bool = True
+    ) -> Dict[str, Any]:
         """Register multiple items with per-item error capture.
 
         Returns:
             Dict with keys: successful, failed, total, errors.
         """
-        successful: list[KeyType] = []
-        failed: list[KeyType] = []
-        errors: list[dict[str, Any]] = []
+        successful: List[KeyType] = []
+        failed: List[KeyType] = []
+        errors: List[Dict[str, Any]] = []
         for key, item in items.items():
             try:
                 cls.register_artifact(key, item)

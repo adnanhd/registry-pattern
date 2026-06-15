@@ -11,8 +11,10 @@ Pick by string name at ``build(cfg, validator=...)`` time.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+# ``Callable`` is subscripted at runtime in the ``Validator`` alias below,
+# which needs the typing alias on Python 3.8 (``collections.abc`` generics are
+# PEP 585, 3.9+).
+from typing import Any, Callable, Dict, Union
 
 from .fnc_registry import FunctionalRegistry
 from .schema import ensure_schema
@@ -20,7 +22,7 @@ from .schema import ensure_schema
 __all__ = ["ValidatorRegistry", "Validator"]
 
 
-Validator = Callable[[type | Callable[..., Any], dict[str, Any]], dict[str, Any]]
+Validator = Callable[[Union[type, Callable[..., Any]], Dict[str, Any]], Dict[str, Any]]
 
 
 class ValidatorRegistry(FunctionalRegistry):
@@ -28,7 +30,9 @@ class ValidatorRegistry(FunctionalRegistry):
 
 
 @ValidatorRegistry.register_artifact
-def pydantic(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, Any]:
+def pydantic(
+    target: Union[type, Callable[..., Any]], data: Dict[str, Any]
+) -> Dict[str, Any]:
     """Validate ``data`` against the target's cached config schema.
 
     Reads from the per-target schema cache populated at registration time.
@@ -41,8 +45,8 @@ def pydantic(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[st
 
 @ValidatorRegistry.register_artifact
 def jsonargparse(
-    target: type | Callable[..., Any], data: dict[str, Any]
-) -> dict[str, Any]:
+    target: Union[type, Callable[..., Any]], data: Dict[str, Any]
+) -> Dict[str, Any]:
     """Validate via jsonargparse's parser. Requires the ``jsonargparse`` extra."""
     import jsonargparse as ja  # pyright: ignore[reportMissingImports]
 
@@ -55,19 +59,21 @@ def jsonargparse(
 
 
 @ValidatorRegistry.register_artifact
-def noop(target: type | Callable[..., Any], data: dict[str, Any]) -> dict[str, Any]:
+def noop(
+    target: Union[type, Callable[..., Any]], data: Dict[str, Any]
+) -> Dict[str, Any]:
     """Passthrough -- no validation, no coercion."""
     return dict(data)
 
 
 @ValidatorRegistry.register_artifact
-def python(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+def python(target: Union[type, Callable[..., Any]], data: Any) -> Dict[str, Any]:
     """Python-native dict input; validate against target's signature via Pydantic."""
     return pydantic(target, data if isinstance(data, dict) else dict(data))
 
 
 @ValidatorRegistry.register_artifact
-def yaml(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+def yaml(target: Union[type, Callable[..., Any]], data: Any) -> Dict[str, Any]:
     """YAML string input; decode then python-validate."""
     import yaml as _yaml
 
@@ -76,7 +82,7 @@ def yaml(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
 
 
 @ValidatorRegistry.register_artifact
-def json(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+def json(target: Union[type, Callable[..., Any]], data: Any) -> Dict[str, Any]:
     """JSON string input; decode then python-validate."""
     import json as _json
 
@@ -85,7 +91,7 @@ def json(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
 
 
 @ValidatorRegistry.register_artifact
-def argparse(target: type | Callable[..., Any], data: Any) -> dict[str, Any]:
+def argparse(target: Union[type, Callable[..., Any]], data: Any) -> Dict[str, Any]:
     """argparse.Namespace input; ``vars(ns)`` then python-validate."""
     decoded = (
         vars(data) if hasattr(data, "__dict__") and not isinstance(data, dict) else data

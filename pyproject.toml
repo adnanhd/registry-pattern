@@ -118,9 +118,14 @@ reportMissingTypeStubs = false
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py38"
 select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]
+# The package supports Python 3.8 and uses pydantic, which evaluates
+# annotations at runtime. pyupgrade's annotation rewrites assume
+# ``from __future__ import annotations`` makes the modern ``list[...]`` /
+# ``X | None`` forms safe, but pydantic resolves the stringified annotations
+# on import and those forms raise on 3.8. Keep the typing.* forms.
+ignore = ["E501", "UP006", "UP007", "UP035", "UP037", "UP045"]
 
 [tool.ruff.per-file-ignores]
 # Tests build classes dynamically and bind them to PascalCase locals.

@@ -21,7 +21,7 @@ import json
 import syslog
 import threading
 import time
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 __all__ = [
     "FactoryReporter",
@@ -41,16 +41,16 @@ class FactoryReporter:
     name: str = "factory_reporter"
 
     def on_build_start(
-        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
+        self, *, cfg: Any, ctx: Dict[str, Any], meta: Dict[str, Any]
     ) -> None: ...
 
     def on_validated(
         self,
         *,
         target: Any,
-        kwargs: dict[str, Any],
-        ctx: dict[str, Any],
-        meta: dict[str, Any],
+        kwargs: Dict[str, Any],
+        ctx: Dict[str, Any],
+        meta: Dict[str, Any],
     ) -> None: ...
 
     def on_built(
@@ -58,8 +58,8 @@ class FactoryReporter:
         *,
         target: Any,
         result: Any,
-        meta: dict[str, Any],
-        ctx: dict[str, Any],
+        meta: Dict[str, Any],
+        ctx: Dict[str, Any],
     ) -> None: ...
 
     def on_error(
@@ -67,8 +67,8 @@ class FactoryReporter:
         *,
         cfg: Any,
         exc: BaseException,
-        ctx: dict[str, Any],
-        meta: dict[str, Any],
+        ctx: Dict[str, Any],
+        meta: Dict[str, Any],
     ) -> None: ...
 
 
@@ -76,7 +76,7 @@ class FactoryReporter:
 # Reporter registry
 # ---------------------------------------------------------------------------
 
-_REPORTERS: dict[str, FactoryReporter] = {}
+_REPORTERS: Dict[str, FactoryReporter] = {}
 _LOCK = threading.Lock()
 
 
@@ -87,13 +87,13 @@ def attach_reporter(reporter: FactoryReporter) -> FactoryReporter:
     return reporter
 
 
-def detach_reporter(name: str) -> FactoryReporter | None:
+def detach_reporter(name: str) -> Optional[FactoryReporter]:
     """Remove and return the reporter registered under ``name``."""
     with _LOCK:
         return _REPORTERS.pop(name, None)
 
 
-def reporters() -> dict[str, FactoryReporter]:
+def reporters() -> Dict[str, FactoryReporter]:
     """Snapshot of currently attached reporters."""
     with _LOCK:
         return dict(_REPORTERS)
@@ -188,7 +188,7 @@ class HTTPDashboardReporter(FactoryReporter):
     def __init__(
         self, port: int = 8765, max_events: int = 200, host: str = "127.0.0.1"
     ) -> None:
-        self._events: list[dict[str, Any]] = []
+        self._events: List[Dict[str, Any]] = []
         self._max_events: int = max_events
         self._lock: threading.Lock = threading.Lock()
         self._server: http.server.HTTPServer = self._start_server(host, port)
@@ -285,7 +285,7 @@ class OpenTelemetryReporter(FactoryReporter):
             description="Wall time per registry.build invocation",
         )
         self._span_prefix = span_name_prefix
-        self._stack: list[tuple[Any, float, str]] = []  # (span, start_perf, type)
+        self._stack: List[Tuple[Any, float, str]] = []  # (span, start_perf, type)
 
     def on_build_start(self, *, cfg, ctx, meta) -> None:
         t = _type_of(cfg) or "unknown"
