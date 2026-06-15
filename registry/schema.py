@@ -21,7 +21,6 @@ target is itself garbage-collected the cache entry vanishes automatically.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Tuple, Type, Union
 
 import inspect
 import threading
@@ -51,7 +50,7 @@ __all__ = [
 ]
 
 
-_JSON_NATIVE: Tuple[type, ...] = (int, float, str, bool, type(None), list, dict, tuple)
+_JSON_NATIVE: tuple[type, ...] = (int, float, str, bool, type(None), list, dict, tuple)
 
 
 def _unwrap_annotated(tp: Any) -> Any:
@@ -61,7 +60,7 @@ def _unwrap_annotated(tp: Any) -> Any:
     return tp
 
 
-def _resolved_hints(target: Union[type, Callable[..., Any]]) -> Dict[str, Any]:
+def _resolved_hints(target: type | Callable[..., Any]) -> dict[str, Any]:
     """Resolve annotations on ``target``, evaluating string forms.
 
     Falls back to ``inspect.signature(...).parameters[name].annotation`` if
@@ -112,11 +111,11 @@ def _config_type_for(tp: Any) -> Any:
     return Any
 
 
-def _signature_of(target: Union[type, Callable[..., Any]]) -> inspect.Signature:
+def _signature_of(target: type | Callable[..., Any]) -> inspect.Signature:
     return inspect.signature(target.__init__ if isinstance(target, type) else target)
 
 
-def derive_config_schema(target: Union[type, Callable[..., Any]]) -> Type[BaseModel]:
+def derive_config_schema(target: type | Callable[..., Any]) -> type[BaseModel]:
     """Build a Pydantic model from ``target``'s signature for input validation.
 
     No ``arbitrary_types_allowed``. Arbitrary classes are rewritten to
@@ -124,7 +123,7 @@ def derive_config_schema(target: Union[type, Callable[..., Any]]) -> Type[BaseMo
     """
     sig = _signature_of(target)
     hints = _resolved_hints(target)
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
     for name, p in sig.parameters.items():
         if name == "self" or p.kind in (
             inspect.Parameter.VAR_POSITIONAL,
@@ -141,7 +140,9 @@ def derive_config_schema(target: Union[type, Callable[..., Any]]) -> Type[BaseMo
     return create_model(f"{schema_name}ConfigSchema", **fields)
 
 
-def derive_meta_schema(target: Union[type, Callable[..., Any]]) -> Optional[Type[BaseModel]]:
+def derive_meta_schema(
+    target: type | Callable[..., Any],
+) -> type[BaseModel] | None:
     """Walk ``Annotated[T, Marker(...)]`` metadata; collect compute markers.
 
     Returns a Pydantic model with one field per marker (name -> return type),
@@ -152,7 +153,7 @@ def derive_meta_schema(target: Union[type, Callable[..., Any]]) -> Optional[Type
     from pydantic import ConfigDict
 
     hints = _resolved_hints(target)
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
     for hint in hints.values():
         if not hasattr(hint, "__metadata__"):
             continue
@@ -175,8 +176,8 @@ def derive_meta_schema(target: Union[type, Callable[..., Any]]) -> Optional[Type
 
 
 def resolve_data_schema(
-    registry: type, target: Union[type, Callable[..., Any]]
-) -> Type[BaseModel]:
+    registry: type, target: type | Callable[..., Any]
+) -> type[BaseModel]:
     """Explicit ``registry.data_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "data_schema", None)
     if explicit is not None:
@@ -185,8 +186,8 @@ def resolve_data_schema(
 
 
 def resolve_meta_schema(
-    registry: type, target: Union[type, Callable[..., Any]]
-) -> Optional[Type[BaseModel]]:
+    registry: type, target: type | Callable[..., Any]
+) -> type[BaseModel] | None:
     """Explicit ``registry.meta_schema`` wins; otherwise serve from cache."""
     explicit = getattr(registry, "meta_schema", None)
     if explicit is not None:
@@ -195,9 +196,9 @@ def resolve_meta_schema(
 
 
 def process_validate(
-    target: Union[type, Callable[..., Any]],
-    kwargs: Dict[str, Any],
-    ctx: Dict[str, Any],
+    target: type | Callable[..., Any],
+    kwargs: dict[str, Any],
+    ctx: dict[str, Any],
 ) -> None:
     """Run every ``Annotated[..., marker_with_validate].validate(value, kwargs, ctx)``."""
     hints = ensure_schema(target).hints
@@ -210,9 +211,9 @@ def process_validate(
 
 
 def process_compute(
-    target: Union[type, Callable[..., Any]],
-    kwargs: Dict[str, Any],
-    meta: Dict[str, Any],
+    target: type | Callable[..., Any],
+    kwargs: dict[str, Any],
+    meta: dict[str, Any],
 ) -> None:
     """Run every ``Annotated[..., marker_with_compute].compute(value)`` and write to meta."""
     hints = ensure_schema(target).hints
@@ -244,9 +245,9 @@ class ArtifactSchema:
       build and ``get_type_hints`` is itself expensive.
     """
 
-    config: Type[BaseModel]
-    meta: Optional[Type[BaseModel]]
-    hints: Dict[str, Any]
+    config: type[BaseModel]
+    meta: type[BaseModel] | None
+    hints: dict[str, Any]
 
 
 _SCHEMA_CACHE: weakref.WeakKeyDictionary[Any, ArtifactSchema] = (
@@ -256,9 +257,9 @@ _SCHEMA_LOCK = threading.Lock()
 
 
 def build_schema(
-    target: Union[type, Callable[..., Any]],
+    target: type | Callable[..., Any],
     *,
-    config_override: Optional[Type[BaseModel]] = None,
+    config_override: type[BaseModel] | None = None,
 ) -> ArtifactSchema:
     """Derive an :class:`ArtifactSchema` for ``target`` without caching.
 
@@ -275,9 +276,9 @@ def build_schema(
 
 
 def cache_schema(
-    target: Union[type, Callable[..., Any]],
+    target: type | Callable[..., Any],
     *,
-    config_override: Optional[Type[BaseModel]] = None,
+    config_override: type[BaseModel] | None = None,
 ) -> ArtifactSchema:
     """Build the schema for ``target`` and store it in the weak cache.
 
@@ -293,12 +294,12 @@ def cache_schema(
     return schema
 
 
-def get_schema(target: Any) -> Optional[ArtifactSchema]:
+def get_schema(target: Any) -> ArtifactSchema | None:
     """Return the cached :class:`ArtifactSchema` for ``target`` or ``None``."""
     return _SCHEMA_CACHE.get(target)
 
 
-def ensure_schema(target: Union[type, Callable[..., Any]]) -> ArtifactSchema:
+def ensure_schema(target: type | Callable[..., Any]) -> ArtifactSchema:
     """Return the cached schema, deriving + caching on the first miss.
 
     Double-checked under a lock so concurrent first-builds for the same

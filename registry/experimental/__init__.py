@@ -9,4 +9,5 @@ Each submodule pins its own optional dependency in ``pyproject.toml``::
 
     pip install 'registry-pattern[torch]'   # registry.experimental.torch_compat
 """
+
 from __future__ import annotations

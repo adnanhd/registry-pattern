@@ -18,7 +18,6 @@ The factory writes computed values back into ``cfg.meta`` and attaches
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Union
 
 import logging
 import re
@@ -43,7 +42,7 @@ _REF_RE = re.compile(r"^\$([A-Za-z_][\w.]*)(\(\))?$")
 
 # External-source schemes. Each handler maps a stripped URL (after the
 # leading ``$``) to a Python value -- typically a parsed dict.
-_REF_SCHEMES: Dict[str, Any] = {}
+_REF_SCHEMES: dict[str, Any] = {}
 
 
 def register_ref_scheme(prefix: str, handler: Any) -> None:
@@ -87,7 +86,7 @@ register_ref_scheme("http", _resolve_http_ref)
 register_ref_scheme("https", _resolve_http_ref)
 
 
-def _resolve_ref(s: str, scope: Dict[str, Any]) -> Any:
+def _resolve_ref(s: str, scope: dict[str, Any]) -> Any:
     """Resolve a ``$ref`` string.
 
     Supports:
@@ -127,7 +126,7 @@ def _repo_matches(reg_repo: str, query: str) -> bool:
     return reg_repo == query or reg_repo.startswith(query + ".")
 
 
-def resolve(type_name: str, repo: Optional[str] = None) -> Tuple[type, Any]:
+def resolve(type_name: str, repo: str | None = None) -> tuple[type, Any]:
     """Find the registry that holds ``type_name``.
 
     Returns ``(registry_class, artifact)``. When ``repo`` is provided, the
@@ -148,7 +147,7 @@ def resolve(type_name: str, repo: Optional[str] = None) -> Tuple[type, Any]:
     if cached is not None:
         return cached
 
-    matches: List[Tuple[type, Any]] = []
+    matches: list[tuple[type, Any]] = []
     for repo_path, reg in {**_ALL_TYPE_REGISTRIES, **_ALL_FN_REGISTRIES}.items():
         if repo is not None and not _repo_matches(repo_path, repo):
             continue
@@ -177,11 +176,11 @@ def resolve(type_name: str, repo: Optional[str] = None) -> Tuple[type, Any]:
 
 
 def validate(
-    target: Union[Union[type, Callable[..., Any]], str],
+    target: type | Callable[..., Any] | str,
     data: Any,
     *,
     validator: str = "python",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run the medium decoder + Pydantic schema check, return validated kwargs.
 
     Sits between ``resolve`` (no work) and ``build`` (full pipeline). Useful
@@ -197,12 +196,12 @@ def validate(
 
 
 def build(
-    cfg_or_target: Union[Union[Union[BuildCfg, Dict[str, Any]], type], Callable[..., Any]],
+    cfg_or_target: BuildCfg | dict[str, Any] | type | Callable[..., Any],
     data: Any = None,  # pyright: ignore[reportRedeclaration]
     *,
     validator: str = "pydantic",
-    ctx: Optional[Dict[str, Any]] = None,
-    repo: Optional[str] = None,
+    ctx: dict[str, Any] | None = None,
+    repo: str | None = None,
 ) -> Any:
     """Recursively construct from a normalized envelope OR explicit class+data.
 
@@ -244,10 +243,10 @@ def build(
     elif repo is not None and isinstance(cfg, dict):
         cfg = {**cfg, "repo": repo}
     # Preserve a reference to the original dict so meta can be written back.
-    raw_dict: Optional[Dict[str, Any]] = cfg if isinstance(cfg, dict) else None
+    raw_dict: dict[str, Any] | None = cfg if isinstance(cfg, dict) else None
     cfg = normalize_cfg(cfg)
     ctx = dict(ctx) if ctx else {}
-    meta: Dict[str, Any] = dict(
+    meta: dict[str, Any] = dict(
         cfg.meta
     )  # available to meters from the very first stage
 
@@ -264,7 +263,7 @@ def build(
         validator_fn = resolve_validator(validator)
 
         # [1] recurse + $ref; later siblings can reference earlier ones
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         for k, v in cfg.data.items():
             scope = {**ctx, **data}
             if is_build_cfg(v):
@@ -275,7 +274,7 @@ def build(
                 data[k] = v
 
         # [2] config-layer validation
-        kwargs: Dict[str, Any] = validator_fn(target, data)
+        kwargs: dict[str, Any] = validator_fn(target, data)
 
         # [3] runtime-layer pre-validation
         pre = getattr(registry, "pre_call", None)
@@ -348,7 +347,7 @@ class SerializerRegistry(FunctionalRegistry):
     """String-keyed registry of serializer engines for ``serialize()``."""
 
 
-def _envelope_for(instance: Any, *, repo: Optional[str] = None) -> Dict[str, Any]:
+def _envelope_for(instance: Any, *, repo: str | None = None) -> dict[str, Any]:
     """Build the ``{type, data, meta}`` envelope from a constructed instance.
 
     Reads constructor-arg attributes for ``data``; invokes the registry's
@@ -370,9 +369,9 @@ def _envelope_for(instance: Any, *, repo: Optional[str] = None) -> Dict[str, Any
         if n != "self" and hasattr(instance, n)
     }
 
-    meta: Dict[str, Any] = {}
-    registry: Optional[type] = None
-    candidates: List[type] = []
+    meta: dict[str, Any] = {}
+    registry: type | None = None
+    candidates: list[type] = []
     for repo_path, reg in _ALL_TYPE_REGISTRIES.items():
         if repo is not None and not _repo_matches(repo_path, repo):
             continue
@@ -397,7 +396,7 @@ def _envelope_for(instance: Any, *, repo: Optional[str] = None) -> Dict[str, Any
 
 
 @SerializerRegistry.register_artifact
-def python(instance: Any, *, repo: Optional[str] = None) -> Dict[str, Any]:
+def python(instance: Any, *, repo: str | None = None) -> dict[str, Any]:
     """Envelope-shaped dict: ``{type, data, meta}``.
 
     ``data`` mirrors the instance's constructor kwargs; ``meta`` collects
@@ -408,7 +407,7 @@ def python(instance: Any, *, repo: Optional[str] = None) -> Dict[str, Any]:
 
 
 @SerializerRegistry.register_artifact
-def yaml(instance: Any, *, repo: Optional[str] = None) -> str:
+def yaml(instance: Any, *, repo: str | None = None) -> str:
     """YAML string of the envelope produced by :func:`python`."""
     import yaml as _yaml
 
@@ -416,7 +415,7 @@ def yaml(instance: Any, *, repo: Optional[str] = None) -> str:
 
 
 @SerializerRegistry.register_artifact
-def json(instance: Any, *, repo: Optional[str] = None) -> str:
+def json(instance: Any, *, repo: str | None = None) -> str:
     """JSON string of the envelope produced by :func:`python`."""
     import json as _json
 
@@ -427,10 +426,10 @@ def serialize(
     instance: Any,
     *,
     ctx: (
-        Optional[Dict[str, Any]]
+        dict[str, Any] | None
     ) = None,  # noqa: ARG001 -- reserved for future nested serdes
     serializator: str = "python",
-    repo: Optional[str] = None,
+    repo: str | None = None,
 ) -> Any:
     """Serialize ``instance`` into a ``BuildCfg``-shaped envelope.
 

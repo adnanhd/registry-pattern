@@ -20,7 +20,6 @@ per-level measurements:
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
 
 import resource
 import threading
@@ -55,7 +54,7 @@ class FactoryMeter:
     name: str = "factory_meter"
 
     def on_build_start(
-        self, *, cfg: Any, ctx: Dict[str, Any], meta: Dict[str, Any]
+        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
     ) -> None:
         """Pre-recursion / pre-validation. Good place to record baselines."""
 
@@ -63,9 +62,9 @@ class FactoryMeter:
         self,
         *,
         target: Any,
-        kwargs: Dict[str, Any],
-        ctx: Dict[str, Any],
-        meta: Dict[str, Any],
+        kwargs: dict[str, Any],
+        ctx: dict[str, Any],
+        meta: dict[str, Any],
     ) -> None:
         """After kwargs assembled + validated, before ``target(**kwargs)``."""
 
@@ -74,8 +73,8 @@ class FactoryMeter:
         *,
         target: Any,
         result: Any,
-        meta: Dict[str, Any],
-        ctx: Dict[str, Any],
+        meta: dict[str, Any],
+        ctx: dict[str, Any],
     ) -> None:
         """After invocation + post hooks. Compute deltas and write to ``meta``."""
 
@@ -84,8 +83,8 @@ class FactoryMeter:
         *,
         cfg: Any,
         exc: BaseException,
-        ctx: Dict[str, Any],
-        meta: Dict[str, Any],
+        ctx: dict[str, Any],
+        meta: dict[str, Any],
     ) -> None:
         """Build failed. Clean up any baseline state."""
 
@@ -94,7 +93,7 @@ class FactoryMeter:
 # Module-level meter registry
 # ---------------------------------------------------------------------------
 
-_METERS: Dict[str, FactoryMeter] = {}
+_METERS: dict[str, FactoryMeter] = {}
 _LOCK = threading.Lock()
 
 
@@ -105,13 +104,13 @@ def attach_meter(meter: FactoryMeter) -> FactoryMeter:
     return meter
 
 
-def detach_meter(name: str) -> Optional[FactoryMeter]:
+def detach_meter(name: str) -> FactoryMeter | None:
     """Remove and return the meter registered under ``name``."""
     with _LOCK:
         return _METERS.pop(name, None)
 
 
-def meters() -> Dict[str, FactoryMeter]:
+def meters() -> dict[str, FactoryMeter]:
     """Snapshot of currently attached meters."""
     with _LOCK:
         return dict(_METERS)
@@ -138,13 +137,13 @@ class _StackedMeter(FactoryMeter):
     """Base for meters that take a baseline at on_build_start and emit a delta at on_built."""
 
     def __init__(self) -> None:
-        self._stack: List[Tuple[Any, ...]] = []
+        self._stack: list[tuple[Any, ...]] = []
 
-    def _sample(self) -> Tuple[Any, ...]:
+    def _sample(self) -> tuple[Any, ...]:
         raise NotImplementedError
 
     def _write(
-        self, meta: Dict[str, Any], before: Tuple[Any, ...], after: Tuple[Any, ...]
+        self, meta: dict[str, Any], before: tuple[Any, ...], after: tuple[Any, ...]
     ) -> None:
         raise NotImplementedError
 
@@ -171,7 +170,7 @@ class LifetimeMeter(_StackedMeter):
 
     name: str = "lifetime"
 
-    def _sample(self) -> Tuple[float]:
+    def _sample(self) -> tuple[float]:
         return (time.perf_counter(),)
 
     def _write(self, meta, before, after) -> None:
@@ -183,7 +182,7 @@ class CPUMeter(_StackedMeter):
 
     name: str = "cpu"
 
-    def _sample(self) -> Tuple[float, float]:
+    def _sample(self) -> tuple[float, float]:
         r = resource.getrusage(resource.RUSAGE_SELF)
         return (r.ru_utime, r.ru_stime)
 
@@ -197,7 +196,7 @@ class MemoryMeter(_StackedMeter):
 
     name: str = "memory"
 
-    def _sample(self) -> Tuple[int]:
+    def _sample(self) -> tuple[int]:
         return (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,)
 
     def _write(self, meta, before, after) -> None:
@@ -211,10 +210,10 @@ class IOMeter(_StackedMeter):
     name: str = "io"
 
     @staticmethod
-    def _read_proc_io() -> Dict[str, int]:
+    def _read_proc_io() -> dict[str, int]:
         try:
             with open("/proc/self/io") as f:
-                out: Dict[str, int] = {}
+                out: dict[str, int] = {}
                 for line in f:
                     k, _, v = line.partition(": ")
                     out[k.strip()] = int(v.strip())
@@ -222,7 +221,7 @@ class IOMeter(_StackedMeter):
         except OSError:
             return {}
 
-    def _sample(self) -> Tuple[int, int, int, int]:
+    def _sample(self) -> tuple[int, int, int, int]:
         s = self._read_proc_io()
         return (
             s.get("read_bytes", 0),
@@ -244,7 +243,7 @@ class NetworkMeter(_StackedMeter):
     name: str = "network"
 
     @staticmethod
-    def _read_proc_net_dev() -> Tuple[int, int]:
+    def _read_proc_net_dev() -> tuple[int, int]:
         rx_total = 0
         tx_total = 0
         try:
@@ -260,7 +259,7 @@ class NetworkMeter(_StackedMeter):
             pass
         return (rx_total, tx_total)
 
-    def _sample(self) -> Tuple[int, int]:
+    def _sample(self) -> tuple[int, int]:
         return self._read_proc_net_dev()
 
     def _write(self, meta, before, after) -> None:
@@ -278,7 +277,7 @@ class HeapMeter(_StackedMeter):
         if not tracemalloc.is_tracing():
             tracemalloc.start()
 
-    def _sample(self) -> Tuple[int, int]:
+    def _sample(self) -> tuple[int, int]:
         return tracemalloc.get_traced_memory()
 
     def _write(self, meta, before, after) -> None:

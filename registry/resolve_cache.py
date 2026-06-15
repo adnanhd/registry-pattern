@@ -11,7 +11,6 @@ entries are dropped.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Tuple
 
 from typing import Any
 
@@ -20,7 +19,7 @@ __all__ = ["RESOLVE_CACHE", "invalidate_resolve_cache"]
 
 # (type_name, repo) -> (registry_class, artifact). ``repo`` is None when
 # the resolve call did not narrow by repo.
-RESOLVE_CACHE: Dict[Tuple[str, Optional[str]], Tuple[type, Any]] = {}
+RESOLVE_CACHE: dict[tuple[str, str | None], tuple[type, Any]] = {}
 
 
 def invalidate_resolve_cache() -> None:

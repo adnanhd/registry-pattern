@@ -16,7 +16,6 @@ Unknown data keys (not in builder signature) go to meta._unused_data.
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, Union
 
 import logging
 from typing import Any
@@ -51,8 +50,8 @@ class BuildCfg(BaseModel):
     # ``data`` is required (no default) so that the envelope can be detected
     # unambiguously -- a plain dict like ``{"type": "x"}`` (e.g. a class with
     # a `type` constructor param) does not accidentally match the schema.
-    data: Dict[str, Any]
-    meta: Dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any]
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def move_extra_to_meta(self) -> BuildCfg:
@@ -75,7 +74,7 @@ class BuildCfg(BaseModel):
                 )
         return self
 
-    def with_unused_data(self, unused: Dict[str, Any]) -> BuildCfg:
+    def with_unused_data(self, unused: dict[str, Any]) -> BuildCfg:
         """Return a copy with unused data merged into meta._unused_data."""
         if not unused:
             return self
@@ -102,9 +101,9 @@ def is_build_cfg(value: Any) -> bool:
 
 
 def normalize_cfg(
-    cfg: Union[Dict[str, Any], BuildCfg],
+    cfg: dict[str, Any] | BuildCfg,
     *,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> BuildCfg:
     """Normalize a raw dict or BuildCfg into a validated BuildCfg.
 

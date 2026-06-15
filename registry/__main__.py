@@ -22,7 +22,6 @@ Examples:
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import argparse
 import json
@@ -44,7 +43,7 @@ def cmd_info(args: argparse.Namespace) -> int:
     return 0
 
 
-def load_config_file(filepath: Path) -> Dict[str, Any]:
+def load_config_file(filepath: Path) -> dict[str, Any]:
     """Load a config file using the appropriate engine.
 
     Args:
@@ -108,7 +107,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         print("Error: No BuildCfg entries found in config", file=sys.stderr)
         return 1
 
-    results: Dict[str, Any] = {}
+    results: dict[str, Any] = {}
     for name, cfg_dict in configs_to_build:
         try:
             cfg = normalize_cfg(cfg_dict)
@@ -142,7 +141,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     if args.output:
         output_path = Path(args.output)
-        output_data: Dict[str, Any] = {}
+        output_data: dict[str, Any] = {}
         for name, obj in results.items():
             try:
                 if hasattr(obj, "model_dump"):
@@ -180,7 +179,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.verbose:
         print(f"Loaded config from: {filepath}")
 
-    ctx: Dict[str, Any] = {}
+    ctx: dict[str, Any] = {}
 
     if is_build_cfg(config):
         try:
