@@ -29,6 +29,7 @@ Pipeline extensions:
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple
 
 import hashlib
 import threading
@@ -95,7 +96,7 @@ def device_of(value: Any) -> Any:
     return value
 
 
-def hash_state_dict(sd: dict[str, torch.Tensor]) -> str:
+def hash_state_dict(sd: Dict[str, torch.Tensor]) -> str:
     """Stable sha256 prefix of a state_dict for provenance / cache keys."""
     h = hashlib.sha256()
     for k in sorted(sd):
@@ -119,7 +120,7 @@ class SameDeviceAs(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         target = kwargs.get(self.ref, ctx.get(self.ref))
         if target is None:
             raise ValueError(f"SameDeviceAs: {self.ref!r} not in kwargs or ctx")
@@ -135,7 +136,7 @@ class BoundTo(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
         if not isinstance(ref_obj, nn.Module):
             raise ValueError(f"BoundTo: {self.ref!r} is not an nn.Module")
@@ -162,7 +163,7 @@ class VerifyChecksum(ValidateMarker):
 
     expected: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         actual = hash_state_dict(value.state_dict())
         if actual != self.expected:
             raise ValueError(
@@ -170,7 +171,7 @@ class VerifyChecksum(ValidateMarker):
             )
 
 
-def _shape_or_none(value: Any) -> tuple[int, ...] | None:
+def _shape_or_none(value: Any) -> Optional[Tuple[int, ...]]:
     """``value.shape[1:]`` for tensors / (tensor, ...) tuples; else None."""
     x = value[0] if isinstance(value, (tuple, list)) and value else value
     if isinstance(x, torch.Tensor):
@@ -178,7 +179,7 @@ def _shape_or_none(value: Any) -> tuple[int, ...] | None:
     return None
 
 
-def _meta_shape(obj: Any, key: str) -> tuple[int, ...] | None:
+def _meta_shape(obj: Any, key: str) -> Optional[Tuple[int, ...]]:
     """Look ``key`` up in ``obj.__meta__`` (if any). Returns a tuple or None."""
     meta = getattr(obj, "__meta__", None) or {}
     value = meta.get(key)
@@ -196,7 +197,7 @@ class MatchesInputShape(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
         if ref_obj is None:
             return
@@ -219,7 +220,7 @@ class MatchesOutputShape(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
         if ref_obj is None:
             return
@@ -244,7 +245,7 @@ class MatchesTargetShape(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ref_obj = kwargs.get(self.ref, ctx.get(self.ref))
         if ref_obj is None:
             return
@@ -269,7 +270,7 @@ class InputShape(ComputeMarker):
 
     name: str
 
-    def compute(self, value: Any) -> tuple[int, ...] | None:
+    def compute(self, value: Any) -> Optional[Tuple[int, ...]]:
         return _shape_or_none(value)
 
 
@@ -284,7 +285,7 @@ class OutputShape(ComputeMarker):
 
     name: str
 
-    def compute(self, value: Any) -> tuple[int, ...] | None:
+    def compute(self, value: Any) -> Optional[Tuple[int, ...]]:
         return _shape_or_none(value)
 
 
@@ -294,7 +295,7 @@ class InputShapeMatches(ValidateMarker):
 
     ref: str
 
-    def validate(self, value: Any, kwargs: dict[str, Any], ctx: dict[str, Any]) -> None:
+    def validate(self, value: Any, kwargs: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         x = value[0] if isinstance(value, (tuple, list)) else value
         if not isinstance(x, torch.Tensor):
             return
@@ -376,10 +377,10 @@ class TorchProfilerMeter(FactoryMeter):
     def __init__(self, top_n: int = 5, record_shapes: bool = False) -> None:
         self._top_n: int = top_n
         self._record_shapes: bool = record_shapes
-        self._stack: list[Any] = []
+        self._stack: List[Any] = []
 
     def on_build_start(
-        self, *, cfg: Any, ctx: dict[str, Any], meta: dict[str, Any]
+        self, *, cfg: Any, ctx: Dict[str, Any], meta: Dict[str, Any]
     ) -> None:
         activities = [ProfilerActivity.CPU]
         if torch.cuda.is_available():
@@ -389,7 +390,7 @@ class TorchProfilerMeter(FactoryMeter):
         self._stack.append(prof)
 
     def on_built(
-        self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]
+        self, *, target: Any, result: Any, meta: Dict[str, Any], ctx: Dict[str, Any]
     ) -> None:
         if not self._stack:
             return
@@ -411,7 +412,7 @@ class TorchProfilerMeter(FactoryMeter):
         ]
 
     def on_error(
-        self, *, cfg: Any, exc: BaseException, ctx: dict[str, Any], meta: dict[str, Any]
+        self, *, cfg: Any, exc: BaseException, ctx: Dict[str, Any], meta: Dict[str, Any]
     ) -> None:
         if not self._stack:
             return
@@ -444,7 +445,7 @@ class TensorBoardReporter(FactoryReporter):
         self._lock = threading.Lock()
 
     def on_built(
-        self, *, target: Any, result: Any, meta: dict[str, Any], ctx: dict[str, Any]
+        self, *, target: Any, result: Any, meta: Dict[str, Any], ctx: Dict[str, Any]
     ) -> None:
         target_name = getattr(target, "__name__", str(target))
         with self._lock:

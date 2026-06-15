@@ -15,6 +15,8 @@ Helpers:
     pydantic_to_dict: Convert Pydantic model to dict (v1/v2 compatible).
     build_error_context: Build standardized error context dict.
 """
+from __future__ import annotations
+from typing import Dict, List, Optional, Tuple, Union
 
 import collections.abc
 import inspect
@@ -62,8 +64,8 @@ class ValidationError(Exception):
     def __init__(
         self,
         message: str,
-        suggestions: list[str] | None = None,
-        context: dict[str, Any] | None = None,
+        suggestions: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ):
         self.message = message
         self.suggestions = suggestions or []
@@ -190,7 +192,7 @@ R = TypeVar("R")
 """Type variable for the result value."""
 
 
-def get_subclasses(cls: type) -> list[type]:
+def get_subclasses(cls: type) -> List[type]:
     """Get subclasses of a class."""
     if isclass(cls):
         return cls.__subclasses__()
@@ -211,7 +213,7 @@ def get_object_name(obj: Any) -> str:
 
 def get_module_members(
     module: ModuleType, ignore_all_keyword: bool = False
-) -> list[Any]:
+) -> List[Any]:
     """Get members of a module."""
     assert ismodule(module), f"{module} is not a module"
     if ignore_all_keyword or not hasattr(module, "__all__"):
@@ -338,8 +340,8 @@ def _validate_function_signature(
                 )
         return
 
-    errs: list[str] = []
-    hints: list[str] = []
+    errs: List[str] = []
+    hints: List[str] = []
 
     actual_params = list(actual_sig.parameters.values())
 
@@ -397,8 +399,8 @@ def _validate_function_signature(
 
 
 def get_callable_signature(
-    artifact: Callable[..., Any] | type,
-) -> tuple[str, Signature, list[Parameter]]:
+    artifact: Union[Callable[..., Any], type],
+) -> Tuple[str, Signature, List[Parameter]]:
     """Extract signature from a class or callable, removing 'self' for classes.
 
     Args:
@@ -444,7 +446,7 @@ def get_callable_signature(
         )
 
 
-def pydantic_to_dict(model: Any) -> dict[str, Any]:
+def pydantic_to_dict(model: Any) -> Dict[str, Any]:
     """Convert a Pydantic model to dict, compatible with v1 and v2.
 
     Args:
@@ -460,11 +462,11 @@ def pydantic_to_dict(model: Any) -> dict[str, Any]:
 
 def build_error_context(
     operation: str,
-    registry_cls: type | None = None,
-    key: Any | None = None,
-    artifact: Any | None = None,
+    registry_cls: Optional[type] = None,
+    key: Optional[Any] = None,
+    artifact: Optional[Any] = None,
     **extra: Any,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Build a standardized error context dictionary.
 
     Args:
@@ -477,7 +479,7 @@ def build_error_context(
     Returns:
         Dictionary suitable for ValidationError context.
     """
-    context: dict[str, Any] = {"operation": operation}
+    context: Dict[str, Any] = {"operation": operation}
 
     if registry_cls is not None:
         context["registry_name"] = getattr(registry_cls, "__name__", "Unknown")
@@ -519,7 +521,7 @@ def is_hashable(value: Any) -> bool:
         return False
 
 
-def cleanup_dead_weakrefs(mapping: dict[Any, Any], key_is_weakref: bool = True) -> int:
+def cleanup_dead_weakrefs(mapping: Dict[Any, Any], key_is_weakref: bool = True) -> int:
     """Remove dead weakref entries from a mapping.
 
     Args:

@@ -1,6 +1,7 @@
 r"""Type (class) registry with optional inheritance/protocol checks."""
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import inspect
 import logging
@@ -25,7 +26,7 @@ from .schema import cache_schema, drop_schema
 from .storage import ThreadSafeLocalStorage
 
 # Module-level lookup populated by __init_subclass__; consumed by registry.factory._resolve.
-_ALL_TYPE_REGISTRIES: dict[str, type] = {}
+_ALL_TYPE_REGISTRIES: Dict[str, type] = {}
 
 
 def _base_type_of(cls: type) -> Any:
@@ -100,8 +101,8 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
             get_type_name(subcls),
             get_type_name(exp_type),
         )
-    missing: list[str] = []
-    sig_errs: list[str] = []
+    missing: List[str] = []
+    sig_errs: List[str] = []
     for name in dir(exp_type):
         if name.startswith("_"):
             continue
@@ -119,8 +120,8 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
             except ConformanceError as e:
                 sig_errs.append(f"{name}: {e.message}")
     if missing or sig_errs:
-        parts: list[str] = []
-        hints: list[str] = []
+        parts: List[str] = []
+        hints: List[str] = []
         if missing:
             parts.append(f"Missing methods: {', '.join(missing)}")
             hints.extend([f"Add method: {m}(...) -> ..." for m in missing])
@@ -142,7 +143,7 @@ def _validate_class_structure(subcls: type, /, exp_type: type) -> type:
 
 
 class TypeRegistry(
-    MutableValidatorMixin[Hashable, type[Cls]],
+    MutableValidatorMixin[Hashable, Type[Cls]],
     ABC,
     Generic[Cls],
 ):
@@ -153,14 +154,14 @@ class TypeRegistry(
       - Strict mode for protocol/inheritance checking
     """
 
-    _repository: MutableMapping[Hashable, type[Cls]]
+    _repository: MutableMapping[Hashable, Type[Cls]]
     _strict: ClassVar[bool] = False
     _abstract: ClassVar[bool] = False
     repo: ClassVar[str] = "default"
-    __slots__: ClassVar[tuple[str, ...]] = ()
+    __slots__: ClassVar[Tuple[str, ...]] = ()
 
     @classmethod
-    def _get_mapping(cls) -> MutableMapping[Hashable, type[Cls]]:
+    def _get_mapping(cls) -> MutableMapping[Hashable, Type[Cls]]:
         return cls._repository
 
     @classmethod
@@ -168,7 +169,7 @@ class TypeRegistry(
         cls,
         strict: bool = False,
         abstract: bool = False,
-        repo: str | None = None,
+        repo: Optional[str] = None,
         **kwargs,
     ) -> None:
         """Initialize the TypeRegistry subclass.
@@ -185,7 +186,7 @@ class TypeRegistry(
         backing (e.g. a JSON-only RPC adapter on top of an external service).
         """
         super().__init_subclass__(**kwargs)
-        cls._repository = ThreadSafeLocalStorage[Hashable, type[Cls]]()
+        cls._repository = ThreadSafeLocalStorage[Hashable, Type[Cls]]()
         cls._strict = strict
         cls._abstract = abstract
         cls.repo = repo if repo is not None else cls.__name__
@@ -201,7 +202,7 @@ class TypeRegistry(
         )
 
     @classmethod
-    def _internalize_artifact(cls, value: Any) -> type[Cls]:
+    def _internalize_artifact(cls, value: Any) -> Type[Cls]:
         """Validate and internalize a class artifact."""
         v = _validate_class(value)
         if cls._abstract:
@@ -217,7 +218,7 @@ class TypeRegistry(
         return super()._internalize_artifact(v)
 
     @classmethod
-    def _identifier_of(cls, item: type[Cls]) -> Hashable:
+    def _identifier_of(cls, item: Type[Cls]) -> Hashable:
         """Return the identifier (class name) for an artifact."""
         return get_type_name(_validate_class(item))
 
@@ -229,10 +230,10 @@ class TypeRegistry(
     @classmethod
     def register_artifact(
         cls,
-        artifact: type[Cls],
+        artifact: Type[Cls],
         *,
-        params_model: type[BaseModel] | None = None,
-    ) -> type[Cls]:
+        params_model: Optional[Type[BaseModel]] = None,
+    ) -> Type[Cls]:
         """Register a class artifact with optional params_model."""
         ...
 
@@ -241,7 +242,7 @@ class TypeRegistry(
     def register_artifact(
         cls,
         *,
-        params_model: type[BaseModel] | None = None,
+        params_model: Optional[Type[BaseModel]] = None,
     ) -> Any:
         """Decorator form: register a class with optional params_model."""
         ...
@@ -249,10 +250,10 @@ class TypeRegistry(
     @classmethod
     def register_artifact(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls,
-        artifact: type[Cls] | None = None,
+        artifact: Optional[Type[Cls]] = None,
         *,
-        params_model: type[BaseModel] | None = None,
-    ) -> type[Cls] | Any:
+        params_model: Optional[Type[BaseModel]] = None,
+    ) -> Union[Type[Cls], Any]:
         """Register a class artifact with optional explicit params_model.
 
         Can be used as a decorator or called directly.
@@ -277,10 +278,10 @@ class TypeRegistry(
                 def __init__(self, x: int): ...
         """
 
-        def _do_register(art: type[Cls]) -> type[Cls]:
+        def _do_register(art: Type[Cls]) -> Type[Cls]:
             # Use parent's register_artifact for the actual registration
             registered = cast(
-                type[Cls], super(TypeRegistry, cls).register_artifact(art)
+                Type[Cls], super(TypeRegistry, cls).register_artifact(art)
             )
             # Eagerly populate the per-target schema cache. Explicit
             # params_model wins over the auto-derived config schema.

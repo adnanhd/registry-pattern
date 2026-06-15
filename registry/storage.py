@@ -1,6 +1,7 @@
 r"""Thread-safe local storage for registries."""
 
 from __future__ import annotations
+from typing import Dict
 
 from collections.abc import (
     Hashable,
@@ -25,7 +26,7 @@ class ThreadSafeLocalStorage(
     """Thread-safe local storage with single-write multi-read semantics."""
 
     def __init__(self):
-        self._storage: dict[KeyType, ValType] = {}
+        self._storage: Dict[KeyType, ValType] = {}
         self._lock = RLock()
 
     def __getitem__(self, key: KeyType) -> ValType:

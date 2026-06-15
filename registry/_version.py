@@ -23,6 +23,7 @@ CLI Usage:
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 import importlib
 import importlib.util
@@ -51,7 +52,7 @@ def get_version() -> str:
     return f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 
 
-def get_python_info() -> dict[str, str]:
+def get_python_info() -> Dict[str, str]:
     """Get Python interpreter information.
 
     Returns:
@@ -65,7 +66,7 @@ def get_python_info() -> dict[str, str]:
     }
 
 
-def get_platform_info() -> dict[str, str]:
+def get_platform_info() -> Dict[str, str]:
     """Get platform/OS information.
 
     Returns:
@@ -80,7 +81,7 @@ def get_platform_info() -> dict[str, str]:
     }
 
 
-def _get_pip_package_version(package_name: str) -> str | None:
+def _get_pip_package_version(package_name: str) -> Optional[str]:
     """Get package version via pip show.
 
     Args:
@@ -106,8 +107,8 @@ def _get_pip_package_version(package_name: str) -> str | None:
 
 
 def _get_package_version(
-    module_name: str, package_name: str | None = None
-) -> str | None:
+    module_name: str, package_name: Optional[str] = None
+) -> Optional[str]:
     """Get package version, trying __version__ first, then pip show.
 
     Args:
@@ -135,13 +136,13 @@ def _get_package_version(
     return _get_pip_package_version(package_name)
 
 
-def get_dependency_versions() -> dict[str, str | None]:
+def get_dependency_versions() -> Dict[str, Optional[str]]:
     """Get versions of key dependencies.
 
     Returns:
         Dict mapping package names to version strings (or None if not installed).
     """
-    deps: dict[str, str | None] = {}
+    deps: Dict[str, Optional[str]] = {}
 
     deps["pydantic"] = _get_package_version("pydantic")
     deps["pydantic_core"] = _get_package_version("pydantic_core", "pydantic-core")
@@ -152,7 +153,7 @@ def get_dependency_versions() -> dict[str, str | None]:
     return deps
 
 
-def get_version_info() -> dict[str, Any]:
+def get_version_info() -> Dict[str, Any]:
     """Get comprehensive version and system information.
 
     Returns:
@@ -173,7 +174,7 @@ def get_version_info() -> dict[str, Any]:
     }
 
 
-def format_version_info(info: dict[str, Any] | None = None) -> str:
+def format_version_info(info: Optional[Dict[str, Any]] = None) -> str:
     """Format version info as a human-readable string with aligned colons.
 
     Args:

@@ -20,6 +20,7 @@ Simple inheritance diagram (Doxygen dot):
 """
 
 from __future__ import annotations
+from typing import Dict, Union
 
 from collections.abc import Hashable, Mapping, MutableMapping
 from typing import TypeVar
@@ -124,7 +125,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     @classmethod
     def _assert_absence(
         cls, key: KeyType
-    ) -> dict[KeyType, ValType] | MutableMapping[KeyType, ValType]:
+    ) -> Union[Dict[KeyType, ValType], MutableMapping[KeyType, ValType]]:
         """Return mapping if `key` is absent; otherwise raise `RegistryError`."""
         mapping = cls._get_mapping()
         if key in mapping:

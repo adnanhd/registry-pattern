@@ -31,6 +31,7 @@ Usage::
 """
 
 from __future__ import annotations
+from typing import Dict
 
 from typing import Any, Protocol, runtime_checkable
 
@@ -49,8 +50,8 @@ class ValidateMarker(Protocol):
     def validate(
         self,
         value: Any,
-        kwargs: dict[str, Any],
-        ctx: dict[str, Any],
+        kwargs: Dict[str, Any],
+        ctx: Dict[str, Any],
     ) -> None: ...
 
 
