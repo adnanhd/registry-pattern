@@ -424,10 +424,10 @@ class MutableValidatorMixin(
             )
             return artifact
         except (ValidationError, ConformanceError, InheritanceError):
-            raise
-        except RegistryError:
-            # Duplicate-key conflict from a concurrent (or plain) re-registration
-            # under the same identifier -- surface as-is, don't wrap.
+            # RegistryError (duplicate-key conflict from a concurrent or plain
+            # re-registration under the same identifier) subclasses
+            # ValidationError, so it is caught here and surfaced as-is -- never
+            # wrapped by the generic handler below.
             raise
         except Exception as e:
             artifact_name = getattr(

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Hashable, Mapping, MutableMapping
-from typing import Dict, Iterator, TypeVar, Union
+from typing import Any, Dict, Iterator, TypeVar, Union, cast
 
 from ..utils import RegistryError, get_type_name
 from .accessor import RegistryAccessorMixin
@@ -73,7 +73,7 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         mapping = cls._get_mapping()
         lock = getattr(mapping, "lock", None)
         if callable(lock):
-            with lock():
+            with cast("contextlib.AbstractContextManager[Any]", lock()):
                 yield
         else:
             yield
