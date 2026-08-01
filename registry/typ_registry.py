@@ -356,7 +356,9 @@ class TypeRegistry(
                 continue
             name = get_object_name(obj)
             try:
-                cls.register_artifact(obj)
+                # ``obj`` is an arbitrary class discovered by scanning the
+                # module; the registry's declared element type is Type[Cls].
+                cls.register_artifact(cast("type[Cls]", obj))
                 ok += 1
             except (ValidationError, ConformanceError, InheritanceError) as e:
                 fail += 1

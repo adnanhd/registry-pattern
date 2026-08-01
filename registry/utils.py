@@ -45,6 +45,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
     get_args,
     get_origin,
 )
@@ -175,7 +176,10 @@ def get_protocol(cls: type):
     assert isclass(cls), f"{cls} is not a class"
     assert Generic in cls.mro(), f"{cls} is not a generic class"
 
-    type_arg = get_args(cls.__orig_bases__[0])[0]
+    # ``__orig_bases__`` isn't on ``type`` statically; the Generic-in-mro
+    # assert above guarantees it exists at runtime.
+    orig_bases = cast("Any", cls).__orig_bases__
+    type_arg = get_args(orig_bases[0])[0]
 
     # If it's already a runtime_checkable Protocol, just return it
     if hasattr(type_arg, "_is_runtime_protocol") and type_arg._is_runtime_protocol:
