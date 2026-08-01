@@ -134,10 +134,25 @@ def emit_meter(method: str, /, **payload: Any) -> None:
 
 
 class _StackedMeter(FactoryMeter):
-    """Base for meters that take a baseline at on_build_start and emit a delta at on_built."""
+    """Base for meters that take a baseline at on_build_start and emit a delta at on_built.
+
+    A meter instance is attached once (``attach_meter``) and reused for
+    every ``build()`` call process-wide, so the baseline stack is kept
+    per-thread via ``threading.local`` -- otherwise two threads racing
+    concurrent ``build()`` calls could pop each other's baseline off a
+    shared LIFO stack and silently write a wrong delta into ``meta``.
+    """
 
     def __init__(self) -> None:
-        self._stack: List[Tuple[Any, ...]] = []
+        self._local = threading.local()
+
+    @property
+    def _stack(self) -> List[Tuple[Any, ...]]:
+        stack = getattr(self._local, "stack", None)
+        if stack is None:
+            stack = []
+            self._local.stack = stack
+        return stack
 
     def _sample(self) -> Tuple[Any, ...]:
         raise NotImplementedError
@@ -151,13 +166,15 @@ class _StackedMeter(FactoryMeter):
         self._stack.append(self._sample())
 
     def on_built(self, *, target, result, meta, ctx) -> None:
-        if not self._stack:
+        stack = self._stack
+        if not stack:
             return
-        self._write(meta, self._stack.pop(), self._sample())
+        self._write(meta, stack.pop(), self._sample())
 
     def on_error(self, *, cfg, exc, ctx, meta) -> None:
-        if self._stack:
-            self._stack.pop()
+        stack = self._stack
+        if stack:
+            stack.pop()
 
 
 # ---------------------------------------------------------------------------
@@ -291,28 +308,41 @@ class RecursionMeter(FactoryMeter):
 
     Writes ``build_depth`` (depth of THIS envelope) and ``build_max_depth``
     (deepest level seen so far this top-level build) into meta.
+
+    Depth is tracked per-thread (``threading.local``): the meter instance is
+    shared across every concurrent ``build()`` call, and a plain shared
+    counter would let one thread's push/pop interleave with another's,
+    corrupting both threads' reported depths.
     """
 
     name: str = "recursion"
 
     def __init__(self) -> None:
-        self._depth: int = 0
-        self._max_depth: int = 0
+        self._local = threading.local()
+
+    def _state(self) -> threading.local:
+        if getattr(self._local, "depth", None) is None:
+            self._local.depth = 0
+            self._local.max_depth = 0
+        return self._local
 
     def on_build_start(self, *, cfg, ctx, meta) -> None:
-        self._depth += 1
-        if self._depth > self._max_depth:
-            self._max_depth = self._depth
+        st = self._state()
+        st.depth += 1
+        if st.depth > st.max_depth:
+            st.max_depth = st.depth
 
     def on_built(self, *, target, result, meta, ctx) -> None:
-        meta["build_depth"] = self._depth
-        meta["build_max_depth"] = self._max_depth
-        self._depth -= 1
-        if self._depth == 0:
-            self._max_depth = 0
+        st = self._state()
+        meta["build_depth"] = st.depth
+        meta["build_max_depth"] = st.max_depth
+        st.depth -= 1
+        if st.depth == 0:
+            st.max_depth = 0
 
     def on_error(self, *, cfg, exc, ctx, meta) -> None:
-        if self._depth > 0:
-            self._depth -= 1
-        if self._depth == 0:
-            self._max_depth = 0
+        st = self._state()
+        if st.depth > 0:
+            st.depth -= 1
+        if st.depth == 0:
+            st.max_depth = 0

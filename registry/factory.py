@@ -28,7 +28,7 @@ from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .fnc_registry import _ALL_FN_REGISTRIES, FunctionalRegistry
 from .meters import emit_meter
 from .reporters import emit_reporter
-from .resolve_cache import RESOLVE_CACHE
+from .resolve_cache import RESOLVE_CACHE, current_generation, write_if_current
 from .schema import process_compute, process_validate, resolve_meta_schema
 from .typ_registry import _ALL_TYPE_REGISTRIES
 from .validators import resolve_validator
@@ -140,13 +140,18 @@ def resolve(type_name: str, repo: Optional[str] = None) -> Tuple[type, Any]:
     Successful lookups are memoized in ``RESOLVE_CACHE`` keyed by
     ``(type_name, repo)``; the cache is cleared whenever artifacts are
     registered or unregistered (see
-    ``registry.resolve_cache.invalidate_resolve_cache``).
+    ``registry.resolve_cache.invalidate_resolve_cache``). The scan-then-cache
+    sequence below snapshots the cache epoch before scanning and only writes
+    if it is unchanged when the scan finishes, so a concurrent unregister
+    that invalidates the cache mid-scan can't be resurrected by a stale
+    write landing after it (see ``resolve_cache.write_if_current``).
     """
     cache_key = (type_name, repo)
     cached = RESOLVE_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
+    generation = current_generation()
     matches: List[Tuple[type, Any]] = []
     for repo_path, reg in {**_ALL_TYPE_REGISTRIES, **_ALL_FN_REGISTRIES}.items():
         if repo is not None and not _repo_matches(repo_path, repo):
@@ -162,12 +167,12 @@ def resolve(type_name: str, repo: Optional[str] = None) -> Tuple[type, Any]:
             f"'{type_name}' not registered in any TypeRegistry/FunctionalRegistry{suffix}"
         )
     if len(matches) == 1:
-        RESOLVE_CACHE[cache_key] = matches[0]
+        write_if_current(cache_key, matches[0], generation)
         return matches[0]
     if repo is not None:
         exact = [(r, a) for r, a in matches if r.repo == repo]
         if len(exact) == 1:
-            RESOLVE_CACHE[cache_key] = exact[0]
+            write_if_current(cache_key, exact[0], generation)
             return exact[0]
     raise KeyError(
         f"'{type_name}' is ambiguous (found in repos "

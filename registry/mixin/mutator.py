@@ -21,8 +21,9 @@ Simple inheritance diagram (Doxygen dot):
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Hashable, Mapping, MutableMapping
-from typing import Dict, TypeVar, Union
+from typing import Any, Dict, Iterator, TypeVar, Union, cast
 
 from ..utils import RegistryError, get_type_name
 from .accessor import RegistryAccessorMixin
@@ -53,13 +54,39 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     """
 
     # -----------------------------------------------------------------------------
+    # Locking helper -- makes check-then-act sequences atomic
+    # -----------------------------------------------------------------------------
+
+    @classmethod
+    @contextlib.contextmanager
+    def _mapping_lock(cls) -> Iterator[None]:
+        """Hold the backing mapping's lock across a compound check-then-act.
+
+        Uses the mapping's own ``lock()`` (``ThreadSafeLocalStorage`` exposes
+        one) if it has one, so a presence/absence assertion and the write or
+        delete that follows it happen atomically under concurrent access --
+        no other thread can observe or mutate the mapping in between. Falls
+        back to a no-op context for custom backing mappings that don't
+        expose a lock (see ``TypeRegistry``/``FunctionalRegistry`` docstrings
+        on assigning a custom ``_repository``).
+        """
+        mapping = cls._get_mapping()
+        lock = getattr(mapping, "lock", None)
+        if callable(lock):
+            with cast("contextlib.AbstractContextManager[Any]", lock()):
+                yield
+        else:
+            yield
+
+    # -----------------------------------------------------------------------------
     # Setter Functions for Registry Object
     # -----------------------------------------------------------------------------
     @classmethod
     def _set_mapping(cls, mapping: Mapping[KeyType, ValType]) -> None:
         """Replace the underlying mapping with `mapping` after clearing."""
-        cls._clear_mapping()
-        cls._update_mapping(mapping)
+        with cls._mapping_lock():
+            cls._clear_mapping()
+            cls._update_mapping(mapping)
 
     @classmethod
     def _update_mapping(cls, mapping: Mapping[KeyType, ValType]) -> None:
@@ -68,10 +95,11 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
         Raises:
             RegistryError: if any key already exists.
         """
-        if cls._len_mapping() > 0:
-            for key in mapping.keys():
-                cls._assert_absence(key)
-        cls._get_mapping().update(mapping)
+        with cls._mapping_lock():
+            if cls._len_mapping() > 0:
+                for key in mapping.keys():
+                    cls._assert_absence(key)
+            cls._get_mapping().update(mapping)
 
     # -----------------------------------------------------------------------------
     # Deleter Functions for Registry Object
@@ -90,19 +118,28 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     def _set_artifact(cls, key: KeyType, item: ValType) -> None:
         """Insert `item` under `key`.
 
+        The absence check and the write are atomic under concurrent access
+        (see `_mapping_lock`): if two threads race to register the same
+        key, exactly one write wins and the other raises `RegistryError`.
+
         Raises:
             RegistryError: if `key` is already present.
         """
-        cls._assert_absence(key)[key] = item
+        with cls._mapping_lock():
+            cls._assert_absence(key)[key] = item
 
     @classmethod
     def _update_artifact(cls, key: KeyType, item: ValType) -> None:
         """Replace `item` under `key`.
 
+        The presence check and the write are atomic under concurrent access
+        (see `_mapping_lock`).
+
         Raises:
             RegistryError: if `key` is not present.
         """
-        cls._assert_presence(key)[key] = item
+        with cls._mapping_lock():
+            cls._assert_presence(key)[key] = item
 
     # -----------------------------------------------------------------------------
     # Deleter Functions for Registry Items
@@ -112,10 +149,16 @@ class RegistryMutatorMixin(RegistryAccessorMixin[KeyType, ValType]):
     def _del_artifact(cls, key: KeyType) -> None:
         """Delete the entry under `key`.
 
+        The presence check and the delete are atomic under concurrent access
+        (see `_mapping_lock`): a concurrent unregister of the same key
+        cannot slip in between the check and the delete, so callers see a
+        proper `RegistryError` rather than a raw `KeyError`.
+
         Raises:
             RegistryError: if `key` is not present.
         """
-        del cls._assert_presence(key)[key]
+        with cls._mapping_lock():
+            del cls._assert_presence(key)[key]
 
     # -----------------------------------------------------------------------------
     # Helper Functions for Error Handling with Rich Context
