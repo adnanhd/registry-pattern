@@ -396,7 +396,14 @@ class MutableValidatorMixin(
     def register_artifact(
         cls, key: Union[KeyType, ValType], item: Optional[ValType] = None
     ) -> ValType:
-        """Register an artifact with validation; supports explicit or inferred keys."""
+        """Register an artifact with validation; supports explicit or inferred keys.
+
+        Safe for concurrent runtime use, not just at import time: the
+        presence check and the write are atomic (`RegistryMutatorMixin.
+        _set_artifact`), so if two threads race to register the same key,
+        exactly one wins and the other raises `RegistryError` instead of
+        silently losing the update.
+        """
         if item is None:
             artifact = cast(ValType, key)
         else:
@@ -418,6 +425,10 @@ class MutableValidatorMixin(
             return artifact
         except (ValidationError, ConformanceError, InheritanceError):
             raise
+        except RegistryError:
+            # Duplicate-key conflict from a concurrent (or plain) re-registration
+            # under the same identifier -- surface as-is, don't wrap.
+            raise
         except Exception as e:
             artifact_name = getattr(
                 artifact if "artifact" in locals() else key, "__name__", str(key)
@@ -435,6 +446,11 @@ class MutableValidatorMixin(
     @classmethod
     def unregister_identifier(cls, key: KeyType) -> None:
         """Remove an artifact by its identifier.
+
+        Safe for concurrent runtime use: the presence check and the delete
+        are atomic (`RegistryMutatorMixin._del_artifact`), so a concurrent
+        unregister of the same key raises `RegistryError` for the loser
+        instead of a raw `KeyError`.
 
         Raises:
             ValidationError: if key validation fails.

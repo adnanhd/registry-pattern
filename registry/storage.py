@@ -30,6 +30,17 @@ class ThreadSafeLocalStorage(
         self._storage: Dict[KeyType, ValType] = {}
         self._lock = RLock()
 
+    def lock(self) -> RLock:
+        """Return this storage's lock, for holding across a compound op.
+
+        Individual accessor/mutator calls (``__contains__``, ``__setitem__``,
+        etc.) each take this same ``RLock`` internally, so callers that need
+        a check-then-act sequence (e.g. "assert key absent, then insert") to
+        be atomic should wrap the whole sequence in ``with storage.lock():``
+        -- the inner calls re-enter the lock safely since it is reentrant.
+        """
+        return self._lock
+
     def __getitem__(self, key: KeyType) -> ValType:
         with self._lock:
             return self._storage[key]
