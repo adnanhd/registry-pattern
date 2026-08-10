@@ -5,23 +5,30 @@ Core API:
     build, resolve, validate, serialize
     ValidationError, RegistryError, CoercionError, ConformanceError, InheritanceError
 
+Observability ships as buses (base class + attach / detach / emit); the concrete
+batteries are opt-in:
+    from registry.extra.meters import CPUMeter, MemoryMeter
+    from registry.extra.reporters import JournalReporter, OpenTelemetryReporter  # [otel]
+
 Optional submodules:
     from registry.engines import ConfigFileEngine                # [yaml] for YAML
-    from registry.reporters import OpenTelemetryReporter         # [otel]
-    from registry.experimental.torch_compat import ...           # [torch]
+    from examples.torch_compat import ...                        # [torch] example
 
 Usage::
 
     from registry import TypeRegistry, build
 
-    class ModelRegistry(TypeRegistry[nn.Module], repo="models"):
+    class Shape:
+        def area(self) -> float: ...
+
+    class ShapeRegistry(TypeRegistry[Shape], repo="shapes"):
         pass
 
-    @ModelRegistry.register_artifact
-    class ResNet18(nn.Module):
-        def __init__(self, num_classes: int = 10): ...
+    @ShapeRegistry.register_artifact
+    class Circle(Shape):
+        def __init__(self, radius: float = 1.0): ...
 
-    model = build({"type": "ResNet18", "data": {"num_classes": 10}})
+    circle = build({"type": "Circle", "data": {"radius": 2.0}})
 """
 
 from __future__ import annotations
@@ -31,23 +38,13 @@ from .container import BuildCfg, is_build_cfg, normalize_cfg
 from .factory import build, resolve, serialize, validate
 from .fnc_registry import FunctionalRegistry
 from .meters import (
-    CPUMeter,
     FactoryMeter,
-    HeapMeter,
-    IOMeter,
-    LifetimeMeter,
-    MemoryMeter,
-    NetworkMeter,
-    RecursionMeter,
     attach_meter,
     detach_meter,
     meters,
 )
 from .reporters import (
     FactoryReporter,
-    HTTPDashboardReporter,
-    JournalReporter,
-    OpenTelemetryReporter,
     attach_reporter,
     detach_reporter,
     reporters,
@@ -81,23 +78,13 @@ __all__ = [
     "resolve",
     "validate",
     "serialize",
-    # Meters (measure -> meta)
+    # Meter bus (concrete meters live in registry.extra.meters)
     "FactoryMeter",
-    "LifetimeMeter",
-    "CPUMeter",
-    "MemoryMeter",
-    "IOMeter",
-    "NetworkMeter",
-    "HeapMeter",
-    "RecursionMeter",
     "attach_meter",
     "detach_meter",
     "meters",
-    # Reporters (ship event externally)
+    # Reporter bus (concrete reporters live in registry.extra.reporters)
     "FactoryReporter",
-    "JournalReporter",
-    "HTTPDashboardReporter",
-    "OpenTelemetryReporter",
     "attach_reporter",
     "detach_reporter",
     "reporters",

@@ -4,6 +4,32 @@ All notable changes to `registry-pattern` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] -- 2026-08-10
+
+### Changed (breaking)
+- `registry.meters` and `registry.reporters` are now bus-only: each ships the
+  base class plus `attach_* / detach_* / *() / emit_*`. The concrete batteries
+  moved to `registry.extra`. Update imports:
+  `from registry.extra.meters import CPUMeter, MemoryMeter, ...` and
+  `from registry.extra.reporters import JournalReporter, HTTPDashboardReporter,
+  OpenTelemetryReporter`. They are no longer re-exported from the top-level
+  `registry` namespace.
+- `registry.experimental.torch_compat` is no longer shipped as part of the
+  package. The torch markers, `TorchProfilerMeter`, and `TensorBoardReporter`
+  now live in `examples/torch_compat.py` as an adaptable example. The
+  `registry-pattern[torch]` extra still installs `torch` + `tensorboard` for it.
+
+### Added
+- `registry.integrations.pydantic.ArtifactOf[Registry]` -- the pydantic-native
+  form of `build()`: a field / `@validate_call` argument that accepts a live
+  artifact of the registry's element type OR a config to build, and serializes
+  mode-aware (python -> the artifact, json -> the `{type, data, meta}` config).
+  Accepts a union of registrars as `ArtifactOf[A, B]` or
+  `Union[ArtifactOf[A], ArtifactOf[B]]`. Its validator threads already-validated
+  siblings (`info.data`) into the build scope, so a config with a
+  `$sibling.attr()` ref (e.g. an optimizer built over `$model.parameters()`)
+  resolves against the live sibling.
+
 ## [0.5.0] -- 2026-05-21
 
 ### Added

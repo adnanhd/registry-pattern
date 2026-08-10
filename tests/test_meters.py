@@ -5,15 +5,17 @@ from typing import Any
 import pytest
 
 from registry import FunctionalRegistry, TypeRegistry, build
-from registry.meters import (
+from registry.extra.meters import (
     CPUMeter,
-    FactoryMeter,
     HeapMeter,
     IOMeter,
     LifetimeMeter,
     MemoryMeter,
     NetworkMeter,
     RecursionMeter,
+)
+from registry.meters import (
+    FactoryMeter,
     attach_meter,
     detach_meter,
     meters,

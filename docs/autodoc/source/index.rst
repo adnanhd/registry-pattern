@@ -40,7 +40,7 @@ extras:
 
    pip install 'registry-pattern[yaml]'    # ConfigFileEngine.yaml loader
    pip install 'registry-pattern[otel]'    # OpenTelemetryReporter
-   pip install 'registry-pattern[torch]'   # registry.experimental.torch_compat
+   pip install 'registry-pattern[torch]'   # deps for examples/torch_compat.py
    pip install 'registry-pattern[all]'     # everything above + docs / dev
 
 Quick start

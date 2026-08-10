@@ -1,0 +1,251 @@
+"""Concrete factory meters -- opt-in batteries.
+
+Each meter takes a baseline at ``on_build_start`` and writes a delta at
+``on_built`` into the envelope's ``meta`` (per-thread baseline stacks make
+concurrent nested builds safe). Attach them with the bus in
+:mod:`registry.meters`::
+
+    from registry import attach_meter
+    from registry.extra.meters import CPUMeter, MemoryMeter
+
+    attach_meter(CPUMeter())
+    attach_meter(MemoryMeter())
+
+- :class:`LifetimeMeter`  -- wall-clock seconds
+- :class:`CPUMeter`       -- user + system CPU seconds
+- :class:`MemoryMeter`    -- max RSS + delta (KB on Linux)
+- :class:`IOMeter`        -- disk read/write bytes via /proc/self/io
+- :class:`NetworkMeter`   -- rx/tx bytes via /proc/self/net/dev
+- :class:`HeapMeter`      -- Python heap via tracemalloc
+- :class:`RecursionMeter` -- factory recursion depth
+"""
+
+from __future__ import annotations
+
+import resource
+import threading
+import time
+import tracemalloc
+from typing import Any, Dict, List, Tuple
+
+from ..meters import FactoryMeter
+
+__all__ = [
+    "LifetimeMeter",
+    "CPUMeter",
+    "MemoryMeter",
+    "IOMeter",
+    "NetworkMeter",
+    "HeapMeter",
+    "RecursionMeter",
+]
+
+
+class _StackedMeter(FactoryMeter):
+    """Base for meters that take a baseline at on_build_start and emit a delta at on_built.
+
+    A meter instance is attached once (``attach_meter``) and reused for
+    every ``build()`` call process-wide, so the baseline stack is kept
+    per-thread via ``threading.local`` -- otherwise two threads racing
+    concurrent ``build()`` calls could pop each other's baseline off a
+    shared LIFO stack and silently write a wrong delta into ``meta``.
+    """
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+
+    @property
+    def _stack(self) -> List[Tuple[Any, ...]]:
+        stack = getattr(self._local, "stack", None)
+        if stack is None:
+            stack = []
+            self._local.stack = stack
+        return stack
+
+    def _sample(self) -> Tuple[Any, ...]:
+        raise NotImplementedError
+
+    def _write(
+        self, meta: Dict[str, Any], before: Tuple[Any, ...], after: Tuple[Any, ...]
+    ) -> None:
+        raise NotImplementedError
+
+    def on_build_start(self, *, cfg, ctx, meta) -> None:
+        self._stack.append(self._sample())
+
+    def on_built(self, *, target, result, meta, ctx) -> None:
+        stack = self._stack
+        if not stack:
+            return
+        self._write(meta, stack.pop(), self._sample())
+
+    def on_error(self, *, cfg, exc, ctx, meta) -> None:
+        stack = self._stack
+        if stack:
+            stack.pop()
+
+
+class LifetimeMeter(_StackedMeter):
+    """Wall-clock seconds the build took."""
+
+    name: str = "lifetime"
+
+    def _sample(self) -> Tuple[float]:
+        return (time.perf_counter(),)
+
+    def _write(self, meta, before, after) -> None:
+        meta["lifetime_seconds"] = after[0] - before[0]
+
+
+class CPUMeter(_StackedMeter):
+    """User + system CPU seconds (process-wide via ``resource.getrusage``)."""
+
+    name: str = "cpu"
+
+    def _sample(self) -> Tuple[float, float]:
+        r = resource.getrusage(resource.RUSAGE_SELF)
+        return (r.ru_utime, r.ru_stime)
+
+    def _write(self, meta, before, after) -> None:
+        meta["cpu_user_seconds"] = after[0] - before[0]
+        meta["cpu_system_seconds"] = after[1] - before[1]
+
+
+class MemoryMeter(_StackedMeter):
+    """Max RSS (KB on Linux) and delta vs. build start."""
+
+    name: str = "memory"
+
+    def _sample(self) -> Tuple[int]:
+        return (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,)
+
+    def _write(self, meta, before, after) -> None:
+        meta["rss_max_kb"] = after[0]
+        meta["rss_delta_kb"] = after[0] - before[0]
+
+
+class IOMeter(_StackedMeter):
+    """Disk IO bytes via ``/proc/self/io`` (Linux)."""
+
+    name: str = "io"
+
+    @staticmethod
+    def _read_proc_io() -> Dict[str, int]:
+        try:
+            with open("/proc/self/io") as f:
+                out: Dict[str, int] = {}
+                for line in f:
+                    k, _, v = line.partition(": ")
+                    out[k.strip()] = int(v.strip())
+                return out
+        except OSError:
+            return {}
+
+    def _sample(self) -> Tuple[int, int, int, int]:
+        s = self._read_proc_io()
+        return (
+            s.get("read_bytes", 0),
+            s.get("write_bytes", 0),
+            s.get("rchar", 0),
+            s.get("wchar", 0),
+        )
+
+    def _write(self, meta, before, after) -> None:
+        meta["io_read_bytes"] = after[0] - before[0]
+        meta["io_write_bytes"] = after[1] - before[1]
+        meta["io_rchar_bytes"] = after[2] - before[2]
+        meta["io_wchar_bytes"] = after[3] - before[3]
+
+
+class NetworkMeter(_StackedMeter):
+    """Bytes rx/tx summed across all interfaces via ``/proc/self/net/dev``."""
+
+    name: str = "network"
+
+    @staticmethod
+    def _read_proc_net_dev() -> Tuple[int, int]:
+        rx_total = 0
+        tx_total = 0
+        try:
+            with open("/proc/self/net/dev") as f:
+                lines = f.readlines()[2:]
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 10:
+                    continue
+                rx_total += int(parts[1])
+                tx_total += int(parts[9])
+        except (OSError, ValueError):
+            pass
+        return (rx_total, tx_total)
+
+    def _sample(self) -> Tuple[int, int]:
+        return self._read_proc_net_dev()
+
+    def _write(self, meta, before, after) -> None:
+        meta["net_rx_bytes"] = after[0] - before[0]
+        meta["net_tx_bytes"] = after[1] - before[1]
+
+
+class HeapMeter(_StackedMeter):
+    """Python heap via ``tracemalloc``. Starts tracemalloc if not already on."""
+
+    name: str = "heap"
+
+    def __init__(self) -> None:
+        super().__init__()
+        if not tracemalloc.is_tracing():
+            tracemalloc.start()
+
+    def _sample(self) -> Tuple[int, int]:
+        return tracemalloc.get_traced_memory()
+
+    def _write(self, meta, before, after) -> None:
+        meta["heap_current_bytes"] = after[0]
+        meta["heap_delta_bytes"] = after[0] - before[0]
+        meta["heap_peak_bytes"] = after[1]
+
+
+class RecursionMeter(FactoryMeter):
+    """Tracks how deep the factory recursion went per top-level build.
+
+    Writes ``build_depth`` (depth of THIS envelope) and ``build_max_depth``
+    (deepest level seen so far this top-level build) into meta.
+
+    Depth is tracked per-thread (``threading.local``): the meter instance is
+    shared across every concurrent ``build()`` call, and a plain shared
+    counter would let one thread's push/pop interleave with another's,
+    corrupting both threads' reported depths.
+    """
+
+    name: str = "recursion"
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+
+    def _state(self) -> threading.local:
+        if getattr(self._local, "depth", None) is None:
+            self._local.depth = 0
+            self._local.max_depth = 0
+        return self._local
+
+    def on_build_start(self, *, cfg, ctx, meta) -> None:
+        st = self._state()
+        st.depth += 1
+        if st.depth > st.max_depth:
+            st.max_depth = st.depth
+
+    def on_built(self, *, target, result, meta, ctx) -> None:
+        st = self._state()
+        meta["build_depth"] = st.depth
+        meta["build_max_depth"] = st.max_depth
+        st.depth -= 1
+        if st.depth == 0:
+            st.max_depth = 0
+
+    def on_error(self, *, cfg, exc, ctx, meta) -> None:
+        st = self._state()
+        if st.depth > 0:
+            st.depth -= 1
+        if st.depth == 0:
+            st.max_depth = 0

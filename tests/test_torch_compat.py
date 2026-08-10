@@ -1,6 +1,7 @@
-"""Unit tests for ``registry.experimental.torch_compat`` -- markers, meter, reporter.
+"""Unit tests for the ``examples/torch_compat.py`` example -- markers, meter, reporter.
 
-All tests skip cleanly when torch is not installed.
+The example module is importable because ``tests/conftest.py`` puts ``examples/``
+on ``sys.path``. All tests skip cleanly when torch is not installed.
 """
 
 from __future__ import annotations
@@ -12,16 +13,7 @@ import pytest
 torch = pytest.importorskip("torch")
 nn = torch.nn
 
-from registry import (  # noqa: E402 -- after importorskip
-    FunctionalRegistry,
-    TypeRegistry,
-    attach_meter,
-    attach_reporter,
-    build,
-    detach_meter,
-    detach_reporter,
-)
-from registry.experimental.torch_compat import (  # noqa: E402
+from torch_compat import (  # noqa: E402 -- examples/ is on sys.path (see conftest)
     BoundTo,
     Checksum,
     Device,
@@ -39,6 +31,16 @@ from registry.experimental.torch_compat import (  # noqa: E402
     VerifyChecksum,
     device_of,
     hash_state_dict,
+)
+
+from registry import (  # noqa: E402 -- after importorskip
+    FunctionalRegistry,
+    TypeRegistry,
+    attach_meter,
+    attach_reporter,
+    build,
+    detach_meter,
+    detach_reporter,
 )
 
 # =============================================================================

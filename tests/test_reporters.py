@@ -5,9 +5,9 @@ from typing import Any
 import pytest
 
 from registry import FunctionalRegistry, build
+from registry.extra.reporters import HTTPDashboardReporter
 from registry.reporters import (
     FactoryReporter,
-    HTTPDashboardReporter,
     attach_reporter,
     detach_reporter,
     reporters,
@@ -73,7 +73,8 @@ def test_reporter_fires_on_error() -> None:
 
 def test_reporter_sees_meter_output_in_meta() -> None:
     """Pipeline contract: meters run before reporters at every stage."""
-    from registry.meters import LifetimeMeter, attach_meter, detach_meter
+    from registry.extra.meters import LifetimeMeter
+    from registry.meters import attach_meter, detach_meter
 
     attach_meter(LifetimeMeter())
     rec = attach_reporter(_RecorderReporter())
@@ -123,7 +124,7 @@ def test_http_dashboard_serves_events() -> None:
 
 def test_journal_reporter_imports() -> None:
     """Smoke: JournalReporter constructs without raising even if journald absent."""
-    from registry.reporters import JournalReporter
+    from registry.extra.reporters import JournalReporter
 
     j = JournalReporter(ident="test-reporter")
     assert j.name == "journal"
@@ -131,7 +132,7 @@ def test_journal_reporter_imports() -> None:
 
 def test_opentelemetry_reporter_import_optional() -> None:
     """OpenTelemetryReporter requires the [otel] extra; gracefully reports missing."""
-    from registry.reporters import OpenTelemetryReporter
+    from registry.extra.reporters import OpenTelemetryReporter
 
     try:
         import opentelemetry  # noqa: F401
