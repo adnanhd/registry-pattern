@@ -25,7 +25,6 @@ from pydantic import BaseModel, ConfigDict
 
 from registry import (
     FunctionalRegistry,
-    LifetimeMeter,
     TypeRegistry,
     attach_meter,
     build,
@@ -34,6 +33,7 @@ from registry import (
     serialize,
     validate,
 )
+from registry.extra.meters import LifetimeMeter
 
 # =============================================================================
 # Tree of registrars: Models -> {CNNModels, Pretrained -> ImagenetPretrained}

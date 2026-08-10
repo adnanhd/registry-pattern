@@ -40,7 +40,8 @@ from registry import (
     build,
     resolve,
 )
-from registry.meters import LifetimeMeter, _StackedMeter, attach_meter, detach_meter
+from registry.extra.meters import LifetimeMeter, _StackedMeter
+from registry.meters import attach_meter, detach_meter
 from registry.resolve_cache import invalidate_resolve_cache
 
 

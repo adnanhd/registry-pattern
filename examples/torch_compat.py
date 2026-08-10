@@ -1,12 +1,16 @@
-"""Torch-flavoured extensions for the factory pipeline.
+"""Torch-flavoured extensions for the factory pipeline (example, not shipped).
 
 Concrete markers, a torch.profiler-backed meter, and a TensorBoard reporter --
-all packaged here so consumers don't reinvent them. Importing this module
-requires ``torch`` (and ``torch.utils.tensorboard`` for the reporter).
-
-Install with::
+all built on the core API so consumers can copy or adapt them. This module is an
+EXAMPLE: it lives under ``examples/`` and is not part of the installed package.
+Importing it requires ``torch`` (and ``torch.utils.tensorboard`` for the
+reporter)::
 
     pip install 'registry-pattern[torch]'
+
+Run an example from the repo root (``examples/`` is then on ``sys.path``)::
+
+    python examples/06_torch_profiler_meter.py
 
 Layout
 ------
@@ -39,9 +43,9 @@ import torch
 from torch import nn
 from torch.profiler import ProfilerActivity, profile
 
-from ..markers import ComputeMarker, ValidateMarker
-from ..meters import FactoryMeter
-from ..reporters import FactoryReporter
+from registry.markers import ComputeMarker, ValidateMarker
+from registry.meters import FactoryMeter
+from registry.reporters import FactoryReporter
 
 __all__ = [
     # helpers
@@ -180,7 +184,9 @@ def _shape_or_none(value: Any) -> Optional[Tuple[int, ...]]:
 
 def _meta_shape(obj: Any, key: str) -> Optional[Tuple[int, ...]]:
     """Look ``key`` up in ``obj.__meta__`` (if any). Returns a tuple or None."""
-    meta = getattr(obj, "__meta__", None) or {}
+    meta: Optional[Dict[str, Any]] = obj.__dict__.get("__meta__")
+    if meta is None:
+        return None
     value = meta.get(key)
     return tuple(value) if value is not None else None
 
@@ -401,7 +407,7 @@ class TorchProfilerMeter(FactoryMeter):
             e.self_cpu_time_total for e in events
         )
         meta["torch_profile_self_cuda_time_total_us"] = sum(
-            getattr(e, "self_cuda_time_total", 0) for e in events
+            e.self_cuda_time_total for e in events
         )
         top = sorted(events, key=lambda e: e.self_cpu_time_total, reverse=True)[
             : self._top_n
@@ -446,7 +452,7 @@ class TensorBoardReporter(FactoryReporter):
     def on_built(
         self, *, target: Any, result: Any, meta: Dict[str, Any], ctx: Dict[str, Any]
     ) -> None:
-        target_name = getattr(target, "__name__", str(target))
+        target_name = target.__name__ if callable(target) else str(target)
         with self._lock:
             for k, v in meta.items():
                 if isinstance(v, (int, float, bool)):

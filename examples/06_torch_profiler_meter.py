@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Example 06: torch.profiler instrumentation via TorchProfilerMeter.
 
-``TorchProfilerMeter`` ships in ``registry.experimental.torch_compat``. Attach
-it once; every build() captures CPU + CUDA op breakdowns into the envelope's
-meta dict. Nested builds get per-level profiles automatically.
+``TorchProfilerMeter`` lives in the sibling ``examples/torch_compat.py`` module.
+Attach it once; every build() captures CPU + CUDA op breakdowns into the
+envelope's meta dict. Nested builds get per-level profiles automatically.
 
 Requires the ``[torch]`` extra::
 
@@ -18,7 +18,7 @@ import torch
 from torch import nn
 
 from registry import FunctionalRegistry, attach_meter, build
-from registry.experimental.torch_compat import TorchProfilerMeter
+from torch_compat import TorchProfilerMeter  # sibling example module
 
 
 class StepRegistry(FunctionalRegistry, repo="myapp.steps"):

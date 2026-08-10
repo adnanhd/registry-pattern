@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
 from registry import FunctionalRegistry, TypeRegistry
+
+# Make the example modules (e.g. examples/torch_compat.py) importable by name so
+# tests can exercise them the same way a user running the scripts would.
+_EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
+if _EXAMPLES_DIR.is_dir() and str(_EXAMPLES_DIR) not in sys.path:
+    sys.path.insert(0, str(_EXAMPLES_DIR))
 
 
 @pytest.fixture

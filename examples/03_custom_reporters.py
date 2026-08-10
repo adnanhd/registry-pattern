@@ -84,8 +84,8 @@ class WandbReporter(FactoryReporter):
 # =============================================================================
 
 
-# (TensorBoardReporter lives in registry.experimental.torch_compat -- see
-# the [torch] extra. This file focuses on WandB as a downstream extension
+# (TensorBoardReporter lives in the sibling examples/torch_compat.py module --
+# see the [torch] extra. This file focuses on WandB as a downstream extension
 # example since wandb is not torch-specific.)
 
 
@@ -109,9 +109,9 @@ def main() -> None:
     except ImportError:
         print("wandb not installed; skipping WandbReporter")
 
-    # TensorBoard: lives in the library, just import + attach.
+    # TensorBoard: lives in the sibling torch_compat example, just import + attach.
     try:
-        from registry.experimental.torch_compat import TensorBoardReporter
+        from torch_compat import TensorBoardReporter
 
         attach_reporter(TensorBoardReporter(log_dir="runs/demo"))
         print("tensorboard reporter attached")

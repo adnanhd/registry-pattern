@@ -29,7 +29,7 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 
 from registry import FunctionalRegistry, TypeRegistry, build
-from registry.experimental.torch_compat import (
+from torch_compat import (  # sibling example module (examples/ is on sys.path)
     BoundTo,
     Checksum,
     EffectiveLr,

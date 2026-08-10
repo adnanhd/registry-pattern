@@ -33,13 +33,14 @@ Autodoc picks up every public submodule of `registry`:
 - `registry.type_guard`    -- `Buildable[T]` annotation
 - `registry.markers`       -- assertion markers (`AssertEq`, `AssertMin`, ...)
 - `registry.validators`    -- validator mediums + `ValidationError`
-- `registry.meters`        -- observability meters (write into `meta`)
-- `registry.reporters`     -- observability reporters (ship externally)
+- `registry.meters`        -- observability meter bus (write into `meta`)
+- `registry.reporters`     -- observability reporter bus (ship externally)
+- `registry.extra`         -- opt-in concrete meters / reporters
+- `registry.integrations`  -- pydantic integration (`ArtifactOf`)
 - `registry.storage`       -- storage backend protocol
 - `registry.engines`       -- registration engines
 - `registry.resolve_cache` -- name -> class resolution cache
 - `registry.utils`         -- shared helpers
-- `registry.experimental.torch_compat` -- optional PyTorch shims
 
 ## Configuration
 

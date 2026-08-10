@@ -159,10 +159,25 @@ registry.mixin.validator module
    :undoc-members:
    :show-inheritance:
 
-registry.experimental package
+registry.extra package
+----------------------
+
+Opt-in batteries for the observability buses: concrete meters and reporters.
+
+.. automodule:: registry.extra.meters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: registry.extra.reporters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+registry.integrations package
 -----------------------------
 
-.. automodule:: registry.experimental.torch_compat
+.. automodule:: registry.integrations.pydantic
    :members:
    :undoc-members:
    :show-inheritance:
