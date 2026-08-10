@@ -13,15 +13,6 @@ import pytest
 torch = pytest.importorskip("torch")
 nn = torch.nn
 
-from registry import (  # noqa: E402 -- after importorskip
-    FunctionalRegistry,
-    TypeRegistry,
-    attach_meter,
-    attach_reporter,
-    build,
-    detach_meter,
-    detach_reporter,
-)
 from torch_compat import (  # noqa: E402 -- examples/ is on sys.path (see conftest)
     BoundTo,
     Checksum,
@@ -40,6 +31,16 @@ from torch_compat import (  # noqa: E402 -- examples/ is on sys.path (see confte
     VerifyChecksum,
     device_of,
     hash_state_dict,
+)
+
+from registry import (  # noqa: E402 -- after importorskip
+    FunctionalRegistry,
+    TypeRegistry,
+    attach_meter,
+    attach_reporter,
+    build,
+    detach_meter,
+    detach_reporter,
 )
 
 # =============================================================================

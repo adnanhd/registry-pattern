@@ -53,11 +53,11 @@ def test_toml_loader(tmp_path) -> None:
 def test_xml_loader_attributes_children_and_text(tmp_path) -> None:
     p = tmp_path / "cfg.xml"
     p.write_text(
-        "<root version=\"1\">"
+        '<root version="1">'
         "<single>hello</single>"
         "<multi>a</multi>"
         "<multi>b</multi>"
-        "<parent kind=\"k\">lead<child>c</child></parent>"
+        '<parent kind="k">lead<child>c</child></parent>'
         "<empty></empty>"
         "</root>"
     )

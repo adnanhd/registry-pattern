@@ -22,7 +22,6 @@ from registry.mixin.validator import (
 )
 from registry.utils import RegistryError, ValidationError
 
-
 # -- ValidationCache ---------------------------------------------------------
 
 

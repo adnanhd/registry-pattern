@@ -44,7 +44,7 @@ class GizmoRegistry(TypeRegistry[Gizmo], repo="gizmos"):
 
 class Model:
     def __init__(self, n: int) -> None:
-        self._params = ["w%d" % i for i in range(n)]
+        self._params = [f"w{i}" for i in range(n)]
 
     def parameters(self) -> list:
         return list(self._params)
@@ -164,8 +164,8 @@ def test_union_tuple_syntax_accepts_either() -> None:
     class Cfg(BaseModel):
         x: ArtifactOf[WidgetRegistry, GizmoRegistry]
 
-    assert isinstance(Cfg(x=Widget(1)).x, Widget)            # instance of the first
-    assert isinstance(Cfg(x=Gizmo(9)).x, Gizmo)              # instance of the second
+    assert isinstance(Cfg(x=Widget(1)).x, Widget)  # instance of the first
+    assert isinstance(Cfg(x=Gizmo(9)).x, Gizmo)  # instance of the second
     assert isinstance(Cfg(x={"type": "Widget", "data": {"size": 2}}).x, Widget)
     assert isinstance(Cfg(x={"type": "Gizmo", "data": {"power": 3}}).x, Gizmo)
 

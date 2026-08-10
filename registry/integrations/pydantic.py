@@ -33,8 +33,8 @@ from .. import factory
 from ..container import BuildCfg, is_build_cfg, normalize_cfg
 from ..factory import _envelope_for
 from ..fnc_registry import FunctionalRegistry
-from ..type_guard import _runtime_type, _type_name
 from ..typ_registry import TypeRegistry, _base_type_of
+from ..type_guard import _runtime_type, _type_name
 
 __all__ = ["ArtifactOf"]
 
@@ -52,7 +52,9 @@ def _artifact_type(registrar: type) -> type:
     repo: Optional[str] = getattr(registrar, "repo", None)
     reg_name = getattr(registrar, "__name__", str(registrar))
 
-    def validate(value: Any, info: ValidationInfo) -> Any:  # pydantic callback: an instance or a build config
+    def validate(
+        value: Any, info: ValidationInfo
+    ) -> Any:  # pydantic callback: an instance or a build config
         if element_type is not object and isinstance(value, runtime_type):
             return value  # already a live artifact
         if isinstance(value, BuildCfg) or is_build_cfg(value):
@@ -66,17 +68,18 @@ def _artifact_type(registrar: type) -> type:
             # discriminates (a mismatch raises -> pydantic tries the next member).
             if element_type is not object and not isinstance(result, runtime_type):
                 raise ValueError(
-                    "built %s, expected %s" % (type(result).__name__, type_label)
+                    f"built {type(result).__name__}, expected {type_label}"
                 )
             return result
         if element_type is object:
             return value
         raise ValueError(
-            "expected %s instance or a build config, got %s"
-            % (type_label, type(value).__name__)
+            f"expected {type_label} instance or a build config, got {type(value).__name__}"
         )
 
-    def serialize(value: Any, info: SerializationInfo) -> Any:  # pydantic callback: value is the built artifact
+    def serialize(
+        value: Any, info: SerializationInfo
+    ) -> Any:  # pydantic callback: value is the built artifact
         # json mode -> the {type,data,meta} config envelope; python mode -> the live artifact.
         if info.mode == "json":
             return _envelope_for(value, repo=repo)
@@ -85,7 +88,7 @@ def _artifact_type(registrar: type) -> type:
     class _ArtifactOfType:
         @classmethod
         def __get_pydantic_core_schema__(
-            cls_, source_type: Any, handler: GetCoreSchemaHandler
+            cls, source_type: Any, handler: GetCoreSchemaHandler
         ) -> CoreSchema:
             return core_schema.with_info_plain_validator_function(
                 validate,
@@ -96,11 +99,10 @@ def _artifact_type(registrar: type) -> type:
                 ),
             )
 
-    _ArtifactOfType.__name__ = "ArtifactOf[%s]" % reg_name
-    _ArtifactOfType.__qualname__ = "ArtifactOf[%s]" % reg_name
-    _ArtifactOfType.__doc__ = "Live %s artifact of %s, or a config to build one." % (
-        type_label,
-        reg_name,
+    _ArtifactOfType.__name__ = f"ArtifactOf[{reg_name}]"
+    _ArtifactOfType.__qualname__ = f"ArtifactOf[{reg_name}]"
+    _ArtifactOfType.__doc__ = (
+        f"Live {type_label} artifact of {reg_name}, or a config to build one."
     )
     return _ArtifactOfType
 
@@ -109,7 +111,7 @@ def _check_registrar(registrar: object) -> None:
     if not (isinstance(registrar, type) and issubclass(registrar, _REGISTRY_BASES)):
         raise TypeError(
             "ArtifactOf[...] expects a registry class (a TypeRegistry or "
-            "FunctionalRegistry subclass), got %r" % (registrar,)
+            f"FunctionalRegistry subclass), got {registrar!r}"
         )
 
 
@@ -118,7 +120,9 @@ class ArtifactOf:
 
     __slots__ = ()
 
-    def __class_getitem__(cls, registrar: Any) -> type:
+    def __class_getitem__(
+        cls, registrar: Any
+    ) -> Any:  # a single pydantic type, or a Union special form
         # Multiple registrars -> a pydantic Union of the single-registrar types.
         if isinstance(registrar, tuple):
             if not registrar:

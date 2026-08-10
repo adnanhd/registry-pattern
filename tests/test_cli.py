@@ -20,7 +20,7 @@ class Doodad:
         self.n = n
 
     def run(self) -> str:
-        return "ran-%d" % self.n
+        return f"ran-{self.n}"
 
 
 class Sprocket:
@@ -28,7 +28,7 @@ class Sprocket:
         self.tag = tag
 
     def __call__(self) -> str:
-        return "called-%s" % self.tag
+        return f"called-{self.tag}"
 
 
 class Blank:
@@ -115,19 +115,25 @@ def test_build_file_not_found(monkeypatch, capsys) -> None:
 
 
 def test_build_single_buildcfg(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}}
+    )
     assert _run(monkeypatch, ["build", cfg]) == 0
     assert "Successfully built 1" in capsys.readouterr().out
 
 
 def test_build_dry_run(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}}
+    )
     assert _run(monkeypatch, ["build", cfg, "--dry-run"]) == 0
     assert "dry-run" in capsys.readouterr().out.lower()
 
 
 def test_build_verbose(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 3}}
+    )
     assert _run(monkeypatch, ["build", cfg, "--verbose"]) == 0
     assert "Loaded config" in capsys.readouterr().out
 
@@ -152,7 +158,9 @@ def test_build_no_buildcfg_entries(monkeypatch, capsys, tmp_path) -> None:
 
 
 def test_build_output_file(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 7}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 7}}
+    )
     out = tmp_path / "out.json"
     assert _run(monkeypatch, ["build", cfg, "-o", str(out)]) == 0
     assert out.exists()
@@ -160,7 +168,9 @@ def test_build_output_file(monkeypatch, capsys, tmp_path) -> None:
 
 
 def test_build_error_bad_type(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "NoSuchType", "repo": "cli_doodad", "data": {}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "NoSuchType", "repo": "cli_doodad", "data": {}}
+    )
     assert _run(monkeypatch, ["build", cfg]) == 1
     assert "Error building" in capsys.readouterr().err
 
@@ -174,14 +184,20 @@ def test_run_file_not_found(monkeypatch, capsys) -> None:
 
 
 def test_run_callable_entry(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Sprocket", "repo": "cli_sprocket", "data": {"tag": "q"}})
+    cfg = _write_json(
+        tmp_path,
+        "c.json",
+        {"type": "Sprocket", "repo": "cli_sprocket", "data": {"tag": "q"}},
+    )
     assert _run(monkeypatch, ["run", cfg]) == 0
     assert "called-q" in capsys.readouterr().out
 
 
 def test_run_method_entry(monkeypatch, capsys, tmp_path) -> None:
     cfg = _write_json(
-        tmp_path, "c.json", {"main": {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 4}}}
+        tmp_path,
+        "c.json",
+        {"main": {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 4}}},
     )
     assert _run(monkeypatch, ["run", cfg]) == 0
     assert "ran-4" in capsys.readouterr().out
@@ -189,13 +205,17 @@ def test_run_method_entry(monkeypatch, capsys, tmp_path) -> None:
 
 def test_run_entry_not_found(monkeypatch, capsys, tmp_path) -> None:
     cfg = _write_json(
-        tmp_path, "c.json", {"other": {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 1}}}
+        tmp_path,
+        "c.json",
+        {"other": {"type": "Doodad", "repo": "cli_doodad", "data": {"n": 1}}},
     )
     assert _run(monkeypatch, ["run", cfg, "--entry", "missing"]) == 1
     assert "not found" in capsys.readouterr().err.lower()
 
 
 def test_run_not_callable_no_run(monkeypatch, capsys, tmp_path) -> None:
-    cfg = _write_json(tmp_path, "c.json", {"type": "Blank", "repo": "cli_blank", "data": {"x": 1}})
+    cfg = _write_json(
+        tmp_path, "c.json", {"type": "Blank", "repo": "cli_blank", "data": {"x": 1}}
+    )
     assert _run(monkeypatch, ["run", cfg]) == 1
     assert "not callable" in capsys.readouterr().err.lower()

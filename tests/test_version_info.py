@@ -7,8 +7,6 @@ not-found / exception branches.
 
 from __future__ import annotations
 
-import pytest
-
 from registry import _version
 from registry._version import (
     __version__,
@@ -24,12 +22,13 @@ from registry._version import (
     print_version_info,
 )
 
-
 # -- get_version -------------------------------------------------------------
 
 
 def test_get_version_no_suffix() -> None:
-    expected = f"{_version.VERSION_MAJOR}.{_version.VERSION_MINOR}.{_version.VERSION_PATCH}"
+    expected = (
+        f"{_version.VERSION_MAJOR}.{_version.VERSION_MINOR}.{_version.VERSION_PATCH}"
+    )
     assert get_version() == expected
     assert get_version() == __version__
 
