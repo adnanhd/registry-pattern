@@ -35,10 +35,17 @@ from .validators import resolve_validator
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build", "resolve", "validate", "serialize"]
+__all__ = ["build", "resolve", "validate", "serialize", "parse_ref"]
 
 
 _REF_RE = re.compile(r"^\$([A-Za-z_][\w.]*)(\(\))?$")
+
+# Quoted back to the author in every $ref grammar error.
+_REF_FORMS = (
+    "$name / $name.attr / $name.attr.method() (local scope lookup), "
+    "$scheme://... (registered scheme), "
+    "$$literal (escape -- yields the string with one leading '$' removed)"
+)
 
 # External-source schemes. Each handler maps a stripped URL (after the
 # leading ``$``) to a Python value -- typically a parsed dict.
@@ -86,33 +93,96 @@ register_ref_scheme("http", _resolve_http_ref)
 register_ref_scheme("https", _resolve_http_ref)
 
 
-def _resolve_ref(s: str, scope: Dict[str, Any]) -> Any:
-    """Resolve a ``$ref`` string.
+def parse_ref(s: str) -> Tuple[str, Any]:
+    """Classify a ``$``-string by grammar alone -- no scope, no I/O.
 
-    Supports:
-      - ``$name``, ``$name.attr``, ``$name.method()`` -- local lookup against
-        ``scope`` (siblings + ctx).
-      - ``$file:///path/to/cfg.yaml`` -- file load via ``ConfigFileEngine``.
-      - ``$http(s)://host/path`` -- HTTP GET + JSON decode.
+    This is the ONE definition of the ``$ref`` grammar. :func:`_resolve_ref`
+    is this parse plus a dispatch, and a static config checker (which has no
+    build-time scope, and must not fetch a ``$https://`` URL just to find out
+    whether the string is well formed) calls it directly.
 
-    Extend via :func:`register_ref_scheme`.
+    Returns ``(kind, payload)``:
+
+      - ``("escape", literal)`` -- ``$$x``; ``literal`` is ``s`` with one
+        leading ``$`` removed.
+      - ``("scheme", (scheme, url))`` -- ``$scheme://...`` for a REGISTERED
+        scheme; ``url`` is ``s`` without the leading ``$``, i.e. what the
+        handler is called with.
+      - ``("local", (parts, call))`` -- a scope lookup; ``parts`` is the
+        dotted path split on ``.`` and ``call`` is truthy when the ref ends
+        in ``()``.
+
+    Raises ``ValueError`` when the string is not a well-formed reference at
+    all (``"$1abc"``, ``"$a-b"``, ``"$model.parameters(x)"``, ``"$"``), or
+    when it names an unregistered scheme. Both are authoring errors: the
+    string can never resolve, in any scope. Name resolution is NOT decided
+    here -- it needs a scope, and stays with :func:`_resolve_ref`.
     """
+    # Escape first: ``$$...`` is a literal and bypasses every rule below.
+    if s.startswith("$$"):
+        return ("escape", s[1:])
+
     # External scheme: ``$scheme://...``
     if s.startswith("$"):
         bare = s[1:]
         scheme_sep = bare.find("://")
         if scheme_sep > 0:
             scheme = bare[:scheme_sep]
-            handler = _REF_SCHEMES.get(scheme)
-            if handler is not None:
-                return handler(bare)
+            if scheme not in _REF_SCHEMES:
+                raise ValueError(
+                    f"$ref {s!r}: unknown scheme '{scheme}' "
+                    f"(registered: {sorted(_REF_SCHEMES)}). "
+                    f"Accepted forms: {_REF_FORMS}"
+                )
+            return ("scheme", (scheme, bare))
 
     # Local scope lookup
     m = _REF_RE.match(s)
     if not m:
-        return s
+        raise ValueError(
+            f"$ref {s!r}: malformed reference. Accepted forms: {_REF_FORMS}"
+        )
     path, call = m.group(1), m.group(2)
-    parts = path.split(".")
+    return ("local", (path.split("."), call))
+
+
+def _resolve_ref(s: str, scope: Dict[str, Any]) -> Any:
+    """Resolve a ``$ref`` string.
+
+    Supports:
+      - ``$$literal`` -- ESCAPE. Yields the literal string with ONE leading
+        ``$`` removed and is never resolved, so ``"$$HOME/data"`` builds the
+        kwarg ``"$HOME/data"`` and ``"$$"`` builds ``"$"``. This is the only
+        way to pass a ``$``-leading literal through the factory.
+      - ``$name``, ``$name.attr``, ``$name.method()`` -- local lookup against
+        ``scope`` (siblings + ctx).
+      - ``$file:///path/to/cfg.yaml`` -- file load via ``ConfigFileEngine``.
+      - ``$http(s)://host/path`` -- HTTP GET + JSON decode.
+
+    Extend via :func:`register_ref_scheme`.
+
+    Failure modes -- a ``$``-string is never passed through as a literal:
+
+      - ``ValueError`` when the string is not a well-formed reference at all
+        (``"$1abc"``, ``"$a-b"``, ``"$model.parameters(x)"``, ``"$"``), or
+        when it is ``$scheme://...`` for a scheme nobody registered. Both are
+        authoring errors: the string can never resolve, in any scope, so the
+        config is wrong rather than merely unlucky.
+      - ``KeyError`` when the reference is well formed but the name it starts
+        from is absent from ``scope``. That depends on where the ref is used,
+        so it stays a lookup miss.
+
+    The grammar itself lives in :func:`parse_ref`; this is that parse plus
+    the dispatch that needs a scope (or the network).
+    """
+    kind, payload = parse_ref(s)
+    if kind == "escape":
+        return payload
+    if kind == "scheme":
+        scheme, url = payload
+        return _REF_SCHEMES[scheme](url)
+
+    parts, call = payload
     if parts[0] not in scope:
         raise KeyError(f"$ref {s!r}: '{parts[0]}' not in scope (have: {sorted(scope)})")
     obj: Any = scope[parts[0]]

@@ -34,7 +34,7 @@ from typing import Any, Dict, Optional
 # Version components
 VERSION_MAJOR = 0
 VERSION_MINOR = 5
-VERSION_PATCH = 0
+VERSION_PATCH = 1
 VERSION_SUFFIX = ""  # e.g., "alpha", "beta", "rc1"
 
 __version__ = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}{'-' + VERSION_SUFFIX if VERSION_SUFFIX else ''}"
