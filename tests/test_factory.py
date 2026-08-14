@@ -322,7 +322,10 @@ def test_parse_ref_classifies_every_accepted_form() -> None:
     assert parse_ref("$$HOME/data") == ("escape", "$HOME/data")
     assert parse_ref("$file:///cfg.yaml") == ("scheme", ("file", "file:///cfg.yaml"))
     assert parse_ref("$model") == ("local", (["model"], None))
-    assert parse_ref("$model.parameters()") == ("local", (["model", "parameters"], "()"))
+    assert parse_ref("$model.parameters()") == (
+        "local",
+        (["model", "parameters"], "()"),
+    )
 
 
 def test_parse_ref_rejects_the_same_strings_resolve_rejects() -> None:
@@ -343,7 +346,10 @@ def test_parse_ref_does_not_call_the_scheme_handler() -> None:
     calls = []
     register_ref_scheme("tmpparse", lambda url: calls.append(url))
     try:
-        assert parse_ref("$tmpparse://a/b") == ("scheme", ("tmpparse", "tmpparse://a/b"))
+        assert parse_ref("$tmpparse://a/b") == (
+            "scheme",
+            ("tmpparse", "tmpparse://a/b"),
+        )
         assert calls == []
     finally:
         del _REF_SCHEMES["tmpparse"]
