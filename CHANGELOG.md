@@ -4,6 +4,35 @@ All notable changes to `registry-pattern` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] -- 2026-08-14
+
+### Added
+- `$$` escape in the `$ref` grammar. A value starting with `$$` yields the
+  literal string with one leading `$` removed and is never resolved, so
+  `"$$HOME/data"` builds the kwarg `"$HOME/data"` and `"$$"` builds `"$"`.
+  It is checked before the scheme and regex logic, so escaping cannot be
+  overridden by a name that happens to be in scope. This is the only way to
+  pass a `$`-leading literal through the factory.
+
+### Changed
+- **Breaking:** `$ref` strings matching no accepted form now raise
+  `ValueError` instead of being passed through as literal kwargs.
+  `"$model.parameters(x)"`, `"$1abc"`, `"$a-b"` and `"$"` previously became
+  silent string kwargs; they are grammar errors and now fail at the cause.
+  The message quotes the offending string and lists the accepted forms.
+- **Breaking:** `$scheme://...` naming a scheme nobody registered now raises
+  `ValueError` listing the registered schemes. It previously fell through the
+  scheme lookup, missed the regex, and leaked out as a literal string.
+- An unresolvable *name* in a well-formed ref still raises `KeyError`. The
+  split is deliberate: `ValueError` marks a string that can never resolve in
+  any scope (an authoring error), `KeyError` marks a well-formed ref whose
+  target is absent from this particular scope (a lookup miss).
+
+### Notes
+- `_REF_RE` is unchanged, so a ref with an empty dotted segment (`"$h."`,
+  `"$h..x"`) is still accepted by the grammar and fails at the attribute
+  lookup with `AttributeError`. It is never passed through as a literal.
+
 ## [0.5.0] -- 2026-05-21
 
 ### Added
